@@ -1,5 +1,8 @@
 node_modules
-# Keep environment variables out of version control
+
+# Keep secrets out of version control; commit only the template.
 .env
+.env.*
+!.env.example
 
 /src/generated/prisma
