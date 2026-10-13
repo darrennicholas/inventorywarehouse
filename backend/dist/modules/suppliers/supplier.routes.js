@@ -1,0 +1,11 @@
+import { Router } from "express";
+import { validateBody } from "../../middlewares/validate.middleware.js";
+import { createSupplierSchema, updateSupplierSchema, } from "./supplier.validation.js";
+import { createSupplier, deactivateSupplier, getSupplierById, getSuppliers, updateSupplier, } from "./supplier.controller.js";
+const router = Router();
+router.get("/", getSuppliers);
+router.get("/:id", getSupplierById);
+router.post("/", validateBody(createSupplierSchema), createSupplier);
+router.patch("/:id", validateBody(updateSupplierSchema), updateSupplier);
+router.delete("/:id", deactivateSupplier);
+export default router;

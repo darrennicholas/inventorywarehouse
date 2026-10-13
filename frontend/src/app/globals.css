@@ -1,0 +1,260 @@
+
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ========================================
+   GLOBAL THEME
+======================================== */
+
+:root {
+  color-scheme: light;
+
+  --background: #f5f6f9;
+  --foreground: #172238;
+  --primary: #3867f6;
+  --primary-hover: #2454e5;
+  --border: #e9edf3;
+}
+
+html.dark {
+  color-scheme: dark;
+  --background: #0b1220;
+  --foreground: #e5edf8;
+  --border: #26354d;
+}
+
+/* ========================================
+   BASE
+======================================== */
+
+html {
+  min-height: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  background: var(--background);
+  color: var(--foreground);
+
+  font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
+
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ========================================
+   DARK MODE COMPATIBILITY LAYER
+   Existing feature components use utility
+   classes heavily; these shared rules keep
+   every table, card and form readable.
+======================================== */
+
+.dark body {
+  background: #0b1220;
+  color: #e5edf8;
+}
+
+html.dark aside,
+html.dark aside > div:first-child,
+html.dark aside nav,
+html.dark aside > div:last-child {
+  background: #0f1a2d !important;
+  border-color: #26354d !important;
+}
+
+html.dark aside h1 {
+  color: #f8fbff !important;
+}
+
+html.dark aside h1 span {
+  color: #75a7ff !important;
+}
+
+html.dark aside p {
+  color: #9fb0c8;
+}
+
+.dark aside [class*="bg-white"] {
+  background-color: #17243a !important;
+}
+
+.dark aside [class*="bg-[#edf3ff]"],
+.dark aside [class*="bg-[#f3f6ff]"] {
+  background-color: #1e3a63 !important;
+  color: #dbeafe !important;
+}
+
+.dark aside [class*="text-[#626e80]"],
+.dark aside [class*="text-slate-500"],
+.dark aside [class*="text-slate-400"] {
+  color: #b8c7dc !important;
+}
+
+.dark aside [class*="border-slate-100"],
+.dark aside [class*="border-slate-200"] {
+  border-color: #26354d !important;
+}
+
+.dark [class*="bg-white"] {
+  background-color: #111c31 !important;
+}
+
+.dark [class*="bg-[#f5f6f9]"] {
+  background-color: #0b1220 !important;
+}
+
+.dark [class*="bg-slate-50"] {
+  background-color: #17243a !important;
+}
+
+.dark [class*="bg-slate-100"] {
+  background-color: #1b2a42 !important;
+}
+
+.dark [class*="text-slate-900"],
+.dark [class*="text-slate-800"],
+.dark [class*="text-[#182438]"],
+.dark [class*="text-[#182237]"],
+.dark [class*="text-[#172238]"] {
+  color: #f4f7fb !important;
+}
+
+.dark [class*="text-slate-700"],
+.dark [class*="text-slate-600"] {
+  color: #c4d0e1 !important;
+}
+
+.dark [class*="text-slate-500"],
+.dark [class*="text-slate-400"] {
+  color: #91a2bb !important;
+}
+
+.dark [class*="border-slate-100"],
+.dark [class*="border-slate-200"] {
+  border-color: #26354d !important;
+}
+
+.dark input,
+.dark select,
+.dark textarea {
+  border-color: #33445f !important;
+  background-color: #0f1a2d !important;
+  color: #f4f7fb !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #71839e;
+}
+
+.dark table thead {
+  background-color: #17243a;
+}
+
+.dark table tbody tr:hover {
+  background-color: #182840;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #0f1a2d;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #344661;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+/* ========================================
+   SCROLLBAR
+======================================== */
+
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f3f7;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #ccd4e2;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #aebbd0;
+}
+
+/* ========================================
+   TABLE
+======================================== */
+
+table {
+  border-spacing: 0;
+}
+
+th,
+td {
+  vertical-align: middle;
+}
+
+/* ========================================
+   FORM
+======================================== */
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+}
+
+input::placeholder {
+  color: #a0a9b8;
+}
+
+/* ========================================
+   ACCESSIBILITY
+======================================== */
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #3867f6;
+  outline-offset: 2px;
+}
+
+/* ========================================
+   RESPONSIVE
+======================================== */
+
+@media (max-width: 768px) {
+  body {
+    overflow-x: hidden;
+  }
+}

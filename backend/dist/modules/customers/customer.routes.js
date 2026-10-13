@@ -1,0 +1,12 @@
+import { Router } from "express";
+import { validateBody } from "../../middlewares/validate.middleware.js";
+import { createCustomer, deleteCustomer, getCustomer, listCustomers, updateCustomer, importCustomers, } from "./customer.controller.js";
+import { createCustomerSchema, importCustomersSchema, updateCustomerSchema } from "./customer.validation.js";
+const router = Router();
+router.get("/", listCustomers);
+router.get("/:id", getCustomer);
+router.post("/import", validateBody(importCustomersSchema), importCustomers);
+router.post("/", validateBody(createCustomerSchema), createCustomer);
+router.patch("/:id", validateBody(updateCustomerSchema), updateCustomer);
+router.delete("/:id", deleteCustomer);
+export default router;

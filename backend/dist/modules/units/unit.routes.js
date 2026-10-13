@@ -1,0 +1,11 @@
+import { Router } from "express";
+import { validateBody } from "../../middlewares/validate.middleware.js";
+import { createUnitSchema, updateUnitSchema, } from "./unit.validation.js";
+import { getUnits, getUnitById, createUnit, updateUnit, deactivateUnit, } from "./unit.controller.js";
+const router = Router();
+router.get("/", getUnits);
+router.get("/:id", getUnitById);
+router.post("/", validateBody(createUnitSchema), createUnit);
+router.patch("/:id", validateBody(updateUnitSchema), updateUnit);
+router.delete("/:id", deactivateUnit);
+export default router;
