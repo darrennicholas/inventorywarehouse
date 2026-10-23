@@ -15,7 +15,7 @@ const date = (day: number) => new Date(`2026-10-${String(day).padStart(2, "0")}T
 
 type RoleCode = (typeof ROLE_CODES)[number];
 
-async function seedAccess(passwordHash: string, adminEmail: string) {
+async function seedAccess(adminEmail: string, adminPassword: string, demoPassword: string) {
   for (const key of PERMISSION_KEYS) {
     await prisma.permission.upsert({ where: { key }, update: {}, create: { key } });
   }
@@ -55,10 +55,10 @@ async function seedAccess(passwordHash: string, adminEmail: string) {
 
   const staffData = [
     { staffCode: "STF-ADM-001", fullName: "System Administrator", email: adminEmail, phone: "0812-0000-0001", position: "System Administrator", warehouseCode: "WH-JKT" },
-    { staffCode: "STF-WHM-001", fullName: "Raka Pratama", email: "warehouse.manager@stockflow.local", phone: "0812-0000-0002", position: "Warehouse Manager", warehouseCode: "WH-JKT" },
-    { staffCode: "STF-WHS-001", fullName: "Siti Rahma", email: "warehouse.staff@stockflow.local", phone: "0812-0000-0003", position: "Warehouse Staff", warehouseCode: "WH-BDG" },
-    { staffCode: "STF-PRC-001", fullName: "Dimas Saputra", email: "procurement@stockflow.local", phone: "0812-0000-0004", position: "Procurement Officer", warehouseCode: "WH-JKT" },
-    { staffCode: "STF-AUD-001", fullName: "Nadia Putri", email: "auditor@stockflow.local", phone: "0812-0000-0005", position: "Inventory Auditor", warehouseCode: "WH-SBY" },
+    { staffCode: "STF-WHM-001", fullName: "Raka Pratama", email: process.env.WAREHOUSE_MANAGER_EMAIL?.trim().toLowerCase() ?? "warehouse.manager@stockflow.local", phone: "0812-0000-0002", position: "Warehouse Manager", warehouseCode: "WH-JKT" },
+    { staffCode: "STF-WHS-001", fullName: "Siti Rahma", email: process.env.WAREHOUSE_STAFF_EMAIL?.trim().toLowerCase() ?? "warehouse.staff@stockflow.local", phone: "0812-0000-0003", position: "Warehouse Staff", warehouseCode: "WH-BDG" },
+    { staffCode: "STF-PRC-001", fullName: "Dimas Saputra", email: process.env.PROCUREMENT_EMAIL?.trim().toLowerCase() ?? "procurement@stockflow.local", phone: "0812-0000-0004", position: "Procurement Officer", warehouseCode: "WH-JKT" },
+    { staffCode: "STF-AUD-001", fullName: "Nadia Putri", email: process.env.AUDITOR_EMAIL?.trim().toLowerCase() ?? "auditor@stockflow.local", phone: "0812-0000-0005", position: "Inventory Auditor", warehouseCode: "WH-SBY" },
   ];
 
   const warehouses = await prisma.warehouse.findMany({ select: { id: true, code: true } });
@@ -77,10 +77,10 @@ async function seedAccess(passwordHash: string, adminEmail: string) {
 
   const users: Array<{ email: string; fullName: string; roleCode: RoleCode }> = [
     { email: adminEmail, fullName: "System Administrator", roleCode: "ADMIN" },
-    { email: "warehouse.manager@stockflow.local", fullName: "Raka Pratama", roleCode: "WAREHOUSE_MANAGER" },
-    { email: "warehouse.staff@stockflow.local", fullName: "Siti Rahma", roleCode: "WAREHOUSE_STAFF" },
-    { email: "procurement@stockflow.local", fullName: "Dimas Saputra", roleCode: "PROCUREMENT" },
-    { email: "auditor@stockflow.local", fullName: "Nadia Putri", roleCode: "AUDITOR" },
+    { email: process.env.WAREHOUSE_MANAGER_EMAIL?.trim().toLowerCase() ?? "warehouse.manager@stockflow.local", fullName: "Raka Pratama", roleCode: "WAREHOUSE_MANAGER" },
+    { email: process.env.WAREHOUSE_STAFF_EMAIL?.trim().toLowerCase() ?? "warehouse.staff@stockflow.local", fullName: "Siti Rahma", roleCode: "WAREHOUSE_STAFF" },
+    { email: process.env.PROCUREMENT_EMAIL?.trim().toLowerCase() ?? "procurement@stockflow.local", fullName: "Dimas Saputra", roleCode: "PROCUREMENT" },
+    { email: process.env.AUDITOR_EMAIL?.trim().toLowerCase() ?? "auditor@stockflow.local", fullName: "Nadia Putri", roleCode: "AUDITOR" },
   ];
 
   const userMap = new Map<string, string>();
@@ -88,10 +88,15 @@ async function seedAccess(passwordHash: string, adminEmail: string) {
     const roleId = roleMap.get(user.roleCode);
     const staffId = staffMap.get(user.email);
     if (!roleId || !staffId) throw new Error(`Data akses tidak lengkap untuk ${user.email}`);
+    const rolePassword = user.roleCode === "ADMIN"
+      ? adminPassword
+      : process.env[`${user.roleCode}_PASSWORD`] ?? demoPassword;
+    if (rolePassword.length < 12) throw new Error(`${user.roleCode}_PASSWORD minimal 12 karakter.`);
+    const rolePasswordHash = await bcrypt.hash(rolePassword, 12);
     const record = await prisma.user.upsert({
       where: { email: user.email },
-      update: { fullName: user.fullName, roleId, staffId, passwordHash, isActive: true },
-      create: { email: user.email, fullName: user.fullName, roleId, staffId, passwordHash, isActive: true },
+      update: { fullName: user.fullName, roleId, staffId, passwordHash: rolePasswordHash, isActive: true },
+      create: { email: user.email, fullName: user.fullName, roleId, staffId, passwordHash: rolePasswordHash, isActive: true },
     });
     userMap.set(user.email, record.id);
   }
@@ -106,7 +111,6 @@ async function main() {
   }
   const demoPassword = process.env.DEMO_PASSWORD ?? adminPassword;
   if (demoPassword.length < 12) throw new Error("DEMO_PASSWORD minimal 12 karakter.");
-  const passwordHash = await bcrypt.hash(demoPassword, 12);
 
   console.log("StockFlow full demo seed dimulai...");
 
@@ -166,8 +170,21 @@ async function main() {
 
   const warehouseList = await prisma.warehouse.findMany({ select: { id: true, code: true } });
   const warehouseMap = new Map(warehouseList.map((item) => [item.code, item.id]));
-  const { userMap } = await seedAccess(passwordHash, adminEmail);
-  const products = await prisma.product.findMany({ select: { id: true, sku: true } });
+  const locationByCode = new Map<string, string>();
+  for (const location of [
+    { warehouseCode: "WH-JKT", code: "JKT-A01", name: "Jakarta Aisle 01", zone: "A", rack: "01", shelf: "01", bin: "01" },
+    { warehouseCode: "WH-JKT", code: "JKT-B01", name: "Jakarta Aisle 02", zone: "B", rack: "01", shelf: "01", bin: "01" },
+    { warehouseCode: "WH-BDG", code: "BDG-A01", name: "Bandung Aisle 01", zone: "A", rack: "01", shelf: "01", bin: "01" },
+    { warehouseCode: "WH-SBY", code: "SBY-A01", name: "Surabaya Aisle 01", zone: "A", rack: "01", shelf: "01", bin: "01" },
+  ]) {
+    const warehouseId = warehouseMap.get(location.warehouseCode);
+    if (!warehouseId) throw new Error(`Warehouse ${location.warehouseCode} belum tersedia`);
+    const record = await prisma.warehouseLocation.upsert({ where: { warehouseId_code: { warehouseId, code: location.code } }, update: { ...location, warehouseCode: undefined, warehouseId, isActive: true }, create: { ...location, warehouseCode: undefined, warehouseId } });
+    locationByCode.set(location.code, record.id);
+  }
+  await prisma.product.update({ where: { sku: "CB-UGR-USBC" }, data: { trackBatch: true } });
+  const { userMap } = await seedAccess(adminEmail, adminPassword, demoPassword);
+  const products = await prisma.product.findMany({ select: { id: true, sku: true, trackBatch: true } });
   const productMap = new Map(products.map((item) => [item.sku, item.id]));
   const supplierMap = new Map((await prisma.supplier.findMany({ select: { id: true, code: true } })).map((item) => [item.code, item.id]));
   const customerMap = new Map((await prisma.customer.findMany({ select: { id: true, code: true } })).map((item) => [item.code, item.id]));
@@ -180,6 +197,7 @@ async function main() {
   const procurement = id(userMap, "procurement@stockflow.local"), manager = id(userMap, "warehouse.manager@stockflow.local"), staff = id(userMap, "warehouse.staff@stockflow.local"), admin = id(userMap, adminEmail);
 
   await prisma.payment.deleteMany({ where: { number: { startsWith: "SEED-" } } });
+  await prisma.goodsReceipt.deleteMany({ where: { number: { startsWith: "SEED-" } } });
   await prisma.stockMovement.deleteMany({ where: { note: { startsWith: "Seed:" } } });
   await prisma.purchaseOrder.deleteMany({ where: { number: { startsWith: "SEED-" } } });
   await prisma.sale.deleteMany({ where: { number: { startsWith: "SEED-" } } });
@@ -188,7 +206,7 @@ async function main() {
   await prisma.expense.deleteMany({ where: { number: { startsWith: "SEED-" } } });
 
   const poReceived = await prisma.purchaseOrder.create({ data: {
-    number: "SEED-PO-202610-001", supplierId: id(supplierMap, "SUP-001"), warehouseId: jkt, createdById: procurement, status: "RECEIVED", orderDate: date(2), expectedDate: date(5), notes: "Penerimaan perangkat untuk stok demo", subtotal: 336500000, tax: 37015000, total: 373515000,
+    number: "SEED-PO-202610-001", supplierId: id(supplierMap, "SUP-001"), warehouseId: jkt, createdById: procurement, approvedById: manager, approvedAt: date(3), status: "RECEIVED", orderDate: date(2), expectedDate: date(5), notes: "Penerimaan perangkat untuk stok demo", subtotal: 336500000, tax: 37015000, total: 373515000,
     items: { create: [
       { productId: id(productMap, "LP-LNV-T14"), quantity: 20, receivedQuantity: 20, unitPrice: 14000000, total: 280000000 },
       { productId: id(productMap, "KB-LOG-K380"), quantity: 50, receivedQuantity: 50, unitPrice: 450000, total: 22500000 },
@@ -218,7 +236,7 @@ async function main() {
     items: { create: [{ productId: id(productMap, "LP-LNV-T14"), quantity: 1, unitPrice: 16500000, total: 16500000 }, { productId: id(productMap, "KB-LOG-K380"), quantity: 3, unitPrice: 650000, total: 1950000 }] },
   } });
   const adjustment = await prisma.stockAdjustment.create({ data: {
-    number: "SEED-ADJ-202610-001", warehouseId: jkt, createdById: manager, type: "INCREASE", status: "POSTED", reason: "Stok fisik printer ditemukan lebih 2 unit saat stock opname", adjustmentDate: date(7),
+    number: "SEED-ADJ-202610-001", warehouseId: jkt, createdById: staff, approvedById: manager, approvedAt: date(7), type: "INCREASE", status: "POSTED", reason: "Stok fisik printer ditemukan lebih 2 unit saat stock opname", adjustmentDate: date(7),
     items: { create: [{ productId: id(productMap, "PR-EPS-L3210"), quantity: 2, notes: "Verifikasi stock opname Oktober" }] },
   } });
   await prisma.stockAdjustment.create({ data: {
@@ -226,7 +244,7 @@ async function main() {
     items: { create: [{ productId: id(productMap, "GLV-SAFE-01"), quantity: 2, notes: "Belum diposting" }] },
   } });
   const transfer = await prisma.stockTransfer.create({ data: {
-    number: "SEED-TRF-202610-001", fromWarehouseId: jkt, toWarehouseId: bdg, createdById: manager, status: "COMPLETED", transferDate: date(8), notes: "Replenishment gudang Bandung",
+    number: "SEED-TRF-202610-001", fromWarehouseId: jkt, toWarehouseId: bdg, createdById: staff, approvedById: manager, approvedAt: date(8), status: "COMPLETED", transferDate: date(8), notes: "Replenishment gudang Bandung",
     items: { create: [{ productId: id(productMap, "LP-LNV-T14"), quantity: 4 }, { productId: id(productMap, "KB-LOG-K380"), quantity: 10 }] },
   } });
   await prisma.stockTransfer.create({ data: {
@@ -245,12 +263,29 @@ async function main() {
     const key = `${product.sku}:${warehouse.code}`;
     const balance = await prisma.inventoryBalance.upsert({
       where: { productId_warehouseId: { productId: product.id, warehouseId: warehouse.id } },
-      update: { quantityOnHand: quantities[key] ?? 0 },
-      create: { productId: product.id, warehouseId: warehouse.id, quantityOnHand: quantities[key] ?? 0 },
+      update: { quantityOnHand: quantities[key] ?? 0, reservedQuantity: 0, locationId: warehouse.code === "WH-JKT" ? locationByCode.get("JKT-A01") : warehouse.code === "WH-BDG" ? locationByCode.get("BDG-A01") : locationByCode.get("SBY-A01") },
+      create: { productId: product.id, warehouseId: warehouse.id, quantityOnHand: quantities[key] ?? 0, locationId: warehouse.code === "WH-JKT" ? locationByCode.get("JKT-A01") : warehouse.code === "WH-BDG" ? locationByCode.get("BDG-A01") : locationByCode.get("SBY-A01") },
     });
     balanceMap.set(key, balance.id);
   }
   const balance = (sku: string, code: string) => id(balanceMap, `${sku}:${code}`);
+  await prisma.productBatch.upsert({ where: { productId_warehouseId_batchNumber: { productId: id(productMap, "CB-UGR-USBC"), warehouseId: jkt, batchNumber: "LOT-CB-2610-A" } }, update: { quantityOnHand: 60, reservedQuantity: 0, expiryDate: new Date("2026-11-15T00:00:00.000Z"), locationId: locationByCode.get("JKT-A01"), status: "ACTIVE" }, create: { productId: id(productMap, "CB-UGR-USBC"), warehouseId: jkt, batchNumber: "LOT-CB-2610-A", quantityOnHand: 60, expiryDate: new Date("2026-11-15T00:00:00.000Z"), locationId: locationByCode.get("JKT-A01") } });
+  await prisma.productBatch.upsert({ where: { productId_warehouseId_batchNumber: { productId: id(productMap, "CB-UGR-USBC"), warehouseId: jkt, batchNumber: "LOT-CB-2610-B" } }, update: { quantityOnHand: 40, reservedQuantity: 0, expiryDate: new Date("2027-01-15T00:00:00.000Z"), locationId: locationByCode.get("JKT-B01"), status: "ACTIVE" }, create: { productId: id(productMap, "CB-UGR-USBC"), warehouseId: jkt, batchNumber: "LOT-CB-2610-B", quantityOnHand: 40, expiryDate: new Date("2027-01-15T00:00:00.000Z"), locationId: locationByCode.get("JKT-B01") } });
+  const receivedPurchaseItems = await prisma.purchaseOrderItem.findMany({ where: { purchaseOrderId: poReceived.id } });
+  const seededCableBatch = await prisma.productBatch.findUnique({ where: { productId_warehouseId_batchNumber: { productId: id(productMap, "CB-UGR-USBC"), warehouseId: jkt, batchNumber: "LOT-CB-2610-A" } } });
+  await prisma.goodsReceipt.create({ data: { number: "SEED-GR-202610-001", purchaseOrderId: poReceived.id, warehouseId: jkt, receivedById: procurement, receivedAt: date(5), notes: "Seed goods receipt", items: { create: receivedPurchaseItems.map((item) => ({ purchaseOrderItemId: item.id, productId: item.productId, locationId: locationByCode.get("JKT-A01")!, batchId: item.productId === id(productMap, "CB-UGR-USBC") ? seededCableBatch?.id ?? null : null, quantity: item.quantity, damagedQuantity: 0 })) } } });
+  for (const product of products) for (const warehouse of warehouseList) {
+    const fallbackLocationId = warehouse.code === "WH-JKT" ? locationByCode.get("JKT-A01")! : warehouse.code === "WH-BDG" ? locationByCode.get("BDG-A01")! : locationByCode.get("SBY-A01")!;
+    const batches = product.trackBatch ? await prisma.productBatch.findMany({ where: { productId: product.id, warehouseId: warehouse.id } }) : [];
+    const rows = batches.length
+      ? batches.map((batch) => ({ locationId: batch.locationId ?? fallbackLocationId, batchId: batch.id, quantityOnHand: batch.quantityOnHand, reservedQuantity: batch.reservedQuantity }))
+      : [{ locationId: fallbackLocationId, batchId: null, quantityOnHand: quantities[`${product.sku}:${warehouse.code}`] ?? 0, reservedQuantity: 0 }];
+    for (const row of rows) {
+      const existing = await prisma.inventoryLocationBalance.findFirst({ where: { productId: product.id, warehouseId: warehouse.id, locationId: row.locationId, batchId: row.batchId } });
+      if (existing) await prisma.inventoryLocationBalance.update({ where: { id: existing.id }, data: { quantityOnHand: row.quantityOnHand, reservedQuantity: row.reservedQuantity } });
+      else await prisma.inventoryLocationBalance.create({ data: { productId: product.id, warehouseId: warehouse.id, locationId: row.locationId, batchId: row.batchId, quantityOnHand: row.quantityOnHand, reservedQuantity: row.reservedQuantity } });
+    }
+  }
   await prisma.stockMovement.createMany({ data: [
     { productId: id(productMap, "LP-LNV-T14"), warehouseId: jkt, inventoryBalanceId: balance("LP-LNV-T14", "WH-JKT"), quantity: 20, movementType: "PURCHASE_RECEIPT", unitCost: 14000000, purchaseOrderId: poReceived.id, createdById: procurement, occurredAt: date(5), note: "Seed: penerimaan PO perangkat" },
     { productId: id(productMap, "KB-LOG-K380"), warehouseId: jkt, inventoryBalanceId: balance("KB-LOG-K380", "WH-JKT"), quantity: 50, movementType: "PURCHASE_RECEIPT", unitCost: 450000, purchaseOrderId: poReceived.id, createdById: procurement, occurredAt: date(5), note: "Seed: penerimaan PO perangkat" },

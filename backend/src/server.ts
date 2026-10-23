@@ -3,6 +3,7 @@ import app from "./app.ts";
 
 import { prisma } from "./lib/prisma.ts";
 import { env } from "./config/env.ts";
+import { releaseExpiredReservations, updateExpiredBatches } from "./modules/operations/inventory.service.ts";
 
 async function startServer() {
   try {
@@ -20,6 +21,13 @@ async function startServer() {
       );
     });
 
+    const maintenanceTimer = setInterval(() => {
+      void Promise.all([updateExpiredBatches(), releaseExpiredReservations()]).catch((error) => {
+        console.error("Inventory maintenance error:", error);
+      });
+    }, 60_000);
+    maintenanceTimer.unref();
+
     let shuttingDown = false;
 
     // Graceful shutdown
@@ -28,6 +36,7 @@ async function startServer() {
 
       shuttingDown = true;
       console.log(`Received ${signal}. Shutting down...`);
+      clearInterval(maintenanceTimer);
 
       server.close(async () => {
         try {

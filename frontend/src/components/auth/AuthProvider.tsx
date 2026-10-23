@@ -154,16 +154,24 @@ export function AuthProvider({
   // ========================================
 
   const logout = useCallback(async () => {
-    await authApi<unknown>(
-      "/api/auth/logout",
-      {
-        method: "POST",
+    try {
+      await authApi<unknown>(
+        "/api/auth/logout",
+        {
+          method: "POST",
+        }
+      );
+    } catch (reason) {
+      // A logout must still work when the backend is temporarily offline.
+      // The server session will expire or be invalidated on the next request.
+      if (!(reason instanceof ApiError) || reason.status !== 0) {
+        console.warn("Logout request could not reach the backend", reason);
       }
-    );
-
-    setCsrfToken(null);
-    setUser(null);
-    setError("");
+    } finally {
+      setCsrfToken(null);
+      setUser(null);
+      setError("");
+    }
   }, []);
 
   // ========================================

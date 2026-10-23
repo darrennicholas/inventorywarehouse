@@ -50,8 +50,8 @@ async function ensureWarehouseCanDeactivate(
 
 export const warehouseService = {
   // GET ALL
-  list() {
-    return warehouseRepository.findAll();
+  list(warehouseIds?: string[]) {
+    return warehouseRepository.findAll(warehouseIds);
   },
 
   // GET DETAIL

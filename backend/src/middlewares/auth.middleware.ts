@@ -14,6 +14,7 @@ import type {
 
 import { prisma } from "../lib/prisma.ts";
 import { AppError } from "../utils/AppError.ts";
+import { hasPermission } from "../rbac/permission-utils.ts";
 
 export const SESSION_COOKIE = "stockflow_session";
 
@@ -35,6 +36,8 @@ export const sessionCookieOptions = {
 export type AuthContext = {
   userId: string;
   sessionId: string;
+  roleCode: string;
+  warehouseId: string | null;
   permissions: string[];
   csrfToken: string;
 };
@@ -113,10 +116,13 @@ export const requireAuth: RequestHandler = async (
             staff: {
               select: {
                 isActive: true,
+                warehouseId: true,
               },
             },
             role: {
-              include: {
+              select: {
+                code: true,
+                isActive: true,
                 permissions: {
                   include: {
                     permission: true,
@@ -150,6 +156,8 @@ export const requireAuth: RequestHandler = async (
     (req as AuthorizedRequest).auth = {
       userId: session.userId,
       sessionId: session.id,
+      roleCode: session.user.role.code,
+      warehouseId: session.user.staff?.warehouseId ?? null,
       csrfToken: createCsrfToken(session.id),
       permissions: session.user.role.permissions.map(
         (item) => item.permission.key
@@ -173,9 +181,7 @@ export function requirePermission(
     try {
       const auth = authOf(req);
 
-      const allowed = permissionKeys.some((key) =>
-        auth.permissions.includes(key)
-      );
+      const allowed = hasPermission(auth.permissions, permissionKeys);
 
       if (!allowed) {
         throw new AppError(

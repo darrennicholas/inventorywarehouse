@@ -14,6 +14,9 @@ export interface Product {
   unitId: string | null;
 
   minStock: number;
+  maxStock: number | null;
+  reorderLeadDays: number;
+  trackBatch: boolean;
   isActive: boolean;
 
   totalStock: number | null;
@@ -52,6 +55,9 @@ export interface ProductInput {
   unitId?: string | null;
 
   minStock?: number;
+  maxStock?: number | null;
+  reorderLeadDays?: number;
+  trackBatch?: boolean;
   isActive?: boolean;
 }
 

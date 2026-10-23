@@ -1,8 +1,20 @@
 
-const API_URL = (
-  process.env.NEXT_PUBLIC_API_URL ??
-  "http://localhost:5000"
-).replace(/\/$/, "");
+function normalizeApiUrl(value: string): string {
+  return value
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/\/api$/i, "");
+}
+
+function apiUrl(endpoint: string): string {
+  const baseUrl = normalizeApiUrl(
+    process.env.NEXT_PUBLIC_API_URL ??
+      "http://localhost:5000"
+  );
+  return endpoint.startsWith("/")
+    ? `${baseUrl}${endpoint}`
+    : `${baseUrl}/${endpoint}`;
+}
 
 let csrfToken: string | null = null;
 let unauthorizedHandler: (() => void) | null = null;
@@ -10,7 +22,8 @@ let unauthorizedHandler: (() => void) | null = null;
 export class ApiError extends Error {
   constructor(
     public status: number,
-    message: string
+    message: string,
+    public requestId?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -59,18 +72,29 @@ export async function apiRequest<T>(
     headers.set("X-CSRF-Token", csrfToken);
   }
 
-  const response = await fetch(
-    endpoint.startsWith("/")
-      ? `${API_URL}${endpoint}`
-      : `${API_URL}/${endpoint}`,
-    {
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && !headers.has('Idempotency-Key')) {
+    const key = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    headers.set('Idempotency-Key', key);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(apiUrl(endpoint), {
       ...options,
       method,
       headers,
       credentials: "include",
       cache: "no-store",
-    }
-  );
+    });
+  } catch (reason) {
+    const detail = reason instanceof Error ? reason.message : "Unknown network error";
+    throw new ApiError(
+      0,
+      `Backend API tidak dapat diakses. Pastikan backend berjalan di ${normalizeApiUrl(process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000")}. (${detail})`
+    );
+  }
 
   const text = await response.text();
 
@@ -98,7 +122,8 @@ export async function apiRequest<T>(
         ? result.message
         : `Request failed (${response.status})`;
 
-    throw new ApiError(response.status, message);
+    const requestId = response.headers.get("X-Request-Id") ?? (typeof result === "object" && result !== null && "requestId" in result && typeof result.requestId === "string" ? result.requestId : undefined);
+    throw new ApiError(response.status, message, requestId);
   }
 
   if (result === null) {
@@ -112,10 +137,16 @@ export async function apiRequest<T>(
 }
 
 export async function apiDownload(endpoint: string): Promise<Blob> {
-  const response = await fetch(
-    endpoint.startsWith("/") ? `${API_URL}${endpoint}` : `${API_URL}/${endpoint}`,
-    { credentials: "include", cache: "no-store" }
-  );
+  let response: Response;
+  try {
+    response = await fetch(apiUrl(endpoint), {
+      credentials: "include",
+      cache: "no-store",
+    });
+  } catch (reason) {
+    const detail = reason instanceof Error ? reason.message : "Unknown network error";
+    throw new ApiError(0, `Backend API tidak dapat diakses. (${detail})`);
+  }
 
   if (!response.ok) {
     const text = await response.text();

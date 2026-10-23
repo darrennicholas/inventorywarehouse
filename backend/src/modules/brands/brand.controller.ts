@@ -3,6 +3,8 @@ import { asyncHandler } from "../../utils/asyncHandler.ts";
 import { requireUuid } from "../../utils/requireUuid.ts";
 
 import { brandService } from "./brand.service.ts";
+import { notifyByPermission } from "../notifications/notification.service.ts";
+import { paginateArray } from "../../utils/pagination.ts";
 
 import type {
   CreateBrandInput,
@@ -10,12 +12,13 @@ import type {
 } from "./brand.validation.ts";
 
 export const getBrands = asyncHandler(
-  async (_req, res) => {
+  async (req, res) => {
     const data = await brandService.list();
+    const result = paginateArray(data, req.query as Record<string, unknown>);
 
     res.status(200).json({
       success: true,
-      data,
+      ...result,
     });
   }
 );
@@ -37,6 +40,7 @@ export const createBrand = asyncHandler(
     const data = await brandService.create(
       req.body as CreateBrandInput
     );
+    await notifyByPermission({ permission: "brands.read", type: "BRAND_CREATED", title: "Brand created", message: `${data.name} was added to product master data.`, entity: "Brand", entityId: data.id });
 
     res.status(201).json({
       success: true,
@@ -54,6 +58,7 @@ export const updateBrand = asyncHandler(
       id,
       req.body as UpdateBrandInput
     );
+    await notifyByPermission({ permission: "brands.read", type: "BRAND_UPDATED", title: "Brand updated", message: `${data.name} was updated.`, entity: "Brand", entityId: data.id });
 
     res.status(200).json({
       success: true,
@@ -67,6 +72,7 @@ export const deactivateBrand = asyncHandler(
   async (req, res) => {
     const id = requireUuid(req.params.id, "Brand ID");
     const data = await brandService.deactivate(id);
+    await notifyByPermission({ permission: "brands.read", type: "BRAND_DEACTIVATED", title: "Brand deactivated", message: `${data.name} was deactivated.`, entity: "Brand", entityId: data.id });
 
     res.status(200).json({
       success: true,

@@ -8,6 +8,9 @@ const purchaseItem = z.object({
   productId: uuid,
   quantity: positiveInt,
   unitPrice: money,
+  batchNumber: z.string().trim().max(80).nullable().optional(),
+  productionDate: z.coerce.date().nullable().optional(),
+  expiryDate: z.coerce.date().nullable().optional(),
 }).strict();
 
 const saleItem = z.object({
@@ -19,30 +22,50 @@ const saleItem = z.object({
 const adjustmentItem = z.object({
   productId: uuid,
   quantity: positiveInt,
+  locationId: uuid.nullable().optional(),
+  batchId: uuid.nullable().optional(),
   notes: z.string().trim().max(500).nullable().optional(),
 }).strict();
 
 const transferItem = z.object({
   productId: uuid,
   quantity: positiveInt,
+  sourceLocationId: uuid.nullable().optional(),
+  destinationLocationId: uuid.nullable().optional(),
+  batchId: uuid.nullable().optional(),
 }).strict();
 
 export const purchaseSchema = z.object({
   number: z.string().trim().min(2).max(40),
   supplierId: uuid,
   warehouseId: uuid,
-  status: z.enum(["DRAFT", "PENDING", "APPROVED", "RECEIVED", "CANCELLED"]).optional(),
+  status: z.enum(["DRAFT", "PENDING", "APPROVED", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELLED"]).optional(),
   expectedDate: z.coerce.date().nullable().optional(),
   notes: z.string().trim().max(1000).nullable().optional(),
   tax: money.optional(),
   items: z.array(purchaseItem).min(1),
 }).strict();
 
+export const purchaseReceiveSchema = z.object({
+  receiptNumber: z.string().trim().min(2).max(40).optional(),
+  notes: z.string().trim().max(1000).nullable().optional(),
+  items: z.array(z.object({
+    productId: uuid,
+    quantity: positiveInt,
+    damagedQuantity: z.coerce.number().int().min(0).default(0),
+    batchNumber: z.string().trim().max(80).nullable().optional(),
+    productionDate: z.coerce.date().nullable().optional(),
+    expiryDate: z.coerce.date().nullable().optional(),
+    locationId: uuid.nullable().optional(),
+    notes: z.string().trim().max(500).nullable().optional(),
+  }).strict()).min(1).optional(),
+}).strict();
+
 export const saleSchema = z.object({
   number: z.string().trim().min(2).max(40),
   customerId: uuid.nullable().optional(),
   warehouseId: uuid,
-  status: z.enum(["DRAFT", "COMPLETED", "CANCELLED"]).optional(),
+  status: z.enum(["DRAFT", "RESERVED", "COMPLETED", "CANCELLED"]).optional(),
   notes: z.string().trim().max(1000).nullable().optional(),
   discount: money.optional(),
   tax: money.optional(),
@@ -95,6 +118,7 @@ export const paymentSchema = z.object({
 }).strict();
 
 export type PurchaseInput = z.output<typeof purchaseSchema>;
+export type PurchaseReceiveInput = z.output<typeof purchaseReceiveSchema>;
 export type SaleInput = z.output<typeof saleSchema>;
 export type AdjustmentInput = z.output<typeof adjustmentSchema>;
 export type TransferInput = z.output<typeof transferSchema>;

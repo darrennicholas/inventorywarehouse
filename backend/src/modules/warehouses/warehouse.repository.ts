@@ -11,8 +11,9 @@ export const warehouseRepository = {
   // GET ALL WAREHOUSES
   // ====================================
 
-  findAll() {
+  findAll(warehouseIds?: string[]) {
     return prisma.warehouse.findMany({
+      where: warehouseIds ? { id: { in: warehouseIds } } : undefined,
       orderBy: {
         createdAt: "desc",
       },

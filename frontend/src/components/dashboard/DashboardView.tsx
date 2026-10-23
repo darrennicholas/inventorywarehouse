@@ -3,15 +3,29 @@
 import type { ReactNode } from "react";
 import { AlertTriangle, ArrowRight, BarChart3, Boxes, ChartNoAxesCombined, Package, PieChart, Ruler, Tag, TrendingUp, Warehouse } from "lucide-react";
 import type { Product } from "@/types/product";
+import NotificationFeed from "@/components/dashboard/NotificationFeed";
+import InventoryIntelligence from "@/components/dashboard/InventoryIntelligence";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 type MasterRow = { id: string; name: string; code?: string; isActive: boolean; createdAt: string };
 type DashboardPage = "categories" | "brands" | "units" | "products" | "warehouses";
-type Props = { products: Product[]; categories: MasterRow[]; brands: MasterRow[]; units: MasterRow[]; loading: boolean; masterLoading: boolean; onNavigate: (page: DashboardPage) => void };
+type DashboardSummary = {
+  kpis: { purchaseValue: number; salesValue: number; expenseValue: number; stockUnits: number; lowStockLines: number };
+  monthly: Array<{ label: string; purchases: number; sales: number; expenses: number }>;
+  topProducts: Array<{ id: string; sku: string; name: string; quantity: number; minStock: number }>;
+  warehouseStock: Array<{ id: string; name: string; quantity: number }>;
+  lowStock: Array<{ productId: string; sku: string; productName: string; warehouseId: string; warehouseName: string; quantityOnHand: number; minStock: number; reorderQuantity: number }>;
+};
+type Props = { products: Product[]; categories: MasterRow[]; brands: MasterRow[]; units: MasterRow[]; summary: DashboardSummary | null; loading: boolean; masterLoading: boolean; onNavigate: (page: DashboardPage) => void };
 
 const colors = ["#3b82f6", "#8b5cf6", "#f59e0b", "#10b981", "#ec4899", "#06b6d4"];
 
 function percentage(part: number, total: number) {
   return total ? Math.round((part / total) * 100) : 0;
+}
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
 }
 
 function monthSeries(products: Product[]) {
@@ -26,7 +40,9 @@ function monthSeries(products: Product[]) {
   });
 }
 
-export default function DashboardView({ products, categories, brands, units, loading, masterLoading, onNavigate }: Props) {
+export default function DashboardView({ products, categories, brands, units, summary, loading, masterLoading, onNavigate }: Props) {
+  const { user } = useAuth();
+  const roleTitle = user?.role.code === "PROCUREMENT" ? "Procurement intelligence" : user?.role.code === "WAREHOUSE_STAFF" ? "Warehouse operations" : user?.role.code === "AUDITOR" ? "Audit-ready snapshot" : user?.role.code === "WAREHOUSE_MANAGER" ? "Warehouse portfolio" : "Inventory intelligence";
   const counts = [
     { label: "Categories", value: categories.length, icon: Tag, color: "from-blue-500 to-indigo-600", page: "categories" as const },
     { label: "Brands", value: brands.length, icon: Boxes, color: "from-violet-500 to-fuchsia-600", page: "brands" as const },
@@ -61,7 +77,7 @@ export default function DashboardView({ products, categories, brands, units, loa
   ];
 
   return <section className="space-y-6">
-    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#172b63] via-[#254ac2] to-[#5b45e8] p-6 text-white shadow-xl sm:p-8"><div className="absolute -right-20 -top-24 h-64 w-64 rounded-full border-[34px] border-white/10" /><div className="absolute bottom-[-80px] right-[30%] h-48 w-48 rounded-full bg-white/10" /><div className="relative flex flex-wrap items-end justify-between gap-6"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-100">StockFlow Analytics</p><h2 className="mt-3 text-3xl font-bold tracking-tight">Inventory intelligence</h2><p className="mt-2 max-w-xl text-sm leading-6 text-blue-100">Four analytical views drawn from your product catalog, its master-data relations, inventory balances, and registration dates.</p></div><div className="rounded-2xl bg-white/15 p-4 backdrop-blur"><TrendingUp size={34} /></div></div></div>
+    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#172b63] via-[#254ac2] to-[#5b45e8] p-6 text-white shadow-xl sm:p-8"><div className="absolute -right-20 -top-24 h-64 w-64 rounded-full border-[34px] border-white/10" /><div className="absolute bottom-[-80px] right-[30%] h-48 w-48 rounded-full bg-white/10" /><div className="relative flex flex-wrap items-end justify-between gap-6"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-100">StockFlow Analytics · {user?.role.name ?? "Role view"}</p><h2 className="mt-3 text-3xl font-bold tracking-tight">{roleTitle}</h2><p className="mt-2 max-w-xl text-sm leading-6 text-blue-100">Four analytical views drawn from your product catalog, its master-data relations, inventory balances, and registration dates.</p></div><div className="rounded-2xl bg-white/15 p-4 backdrop-blur"><TrendingUp size={34} /></div></div></div>
 
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{counts.map((item) => { const Icon = item.icon; return <button key={item.label} type="button" onClick={() => onNavigate(item.page)} className="group rounded-2xl border border-slate-100 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-lg dark:border-slate-800 dark:bg-slate-900"><div className="flex items-center justify-between"><span className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${item.color} text-white shadow-md`}><Icon size={20} /></span><ArrowRight size={17} className="text-slate-300 transition group-hover:translate-x-1 group-hover:text-blue-500" /></div><p className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">{item.label}</p><p className="mt-1 text-3xl font-bold text-slate-900 dark:text-white">{masterLoading || loading ? "—" : item.value}</p><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Master records available</p></button>; })}</div>
 
@@ -74,6 +90,18 @@ export default function DashboardView({ products, categories, brands, units, loa
 
       <ChartCard title="Catalog relationship readiness" subtitle="Progress chart · Product categoryId, brandId, unitId, barcode" icon={<Warehouse size={20} className="text-amber-500" />}><div className="mt-6 space-y-5">{relationshipProgress.map((item) => <div key={item.label}><div className="mb-2 flex items-center justify-between text-xs"><span className="font-semibold text-slate-600 dark:text-slate-300">{item.label}</span><span className="font-bold text-slate-900 dark:text-white">{item.value}%</span></div><div className="h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className={`h-full rounded-full ${item.color} transition-all duration-700`} style={{ width: `${item.value}%` }} /></div></div>)}<div className="mt-5 rounded-xl bg-amber-50 p-3 text-xs text-amber-700 dark:bg-amber-950/40 dark:text-amber-200">{lowStock.length} products are at or below their Product.minStock threshold.</div></div></ChartCard>
     </div>
+
+    {summary && <section className="space-y-5 rounded-3xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-7">
+      <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-500">Operational intelligence</p><h3 className="mt-2 text-xl font-bold text-slate-900 dark:text-white">Business flow & reorder center</h3><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Live data from purchase orders, completed sales, expenses, and inventory balances.</p></div><button type="button" onClick={() => onNavigate("products")} className="rounded-xl bg-blue-50 px-4 py-2 text-xs font-bold text-blue-600 hover:bg-blue-100 dark:bg-blue-950/50 dark:text-blue-300">Open product catalog</button></div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><Metric label="Purchase value" value={formatMoney(summary.kpis.purchaseValue)} tone="blue" /><Metric label="Sales value" value={formatMoney(summary.kpis.salesValue)} tone="emerald" /><Metric label="Operating expense" value={formatMoney(summary.kpis.expenseValue)} tone="rose" /><Metric label="Units on hand" value={summary.kpis.stockUnits.toLocaleString("id-ID")} tone="violet" /><Metric label="Reorder lines" value={String(summary.kpis.lowStockLines)} tone="amber" /></div>
+      <div className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">
+        <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-5 dark:border-slate-800 dark:bg-slate-950/40"><div className="flex items-center justify-between"><div><h4 className="font-bold text-slate-900 dark:text-white">Monthly business flow</h4><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Purchase, sales, and expense value</p></div><div className="flex gap-3 text-[10px] font-semibold text-slate-500"><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-blue-500" />Purchase</span><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-emerald-500" />Sales</span></div></div><div className="mt-6 grid grid-cols-6 items-end gap-2 sm:gap-4">{summary.monthly.map((month) => { const max = Math.max(month.purchases, month.sales, month.expenses, 1); return <div key={month.label} className="flex min-w-0 flex-col items-center gap-2"><div className="flex h-36 w-full items-end justify-center gap-1 rounded-t-xl bg-white px-1 pt-2 dark:bg-slate-900"><span className="w-1/3 rounded-t bg-blue-500" style={{ height: `${Math.max((month.purchases / max) * 100, month.purchases ? 5 : 0)}%` }} title={`Purchase ${formatMoney(month.purchases)}`} /><span className="w-1/3 rounded-t bg-emerald-500" style={{ height: `${Math.max((month.sales / max) * 100, month.sales ? 5 : 0)}%` }} title={`Sales ${formatMoney(month.sales)}`} /><span className="w-1/3 rounded-t bg-rose-400" style={{ height: `${Math.max((month.expenses / max) * 100, month.expenses ? 5 : 0)}%` }} title={`Expense ${formatMoney(month.expenses)}`} /></div><span className="truncate text-[10px] font-semibold text-slate-500">{month.label}</span></div>; })}</div></div>
+        <div className="rounded-2xl border border-amber-100 bg-amber-50/60 p-5 dark:border-amber-900/60 dark:bg-amber-950/20"><div className="flex items-center justify-between"><div><h4 className="font-bold text-slate-900 dark:text-white">Reorder queue</h4><p className="mt-1 text-xs text-slate-600 dark:text-slate-300">Recommended quantity uses minStock × 2</p></div><AlertTriangle size={20} className="text-amber-500" /></div><div className="mt-4 space-y-3">{summary.lowStock.slice(0, 5).map((row) => <div key={`${row.productId}-${row.warehouseId}`} className="flex items-center justify-between gap-3 rounded-xl bg-white/80 p-3 dark:bg-slate-900/70"><div className="min-w-0"><p className="truncate text-xs font-bold text-slate-900 dark:text-white">{row.productName}</p><p className="truncate text-[10px] text-slate-500 dark:text-slate-400">{row.warehouseName} · {row.sku}</p></div><div className="shrink-0 text-right"><p className="text-xs font-bold text-red-600 dark:text-red-300">{row.quantityOnHand} / {row.minStock}</p><p className="text-[10px] text-slate-500">Order +{row.reorderQuantity}</p></div></div>)}{summary.lowStock.length === 0 && <p className="py-8 text-center text-sm text-emerald-700 dark:text-emerald-300">All stock levels are healthy.</p>}</div></div>
+      </div>
+    </section>}
+
+    <NotificationFeed />
+    <InventoryIntelligence />
 
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Insight label="Stock visibility" value={`${stockVisible.length}`} hint="Products with inventory balances" tone="blue" /><Insight label="Low-stock attention" value={`${lowStock.length}`} hint="Using totalStock and minStock" tone="amber" icon={<AlertTriangle size={17} />} /><Insight label="Catalog linked" value={`${percentage(linkedCategory + linkedBrand + linkedUnit, products.length * 3)}%`} hint="Across three master relationships" tone="violet" /><Insight label="Barcode coverage" value={`${percentage(barcodeReady, products.length)}%`} hint="Products ready for scanning" tone="emerald" /></div>
 
@@ -94,6 +122,11 @@ function LineChart({ points, labels, maxValue }: { points: number[]; labels: str
 }
 
 function EmptyChart() { return <p className="m-auto py-12 text-center text-sm text-slate-400">No related data has been recorded yet.</p>; }
+
+function Metric({ label, value, tone }: { label: string; value: string; tone: "blue" | "emerald" | "rose" | "violet" | "amber" }) {
+  const colors = { blue: "bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300", emerald: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300", rose: "bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-300", violet: "bg-violet-50 text-violet-600 dark:bg-violet-950/50 dark:text-violet-300", amber: "bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-300" };
+  return <div className={`rounded-2xl p-4 ${colors[tone]}`}><p className="text-[10px] font-bold uppercase tracking-wide opacity-75">{label}</p><p className="mt-2 truncate text-lg font-bold">{value}</p></div>;
+}
 
 function Insight({ label, value, hint, tone, icon }: { label: string; value: string; hint: string; tone: "blue" | "amber" | "violet" | "emerald"; icon?: ReactNode }) {
   const toneClasses = { blue: "bg-blue-50 text-blue-600 dark:bg-blue-950/50", amber: "bg-amber-50 text-amber-600 dark:bg-amber-950/50", violet: "bg-violet-50 text-violet-600 dark:bg-violet-950/50", emerald: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50" };

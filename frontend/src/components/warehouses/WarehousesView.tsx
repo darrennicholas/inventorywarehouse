@@ -27,6 +27,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 
 import { useWarehouses } from "@/hooks/useWarehouses";
 import { warehouseService } from "@/services/warehouse.service";
+import WarehouseLocationsPanel from "@/components/warehouses/WarehouseLocationsPanel";
 
 import type {
   Warehouse,
@@ -1013,6 +1014,8 @@ export default function WarehousesView() {
                   </span>
                 </div>
               ))}
+
+              <WarehouseLocationsPanel warehouseId={viewing.id} canWrite={canWrite} />
 
               <div className="flex justify-end gap-3 pt-2">
                 <button

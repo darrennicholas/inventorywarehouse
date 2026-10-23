@@ -60,6 +60,12 @@ const productFields = z
       .min(0, "Minimum stock cannot be negative")
       .optional(),
 
+    maxStock: z.number().int().min(0, "Maximum stock cannot be negative").nullable().optional(),
+
+    reorderLeadDays: z.number().int().min(0).max(365).optional(),
+
+    trackBatch: z.boolean().optional(),
+
     isActive: z.boolean().optional(),
   })
   .strict();

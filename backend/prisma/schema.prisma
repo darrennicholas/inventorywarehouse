@@ -61,6 +61,8 @@ model Unit {
 // ==========================================
 
 model Product {
+  returnOrderItems ReturnOrderItem[]
+
   id          String  @id @default(uuid()) @db.Uuid
   sku         String  @unique
   code        String? @unique
@@ -69,8 +71,11 @@ model Product {
   description String?
   imageUrl    String?
 
-  minStock Int     @default(0)
-  isActive Boolean @default(true)
+  minStock   Int     @default(0)
+  maxStock   Int?
+  reorderLeadDays Int @default(7)
+  trackBatch Boolean @default(false)
+  isActive   Boolean @default(true)
 
   // FOREIGN KEYS
   categoryId String? @db.Uuid
@@ -82,12 +87,19 @@ model Product {
   brand    Brand?    @relation(fields: [brandId], references: [id], onDelete: SetNull)
   unit     Unit?     @relation(fields: [unitId], references: [id], onDelete: SetNull)
 
-  inventoryBalances InventoryBalance[]
-  purchaseItems     PurchaseOrderItem[]
-  saleItems         SaleItem[]
-  adjustmentItems   StockAdjustmentItem[]
-  transferItems     StockTransferItem[]
-  stockMovements    StockMovement[]
+  inventoryBalances         InventoryBalance[]
+  inventoryLocationBalances InventoryLocationBalance[]
+  purchaseItems             PurchaseOrderItem[]
+  saleItems                 SaleItem[]
+  adjustmentItems           StockAdjustmentItem[]
+  transferItems             StockTransferItem[]
+  stockMovements            StockMovement[]
+  stockTakeLines            StockTakeLine[]
+  batches                   ProductBatch[]
+  reservations              StockReservation[]
+  goodsReceiptItems         GoodsReceiptItem[]
+  shipmentItems             SaleShipmentItem[]
+  relocationItems           StockRelocationItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -102,6 +114,8 @@ model Product {
 // ==========================================
 
 model Warehouse {
+  returnOrders ReturnOrder[]
+
   id       String  @id @default(uuid()) @db.Uuid
   code     String  @unique
   name     String
@@ -109,15 +123,23 @@ model Warehouse {
   isActive Boolean @default(true)
 
   // RELATIONS
-  inventoryBalances InventoryBalance[]
-  staffMembers      Staff[]
-  purchaseOrders    PurchaseOrder[]
-  sales             Sale[]
-  adjustments       StockAdjustment[]
-  transfersFrom     StockTransfer[]    @relation("TransferFromWarehouse")
-  transfersTo       StockTransfer[]    @relation("TransferToWarehouse")
-  expenses          Expense[]
-  stockMovements    StockMovement[]
+  inventoryBalances         InventoryBalance[]
+  inventoryLocationBalances InventoryLocationBalance[]
+  staffMembers              Staff[]
+  purchaseOrders            PurchaseOrder[]
+  sales                     Sale[]
+  adjustments               StockAdjustment[]
+  transfersFrom             StockTransfer[]            @relation("TransferFromWarehouse")
+  transfersTo               StockTransfer[]            @relation("TransferToWarehouse")
+  expenses                  Expense[]
+  stockMovements            StockMovement[]
+  stockTakeSessions         StockTakeSession[]
+  locations                 WarehouseLocation[]
+  batches                   ProductBatch[]
+  reservations              StockReservation[]
+  goodsReceipts             GoodsReceipt[]
+  shipments                 SaleShipment[]
+  relocations               StockRelocation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -140,6 +162,34 @@ model Supplier {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+enum ApprovalSubject {
+  PURCHASE
+  ADJUSTMENT
+  RETURN
+  STOCK_OPNAME
+}
+
+// Nominal approval matrix. A record is matched to the active policy whose
+// range contains its calculated value. The approver role is intentionally a
+// foreign key so administrators can adjust role names without code changes.
+model ApprovalPolicy {
+  id                       String          @id @default(uuid()) @db.Uuid
+  subject                  ApprovalSubject
+  minimumAmount            Decimal         @db.Decimal(14, 2)
+  maximumAmount            Decimal?        @db.Decimal(14, 2)
+  approverRoleId           String          @db.Uuid
+  requiresDifferentCreator Boolean         @default(true)
+  isActive                 Boolean         @default(true)
+
+  approverRole Role @relation(fields: [approverRoleId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([subject, isActive, minimumAmount])
+  @@index([approverRoleId])
 }
 
 // ==========================================
@@ -166,14 +216,17 @@ model Customer {
 // ==========================================
 
 model InventoryBalance {
-  id             String @id @default(uuid()) @db.Uuid
-  productId      String @db.Uuid
-  warehouseId    String @db.Uuid
-  quantityOnHand Int    @default(0)
+  id               String  @id @default(uuid()) @db.Uuid
+  productId        String  @db.Uuid
+  warehouseId      String  @db.Uuid
+  quantityOnHand   Int     @default(0)
+  reservedQuantity Int     @default(0)
+  locationId       String? @db.Uuid
 
   // RELATIONS
-  product   Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
-  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  product   Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  warehouse Warehouse          @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  location  WarehouseLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
 
   stockMovements StockMovement[]
 
@@ -182,6 +235,117 @@ model InventoryBalance {
   // ONE STOCK BALANCE PER PRODUCT PER WAREHOUSE
   @@unique([productId, warehouseId])
   @@index([warehouseId])
+}
+
+// Detail saldo per Product + Warehouse + Location + Batch.
+// IMPORTANT: Backend stock posting must be upgraded before this becomes the live source of truth.
+model InventoryLocationBalance {
+  id String @id @default(uuid()) @db.Uuid
+
+  productId   String  @db.Uuid
+  warehouseId String  @db.Uuid
+  locationId  String  @db.Uuid
+  batchId     String? @db.Uuid
+
+  quantityOnHand   Int @default(0)
+  reservedQuantity Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // RELATIONS
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+
+  location WarehouseLocation @relation(fields: [locationId], references: [id], onDelete: Restrict)
+
+  batch ProductBatch? @relation(fields: [batchId], references: [id], onDelete: Restrict)
+
+  reservations        StockReservation[]
+  movementAllocations StockMovementAllocation[]
+
+  // INDEXES
+  @@index([productId, warehouseId])
+  @@index([warehouseId, locationId])
+  @@index([batchId])
+}
+
+// ==========================================
+// WAREHOUSE LOCATIONS & PRODUCT BATCHES
+// ==========================================
+
+model WarehouseLocation {
+  locationType WarehouseLocationType @default(STORAGE)
+
+  returnOrderItems ReturnOrderItem[]
+
+  id          String  @id @default(uuid()) @db.Uuid
+  warehouseId String  @db.Uuid
+  code        String
+  name        String
+  zone        String?
+  rack        String?
+  shelf       String?
+  bin         String?
+  capacity    Int?
+  isActive    Boolean @default(true)
+
+  warehouse                 Warehouse                  @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  inventoryBalances         InventoryBalance[]
+  inventoryLocationBalances InventoryLocationBalance[]
+  batches                   ProductBatch[]
+  goodsReceiptItems         GoodsReceiptItem[]
+  sourceTransferItems       StockTransferItem[]        @relation("TransferSourceLocation")
+  destinationTransferItems  StockTransferItem[]        @relation("TransferDestinationLocation")
+  adjustmentItems           StockAdjustmentItem[]
+  relocationsFrom           StockRelocation[]        @relation("RelocationFromLocation")
+  relocationsTo             StockRelocation[]        @relation("RelocationToLocation")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([warehouseId, code])
+  @@index([warehouseId, isActive])
+}
+
+enum BatchStatus {
+  ACTIVE
+  EXPIRED
+  QUARANTINED
+  DEPLETED
+}
+
+model ProductBatch {
+  returnOrderItems ReturnOrderItem[]
+
+  id               String      @id @default(uuid()) @db.Uuid
+  productId        String      @db.Uuid
+  warehouseId      String      @db.Uuid
+  locationId       String?     @db.Uuid
+  batchNumber      String
+  productionDate   DateTime?
+  expiryDate       DateTime?
+  quantityOnHand   Int         @default(0)
+  reservedQuantity Int         @default(0)
+  status           BatchStatus @default(ACTIVE)
+
+  product           Product                    @relation(fields: [productId], references: [id], onDelete: Restrict)
+  warehouse         Warehouse                  @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  location          WarehouseLocation?         @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  reservations      StockReservation[]
+  locationBalances  InventoryLocationBalance[]
+  goodsReceiptItems GoodsReceiptItem[]
+  adjustmentItems   StockAdjustmentItem[]
+  transferItems     StockTransferItem[]
+  relocationItems   StockRelocationItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, warehouseId, batchNumber])
+  @@index([warehouseId, expiryDate])
+  @@index([productId, status])
 }
 
 // ==========================================
@@ -217,6 +381,9 @@ model Staff {
 // ==========================================
 
 model User {
+  createdReturnOrders  ReturnOrder[] @relation("ReturnCreatedBy")
+  approvedReturnOrders ReturnOrder[] @relation("ReturnApprovedBy")
+
   id           String  @id @default(uuid()) @db.Uuid
   email        String  @unique
   fullName     String
@@ -229,14 +396,29 @@ model User {
   staffId String? @unique @db.Uuid
   staff   Staff?  @relation(fields: [staffId], references: [id], onDelete: SetNull)
 
-  sessions       AuthSession[]
-  purchaseOrders PurchaseOrder[]
-  sales          Sale[]
-  adjustments    StockAdjustment[]
-  transfers      StockTransfer[]
-  expenses       Expense[]
-  payments       Payment[]
-  stockMovements StockMovement[]
+  sessions                  AuthSession[]
+  purchaseOrders            PurchaseOrder[]
+  approvedPurchaseOrders    PurchaseOrder[]    @relation("PurchaseApprovedBy")
+  sales                     Sale[]
+  adjustments               StockAdjustment[]
+  approvedAdjustments       StockAdjustment[]  @relation("AdjustmentApprovedBy")
+  transfers                 StockTransfer[]
+  approvedTransfers         StockTransfer[]    @relation("TransferApprovedBy")
+  expenses                  Expense[]
+  payments                  Payment[]
+  stockMovements            StockMovement[]
+  auditLogs                 AuditLog[]
+  notifications             Notification[]
+  attachments               Attachment[]
+  createdStockTakeSessions  StockTakeSession[] @relation("StockTakeCreatedBy")
+  approvedStockTakeSessions StockTakeSession[] @relation("StockTakeApprovedBy")
+  stockReservations         StockReservation[]
+  goodsReceipts             GoodsReceipt[]
+  idempotencyKeys           IdempotencyKey[]
+  createdShipments           SaleShipment[]     @relation("ShipmentCreatedBy")
+  pickedShipmentItems        SaleShipmentItem[] @relation("ShipmentPickedBy")
+  packedShipmentItems        SaleShipmentItem[] @relation("ShipmentPackedBy")
+  relocations                StockRelocation[]  @relation("RelocationCreatedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -258,6 +440,7 @@ model Role {
 
   users       User[]
   permissions RolePermission[]
+  approvalPolicies ApprovalPolicy[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -289,6 +472,69 @@ model RolePermission {
 
   // COMPOSITE PRIMARY KEY
   @@id([roleId, permissionId])
+}
+
+// ==========================================
+// AUDIT LOG
+// ==========================================
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @db.Uuid
+  action     String
+  entity     String
+  entityId   String?
+  beforeData Json?
+  afterData  Json?
+  requestId  String?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
+// ==========================================
+// NOTIFICATIONS & ATTACHMENTS
+// ==========================================
+
+model Notification {
+  id          String    @id @default(uuid()) @db.Uuid
+  fingerprint String    @unique
+  userId      String    @db.Uuid
+  type        String
+  title       String
+  message     String
+  entity      String?
+  entityId    String?
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@index([entity, entityId])
+}
+
+model Attachment {
+  id           String   @id @default(uuid()) @db.Uuid
+  entity       String
+  entityId     String
+  originalName String
+  storageKey   String   @unique
+  mimeType     String
+  sizeBytes    Int
+  uploadedById String   @db.Uuid
+  createdAt    DateTime @default(now())
+
+  uploadedBy User @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([entity, entityId, createdAt])
+  @@index([uploadedById, createdAt])
 }
 
 // ==========================================
@@ -324,11 +570,15 @@ enum PurchaseStatus {
 }
 
 model PurchaseOrder {
+  returnOrders ReturnOrder[]
+
   id           String         @id @default(uuid()) @db.Uuid
   number       String         @unique
   supplierId   String         @db.Uuid
   warehouseId  String         @db.Uuid
   createdById  String         @db.Uuid
+  approvedById String?        @db.Uuid
+  approvedAt   DateTime?
   status       PurchaseStatus @default(DRAFT)
   orderDate    DateTime       @default(now())
   expectedDate DateTime?
@@ -337,12 +587,14 @@ model PurchaseOrder {
   tax          Decimal        @default(0) @db.Decimal(14, 2)
   total        Decimal        @default(0) @db.Decimal(14, 2)
 
-  supplier  Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  warehouse Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  createdBy User                @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  items     PurchaseOrderItem[]
-  payments  Payment[]
-  movements StockMovement[]
+  supplier   Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  warehouse  Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  createdBy  User                @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy User?               @relation("PurchaseApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  items      PurchaseOrderItem[]
+  payments   Payment[]
+  movements  StockMovement[]
+  receipts   GoodsReceipt[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -352,19 +604,26 @@ model PurchaseOrder {
   @@index([createdById])
   @@index([status])
   @@index([orderDate])
+  @@index([status, orderDate])
 }
 
 model PurchaseOrderItem {
-  id               String  @id @default(uuid()) @db.Uuid
-  purchaseOrderId  String  @db.Uuid
-  productId        String  @db.Uuid
-  quantity         Int
-  receivedQuantity Int     @default(0)
-  unitPrice        Decimal @db.Decimal(14, 2)
-  total            Decimal @db.Decimal(14, 2)
+  returnOrderItems ReturnOrderItem[]
 
-  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  id               String    @id @default(uuid()) @db.Uuid
+  purchaseOrderId  String    @db.Uuid
+  productId        String    @db.Uuid
+  quantity         Int
+  receivedQuantity Int       @default(0)
+  unitPrice        Decimal   @db.Decimal(14, 2)
+  total            Decimal   @db.Decimal(14, 2)
+  batchNumber      String?
+  productionDate   DateTime?
+  expiryDate       DateTime?
+
+  purchaseOrder PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  receiptItems  GoodsReceiptItem[]
 
   @@unique([purchaseOrderId, productId])
   @@index([productId])
@@ -372,11 +631,18 @@ model PurchaseOrderItem {
 
 enum SaleStatus {
   DRAFT
+  RESERVED
+  PICKING
+  PACKED
+  PARTIALLY_SHIPPED
+  SHIPPED
   COMPLETED
   CANCELLED
 }
 
 model Sale {
+  returnOrders ReturnOrder[]
+
   id          String     @id @default(uuid()) @db.Uuid
   number      String     @unique
   customerId  String?    @db.Uuid
@@ -390,12 +656,14 @@ model Sale {
   tax         Decimal    @default(0) @db.Decimal(14, 2)
   total       Decimal    @default(0) @db.Decimal(14, 2)
 
-  customer  Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  warehouse Warehouse       @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  createdBy User            @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  items     SaleItem[]
-  payments  Payment[]
-  movements StockMovement[]
+  customer     Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  warehouse    Warehouse          @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  createdBy    User               @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  items        SaleItem[]
+  payments     Payment[]
+  movements    StockMovement[]
+  reservations StockReservation[]
+  shipments    SaleShipment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -405,9 +673,12 @@ model Sale {
   @@index([createdById])
   @@index([status])
   @@index([saleDate])
+  @@index([status, saleDate])
 }
 
 model SaleItem {
+  returnOrderItems ReturnOrderItem[]
+
   id        String  @id @default(uuid()) @db.Uuid
   saleId    String  @db.Uuid
   productId String  @db.Uuid
@@ -415,11 +686,191 @@ model SaleItem {
   unitPrice Decimal @db.Decimal(14, 2)
   total     Decimal @db.Decimal(14, 2)
 
-  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  sale         Sale               @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product      Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  reservations StockReservation[]
+  shipmentItems SaleShipmentItem[]
 
   @@unique([saleId, productId])
   @@index([productId])
+}
+
+enum StockReservationStatus {
+  ACTIVE
+  RELEASED
+  CONSUMED
+  CANCELLED
+}
+
+model StockReservation {
+  id                String                 @id @default(uuid()) @db.Uuid
+  saleId            String                 @db.Uuid
+  saleItemId        String                 @db.Uuid
+  productId         String                 @db.Uuid
+  warehouseId       String                 @db.Uuid
+  batchId           String?                @db.Uuid
+  locationBalanceId String?                @db.Uuid
+  quantity          Int
+  status            StockReservationStatus @default(ACTIVE)
+  reservedById      String                 @db.Uuid
+  expiresAt         DateTime?
+  releasedAt        DateTime?
+  consumedAt        DateTime?
+  releaseReason     String?
+
+  sale            Sale                      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  saleItem        SaleItem                  @relation(fields: [saleItemId], references: [id], onDelete: Cascade)
+  product         Product                   @relation(fields: [productId], references: [id], onDelete: Restrict)
+  warehouse       Warehouse                 @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  batch           ProductBatch?             @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  locationBalance InventoryLocationBalance? @relation(fields: [locationBalanceId], references: [id], onDelete: Restrict)
+  reservedBy      User                      @relation(fields: [reservedById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([saleId, status])
+  @@index([warehouseId, productId, status])
+  @@index([batchId, status])
+  @@index([locationBalanceId])
+  @@index([status, expiresAt])
+}
+
+enum SaleShipmentStatus {
+  PICKING
+  PACKED
+  SHIPPED
+  COMPLETED
+  CANCELLED
+}
+
+model SaleShipment {
+  id              String             @id @default(uuid()) @db.Uuid
+  number          String             @unique
+  saleId          String             @db.Uuid
+  warehouseId     String             @db.Uuid
+  createdById     String             @db.Uuid
+  status          SaleShipmentStatus @default(PICKING)
+  courier         String?
+  trackingNumber  String?
+  shippingAddress String?
+  pickedAt        DateTime?
+  packedAt        DateTime?
+  shippedAt       DateTime?
+  completedAt     DateTime?
+  notes           String?
+
+  sale       Sale       @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  warehouse  Warehouse  @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  createdBy  User       @relation("ShipmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  items      SaleShipmentItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([saleId, status])
+  @@index([warehouseId, status, createdAt])
+  @@index([createdById])
+}
+
+model SaleShipmentItem {
+  id            String   @id @default(uuid()) @db.Uuid
+  shipmentId    String   @db.Uuid
+  saleItemId    String   @db.Uuid
+  productId     String   @db.Uuid
+  quantity      Int
+  pickedQuantity Int     @default(0)
+  packedQuantity Int     @default(0)
+  pickedById    String?  @db.Uuid
+  packedById    String?  @db.Uuid
+  pickedAt      DateTime?
+  packedAt      DateTime?
+  notes         String?
+
+  shipment SaleShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  saleItem SaleItem      @relation(fields: [saleItemId], references: [id], onDelete: Restrict)
+  product  Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  pickedBy User?         @relation("ShipmentPickedBy", fields: [pickedById], references: [id], onDelete: SetNull)
+  packedBy User?         @relation("ShipmentPackedBy", fields: [packedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([shipmentId, saleItemId])
+  @@index([saleItemId])
+  @@index([productId])
+}
+
+enum GoodsReceiptStatus {
+  POSTED
+  CANCELLED
+}
+
+model GoodsReceipt {
+  id              String             @id @default(uuid()) @db.Uuid
+  number          String             @unique
+  purchaseOrderId String             @db.Uuid
+  warehouseId     String             @db.Uuid
+  receivedById    String             @db.Uuid
+  status          GoodsReceiptStatus @default(POSTED)
+  receivedAt      DateTime           @default(now())
+  notes           String?
+
+  purchaseOrder PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  warehouse     Warehouse          @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  receivedBy    User               @relation(fields: [receivedById], references: [id], onDelete: Restrict)
+  items         GoodsReceiptItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([purchaseOrderId])
+  @@index([warehouseId, receivedAt])
+  @@index([receivedById])
+}
+
+model GoodsReceiptItem {
+  id                  String  @id @default(uuid()) @db.Uuid
+  goodsReceiptId      String  @db.Uuid
+  purchaseOrderItemId String  @db.Uuid
+  productId           String  @db.Uuid
+  locationId          String  @db.Uuid
+  batchId             String? @db.Uuid
+  quantity            Int
+  damagedQuantity     Int     @default(0)
+  notes               String?
+
+  goodsReceipt      GoodsReceipt      @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+  purchaseOrderItem PurchaseOrderItem @relation(fields: [purchaseOrderItemId], references: [id], onDelete: Restrict)
+  product           Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  location          WarehouseLocation @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  batch             ProductBatch?     @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([goodsReceiptId])
+  @@index([purchaseOrderItemId])
+  @@index([productId, locationId])
+  @@index([batchId])
+}
+
+model IdempotencyKey {
+  id             String   @id @default(uuid()) @db.Uuid
+  key            String
+  userId         String   @db.Uuid
+  method         String
+  path           String
+  requestHash    String
+  responseStatus Int
+  responseBody   Json
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([expiresAt])
 }
 
 enum AdjustmentType {
@@ -438,15 +889,18 @@ model StockAdjustment {
   number         String           @unique
   warehouseId    String           @db.Uuid
   createdById    String           @db.Uuid
+  approvedById   String?          @db.Uuid
+  approvedAt     DateTime?
   type           AdjustmentType
   status         AdjustmentStatus @default(DRAFT)
   reason         String
   adjustmentDate DateTime         @default(now())
 
-  warehouse Warehouse             @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  createdBy User                  @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  items     StockAdjustmentItem[]
-  movements StockMovement[]
+  warehouse  Warehouse             @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  createdBy  User                  @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy User?                 @relation("AdjustmentApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  items      StockAdjustmentItem[]
+  movements  StockMovement[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -461,12 +915,16 @@ model StockAdjustmentItem {
   adjustmentId String  @db.Uuid
   productId    String  @db.Uuid
   quantity     Int
+  locationId   String? @db.Uuid
+  batchId      String? @db.Uuid
   notes        String?
 
-  adjustment StockAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
-  product    Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  adjustment StockAdjustment    @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+  product    Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  location   WarehouseLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  batch      ProductBatch?      @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
-  @@unique([adjustmentId, productId])
+  @@index([adjustmentId, productId])
   @@index([productId])
 }
 
@@ -483,6 +941,8 @@ model StockTransfer {
   fromWarehouseId String         @db.Uuid
   toWarehouseId   String         @db.Uuid
   createdById     String         @db.Uuid
+  approvedById    String?        @db.Uuid
+  approvedAt      DateTime?
   status          TransferStatus @default(DRAFT)
   transferDate    DateTime       @default(now())
   notes           String?
@@ -490,6 +950,7 @@ model StockTransfer {
   fromWarehouse Warehouse           @relation("TransferFromWarehouse", fields: [fromWarehouseId], references: [id], onDelete: Restrict)
   toWarehouse   Warehouse           @relation("TransferToWarehouse", fields: [toWarehouseId], references: [id], onDelete: Restrict)
   createdBy     User                @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy    User?               @relation("TransferApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
   items         StockTransferItem[]
   movements     StockMovement[]
 
@@ -503,15 +964,21 @@ model StockTransfer {
 }
 
 model StockTransferItem {
-  id         String @id @default(uuid()) @db.Uuid
-  transferId String @db.Uuid
-  productId  String @db.Uuid
-  quantity   Int
+  id                    String  @id @default(uuid()) @db.Uuid
+  transferId            String  @db.Uuid
+  productId             String  @db.Uuid
+  quantity              Int
+  sourceLocationId      String? @db.Uuid
+  destinationLocationId String? @db.Uuid
+  batchId               String? @db.Uuid
 
-  transfer StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
-  product  Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  transfer            StockTransfer      @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product             Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  sourceLocation      WarehouseLocation? @relation("TransferSourceLocation", fields: [sourceLocationId], references: [id], onDelete: SetNull)
+  destinationLocation WarehouseLocation? @relation("TransferDestinationLocation", fields: [destinationLocationId], references: [id], onDelete: SetNull)
+  batch               ProductBatch?      @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
-  @@unique([transferId, productId])
+  @@index([transferId, productId])
   @@index([productId])
 }
 
@@ -586,6 +1053,7 @@ model Payment {
   @@index([expenseId])
   @@index([paidById])
   @@index([paymentDate])
+  @@index([status, paymentDate])
 }
 
 enum StockMovementType {
@@ -595,9 +1063,16 @@ enum StockMovementType {
   ADJUSTMENT_OUT
   TRANSFER_IN
   TRANSFER_OUT
+  PURCHASE_RETURN
+  SALES_RETURN
+  RELOCATION_OUT
+  RELOCATION_IN
 }
 
 model StockMovement {
+  returnOrderId String?      @db.Uuid
+  returnOrder   ReturnOrder? @relation(fields: [returnOrderId], references: [id], onDelete: SetNull)
+
   id              String            @id @default(uuid()) @db.Uuid
   productId       String            @db.Uuid
   warehouseId     String            @db.Uuid
@@ -612,17 +1087,252 @@ model StockMovement {
   occurredAt      DateTime          @default(now())
   note            String?
 
-  product            Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
-  warehouse          Warehouse         @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  purchaseOrder      PurchaseOrder?    @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
-  sale               Sale?             @relation(fields: [saleId], references: [id], onDelete: SetNull)
-  adjustment         StockAdjustment?  @relation(fields: [adjustmentId], references: [id], onDelete: SetNull)
-  transfer           StockTransfer?    @relation(fields: [transferId], references: [id], onDelete: SetNull)
-  createdBy          User              @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  inventoryBalance   InventoryBalance? @relation(fields: [inventoryBalanceId], references: [id])
-  inventoryBalanceId String?           @db.Uuid
+  product            Product                   @relation(fields: [productId], references: [id], onDelete: Restrict)
+  warehouse          Warehouse                 @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  purchaseOrder      PurchaseOrder?            @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  sale               Sale?                     @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  adjustment         StockAdjustment?          @relation(fields: [adjustmentId], references: [id], onDelete: SetNull)
+  transfer           StockTransfer?            @relation(fields: [transferId], references: [id], onDelete: SetNull)
+  createdBy          User                      @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  inventoryBalance   InventoryBalance?         @relation(fields: [inventoryBalanceId], references: [id])
+  inventoryBalanceId String?                   @db.Uuid
+  allocations        StockMovementAllocation[]
 
+  @@index([returnOrderId])
   @@index([productId, warehouseId])
   @@index([warehouseId, occurredAt])
   @@index([movementType])
+}
+
+enum StockRelocationStatus {
+  COMPLETED
+  CANCELLED
+}
+
+// Internal movement between two locations in the same warehouse. Warehouse
+// quantity stays unchanged; only location balances and the audit trail move.
+model StockRelocation {
+  id             String                @id @default(uuid()) @db.Uuid
+  number         String                @unique
+  warehouseId    String                @db.Uuid
+  fromLocationId String                @db.Uuid
+  toLocationId   String                @db.Uuid
+  createdById    String                @db.Uuid
+  status         StockRelocationStatus @default(COMPLETED)
+  reason         String?
+
+  warehouse    Warehouse         @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  fromLocation WarehouseLocation @relation("RelocationFromLocation", fields: [fromLocationId], references: [id], onDelete: Restrict)
+  toLocation   WarehouseLocation @relation("RelocationToLocation", fields: [toLocationId], references: [id], onDelete: Restrict)
+  createdBy    User              @relation("RelocationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  items        StockRelocationItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([warehouseId, createdAt])
+  @@index([fromLocationId])
+  @@index([toLocationId])
+  @@index([createdById])
+}
+
+model StockRelocationItem {
+  id           String  @id @default(uuid()) @db.Uuid
+  relocationId String  @db.Uuid
+  productId    String  @db.Uuid
+  batchId      String? @db.Uuid
+  quantity     Int
+
+  relocation StockRelocation @relation(fields: [relocationId], references: [id], onDelete: Cascade)
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  batch      ProductBatch?   @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([relocationId])
+  @@index([productId])
+  @@index([batchId])
+}
+
+// Immutable allocation reference for each warehouse StockMovement.
+model StockMovementAllocation {
+  id String @id @default(uuid()) @db.Uuid
+
+  stockMovementId            String @db.Uuid
+  inventoryLocationBalanceId String @db.Uuid
+
+  // Signed quantity:
+  // Positive = Stock In
+  // Negative = Stock Out
+  quantity Int
+
+  createdAt DateTime @default(now())
+
+  movement StockMovement @relation(fields: [stockMovementId], references: [id], onDelete: Restrict)
+
+  locationBalance InventoryLocationBalance @relation(fields: [inventoryLocationBalanceId], references: [id], onDelete: Restrict)
+
+  @@index([stockMovementId])
+  @@index([inventoryLocationBalanceId])
+  @@index([createdAt])
+}
+
+// ==========================================
+// ADVANCED STOCK OPNAME
+// ==========================================
+
+enum StockTakeStatus {
+  DRAFT
+  COUNTING
+  SUBMITTED
+  APPROVED
+  CANCELLED
+}
+
+model StockTakeSession {
+  id           String          @id @default(uuid()) @db.Uuid
+  number       String          @unique
+  warehouseId  String          @db.Uuid
+  createdById  String          @db.Uuid
+  approvedById String?         @db.Uuid
+  status       StockTakeStatus @default(DRAFT)
+  startedAt    DateTime        @default(now())
+  submittedAt  DateTime?
+  approvedAt   DateTime?
+  notes        String?
+
+  warehouse  Warehouse       @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  createdBy  User            @relation("StockTakeCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy User?           @relation("StockTakeApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  lines      StockTakeLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([warehouseId, status])
+  @@index([createdById])
+  @@index([startedAt])
+}
+
+model StockTakeLine {
+  id               String    @id @default(uuid()) @db.Uuid
+  sessionId        String    @db.Uuid
+  productId        String    @db.Uuid
+  systemQuantity   Int
+  physicalQuantity Int?
+  variance         Int       @default(0)
+  notes            String?
+  countedAt        DateTime?
+
+  session StockTakeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  product Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, productId])
+  @@index([productId])
+}
+
+// ==========================================
+// PURCHASE & SALES RETURNS
+// ==========================================
+
+enum ReturnType {
+  PURCHASE
+  SALE
+}
+
+enum ReturnStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  POSTED
+  CANCELLED
+}
+
+enum ReturnCondition {
+  GOOD
+  DAMAGED
+  EXPIRED
+  DEFECTIVE
+}
+
+enum ReturnDisposition {
+  RESTOCK
+  QUARANTINE
+  SCRAP
+}
+
+enum WarehouseLocationType {
+  STORAGE
+  RECEIVING
+  QUARANTINE
+  DAMAGED
+}
+
+// One return belongs to exactly one source transaction.
+// Its purchaseOrderId/saleId XOR is also enforced in migration.sql.
+// Approval and posting are separate actions: only POSTED affects stock.
+model ReturnOrder {
+  id              String       @id @default(uuid()) @db.Uuid
+  number          String       @unique
+  type            ReturnType
+  purchaseOrderId String?      @db.Uuid
+  saleId          String?      @db.Uuid
+  warehouseId     String       @db.Uuid
+  createdById     String       @db.Uuid
+  approvedById    String?      @db.Uuid
+  status          ReturnStatus @default(DRAFT)
+  reason          String
+  notes           String?
+  approvedAt      DateTime?
+  postedAt        DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  purchaseOrder PurchaseOrder?    @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  sale          Sale?             @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  warehouse     Warehouse         @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  createdBy     User              @relation("ReturnCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy    User?             @relation("ReturnApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  items         ReturnOrderItem[]
+  movements     StockMovement[]
+
+  @@index([type, status, createdAt])
+  @@index([purchaseOrderId])
+  @@index([saleId])
+  @@index([warehouseId, status])
+  @@index([createdById])
+  @@index([approvedById])
+}
+
+// The source item ID allows safe cumulative return quantity validation.
+// For SALE: RESTOCK/QUARANTINE/SCRAP require dedicated post logic.
+// For PURCHASE: any disposition must be validated against the outbound return policy.
+model ReturnOrderItem {
+  id                  String            @id @default(uuid()) @db.Uuid
+  returnOrderId       String            @db.Uuid
+  productId           String            @db.Uuid
+  purchaseOrderItemId String?           @db.Uuid
+  saleItemId          String?           @db.Uuid
+  locationId          String?           @db.Uuid
+  batchId             String?           @db.Uuid
+  quantity            Int
+  condition           ReturnCondition
+  disposition         ReturnDisposition
+  notes               String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  returnOrder       ReturnOrder        @relation(fields: [returnOrderId], references: [id], onDelete: Cascade)
+  product           Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  purchaseOrderItem PurchaseOrderItem? @relation(fields: [purchaseOrderItemId], references: [id], onDelete: Restrict)
+  saleItem          SaleItem?          @relation(fields: [saleItemId], references: [id], onDelete: Restrict)
+  location          WarehouseLocation? @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  batch             ProductBatch?      @relation(fields: [batchId], references: [id], onDelete: Restrict)
+
+  @@index([returnOrderId])
+  @@index([productId])
+  @@index([purchaseOrderItemId])
+  @@index([saleItemId])
+  @@index([locationId])
+  @@index([batchId])
 }

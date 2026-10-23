@@ -4,6 +4,7 @@ import type {
 } from "express";
 
 import { AppError } from "../utils/AppError.ts";
+import { reportError } from "../lib/monitoring.ts";
 
 function isPrismaUniqueError(
   error: unknown
@@ -18,15 +19,20 @@ function isPrismaUniqueError(
 
 export const errorHandler: ErrorRequestHandler = (
   error: unknown,
-  _req,
+  req,
   res,
   _next
 ) => {
+  const requestId = res.locals.requestId as string | undefined;
+  reportError(error, { requestId, method: req.method, path: req.originalUrl });
+  const responseMeta = requestId ? { requestId } : {};
+
   // Custom Application Error
   if (error instanceof AppError) {
     res.status(error.statusCode).json({
       success: false,
       message: error.message,
+      ...responseMeta,
       ...(error.details !== undefined
         ? { errors: error.details }
         : {}),
@@ -40,6 +46,7 @@ export const errorHandler: ErrorRequestHandler = (
     res.status(409).json({
       success: false,
       message: "Data already exists",
+      ...responseMeta,
     });
 
     return;
@@ -53,16 +60,16 @@ export const errorHandler: ErrorRequestHandler = (
     res.status(400).json({
       success: false,
       message: "Invalid JSON request body",
+      ...responseMeta,
     });
 
     return;
   }
 
   // Unexpected Server Error
-  console.error("Unhandled API error:", error);
-
   res.status(500).json({
     success: false,
     message: "Internal server error",
+    ...responseMeta,
   });
 };

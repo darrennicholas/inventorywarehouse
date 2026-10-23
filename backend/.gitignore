@@ -6,3 +6,11 @@ node_modules
 !.env.example
 
 /src/generated/prisma
+/backups/
+/storage/
+/uploads/
+/coverage/
+/dist/
+*.dump
+*.backup
+*.sql.gz

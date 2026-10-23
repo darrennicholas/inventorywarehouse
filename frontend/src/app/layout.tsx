@@ -20,6 +20,12 @@ export const metadata: Metadata = {
 
   applicationName: "StockFlow",
 
+  icons: {
+    icon: "/stockflow-icon.svg",
+    shortcut: "/stockflow-icon.svg",
+    apple: "/stockflow-icon.svg",
+  },
+
   robots: {
     index: false,
     follow: false,

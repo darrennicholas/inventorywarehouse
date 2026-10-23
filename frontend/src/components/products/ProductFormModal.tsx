@@ -71,6 +71,12 @@ export default function ProductFormModal({
   const [minStock, setMinStock] = useState(
     String(product?.minStock ?? 0)
   );
+  const [maxStock, setMaxStock] = useState(String(product?.maxStock ?? ""));
+  const [reorderLeadDays, setReorderLeadDays] = useState(String(product?.reorderLeadDays ?? 7));
+
+  const [trackBatch, setTrackBatch] = useState(
+    product?.trackBatch ?? false
+  );
 
   const [isActive, setIsActive] = useState(
     product?.isActive ?? true
@@ -115,11 +121,21 @@ export default function ProductFormModal({
     }
 
     const qty = Number(minStock);
+    const maxQty = maxStock.trim() === "" ? null : Number(maxStock);
+    const leadDays = Number(reorderLeadDays);
 
     if (!Number.isInteger(qty) || qty < 0) {
       setFormError(
         "Minimum stock harus bilangan bulat 0 atau lebih."
       );
+      return;
+    }
+    if (maxQty !== null && (!Number.isInteger(maxQty) || maxQty < qty)) {
+      setFormError("Maximum stock harus bilangan bulat dan tidak boleh lebih kecil dari minimum stock.");
+      return;
+    }
+    if (!Number.isInteger(leadDays) || leadDays < 0 || leadDays > 365) {
+      setFormError("Lead time harus 0 sampai 365 hari.");
       return;
     }
 
@@ -138,6 +154,9 @@ export default function ProductFormModal({
         unitId: unitId || null,
 
         minStock: qty,
+        maxStock: maxQty,
+        reorderLeadDays: leadDays,
+        trackBatch,
         isActive,
       });
     } catch (error) {
@@ -215,6 +234,16 @@ export default function ProductFormModal({
                 onChange={(e) => setSku(e.target.value)}
                 placeholder="PRD-001"
               />
+            </div>
+
+            <div>
+              <label htmlFor="p-max-stock" className={labelClass}>Maximum Stock (Target)</label>
+              <input id="p-max-stock" className={inputClass} type="number" min={0} step={1} value={maxStock} onChange={(e) => setMaxStock(e.target.value)} placeholder="Optional" />
+            </div>
+
+            <div>
+              <label htmlFor="p-lead-time" className={labelClass}>Supplier Lead Time (days)</label>
+              <input id="p-lead-time" className={inputClass} type="number" min={0} max={365} step={1} value={reorderLeadDays} onChange={(e) => setReorderLeadDays(e.target.value)} />
             </div>
 
             {/* PRODUCT CODE */}
@@ -424,6 +453,11 @@ export default function ProductFormModal({
                 <option value="inactive">Inactive</option>
               </select>
             </div>
+
+            <label className="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 sm:col-span-2">
+              <input type="checkbox" checked={trackBatch} onChange={(event) => setTrackBatch(event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+              <span><span className="block text-sm font-semibold text-slate-800">Track batch & expiry</span><span className="mt-0.5 block text-xs text-slate-500">Receiving will require a batch number and stock will use FEFO reservation.</span></span>
+            </label>
 
             {/* DESCRIPTION */}
             <div className="sm:col-span-2">

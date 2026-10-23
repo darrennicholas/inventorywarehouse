@@ -3,6 +3,8 @@ import { asyncHandler } from "../../utils/asyncHandler.ts";
 import { requireUuid } from "../../utils/requireUuid.ts";
 
 import { staffService } from "./staff.service.ts";
+import { notifyByPermission } from "../notifications/notification.service.ts";
+import { paginateArray } from "../../utils/pagination.ts";
 
 import type {
   CreateStaffInput,
@@ -14,12 +16,13 @@ import type {
 // ======================================
 
 export const getStaff = asyncHandler(
-  async (_req, res) => {
+  async (req, res) => {
     const data = await staffService.list();
+    const result = paginateArray(data, req.query as Record<string, unknown>);
 
     res.status(200).json({
       success: true,
-      data,
+      ...result,
     });
   }
 );
@@ -54,6 +57,7 @@ export const createStaff = asyncHandler(
       req.body as CreateStaffInput;
 
     const data = await staffService.create(input);
+    await notifyByPermission({ permission: "staff.read", type: "STAFF_CREATED", title: "Staff profile created", message: `${data.fullName} was added to staff records.`, entity: "Staff", entityId: data.id, warehouseId: data.warehouseId ?? undefined });
 
     res.status(201).json({
       success: true,
@@ -81,6 +85,7 @@ export const updateStaff = asyncHandler(
       id,
       input
     );
+    await notifyByPermission({ permission: "staff.read", type: "STAFF_UPDATED", title: "Staff profile updated", message: `${data.fullName} was updated.`, entity: "Staff", entityId: data.id, warehouseId: data.warehouseId ?? undefined });
 
     res.status(200).json({
       success: true,
@@ -103,6 +108,7 @@ export const deactivateStaff = asyncHandler(
 
     const data =
       await staffService.deactivate(id);
+    await notifyByPermission({ permission: "staff.read", type: "STAFF_DEACTIVATED", title: "Staff profile deactivated", message: `${data.fullName} was deactivated.`, entity: "Staff", entityId: data.id, warehouseId: data.warehouseId ?? undefined });
 
     res.status(200).json({
       success: true,

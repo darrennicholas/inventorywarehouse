@@ -12,6 +12,7 @@ import {
   createSupplier,
   deactivateSupplier,
   getSupplierById,
+  getSupplierAnalytics,
   getSuppliers,
   updateSupplier,
 } from "./supplier.controller.ts";
@@ -19,6 +20,7 @@ import {
 const router = Router();
 
 router.get("/", getSuppliers);
+router.get("/:id/analytics", getSupplierAnalytics);
 router.get("/:id", getSupplierById);
 
 router.post(

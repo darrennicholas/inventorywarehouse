@@ -5,6 +5,8 @@ import { z } from "zod";
 import { prisma } from "../../lib/prisma.ts";
 import { AppError } from "../../utils/AppError.ts";
 import { asyncHandler } from "../../utils/asyncHandler.ts";
+import { writeAuditLog } from "../audit/audit.service.ts";
+import { notifyByPermission } from "../notifications/notification.service.ts";
 
 import {
   authOf,
@@ -329,6 +331,9 @@ router.post(
       include: roleInclude,
     });
 
+    await writeAuditLog({ userId: caller.userId, action: "CREATE", entity: "Role", entityId: role.id, afterData: role, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") });
+    await notifyByPermission({ permission: "roles.manage", type: "ROLE_CREATED", title: "Role created", message: `${role.name} was created with ${role.permissions.length} permission(s).`, entity: "Role", entityId: role.id });
+
     res.status(201).json({
       success: true,
       message: "Role created successfully",
@@ -363,7 +368,7 @@ router.patch(
     const caller = authOf(req);
 
     // Check if editable.
-    await getEditableRole(
+    const currentRole = await getEditableRole(
       id,
       caller.permissions
     );
@@ -454,6 +459,9 @@ router.patch(
         }
       );
 
+    await writeAuditLog({ userId: caller.userId, action: "UPDATE", entity: "Role", entityId: id, beforeData: currentRole, afterData: updatedRole, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") });
+    await notifyByPermission({ permission: "roles.manage", type: "ROLE_UPDATED", title: "Role permission updated", message: `${updatedRole.name} permission mapping was updated.`, entity: "Role", entityId: updatedRole.id });
+
     res.status(200).json({
       success: true,
       message: "Role updated successfully",
@@ -513,6 +521,9 @@ router.delete(
 
       include: roleInclude,
     });
+
+    await writeAuditLog({ userId: caller.userId, action: "DEACTIVATE", entity: "Role", entityId: id, beforeData: { id: role.id, isActive: true }, afterData: role, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") });
+    await notifyByPermission({ permission: "roles.manage", type: "ROLE_DEACTIVATED", title: "Role deactivated", message: `${role.name} was deactivated.`, entity: "Role", entityId: role.id });
 
     res.status(200).json({
       success: true,

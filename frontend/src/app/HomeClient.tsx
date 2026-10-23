@@ -5,14 +5,17 @@ import { useEffect, useState } from "react";
 
 import {
   AlertCircle,
+  ArrowDownLeft,
   ArrowLeftRight,
   ArrowRight,
   Boxes,
   ChartNoAxesColumn,
+  ClipboardCheck,
   ChevronDown,
   ChevronRight,
   ClipboardList,
   LayoutDashboard,
+  History,
   LogOut,
   Menu,
   Moon,
@@ -44,8 +47,13 @@ import WarehousesView from "@/components/warehouses/WarehousesView";
 import StaffView from "@/components/staff/StaffView";
 import SuppliersView from "@/components/suppliers/SuppliersView";
 import OperationsView from "@/components/operations/OperationsView";
+import FulfillmentView from "@/components/fulfillment/FulfillmentView";
+import ReturnsView from "@/components/returns/ReturnsView";
 import DashboardView from "@/components/dashboard/DashboardView";
 import MasterModuleFrame from "@/components/master/MasterModuleFrame";
+import AuditLogsView from "@/components/audit/AuditLogsView";
+import StockOpnamesView from "@/components/stock-opnames/StockOpnamesView";
+import NotificationBell from "@/components/notifications/NotificationBell";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { apiRequest } from "@/lib/api";
@@ -68,11 +76,16 @@ type Page =
   | "suppliers"
   | "purchases"
   | "sales"
+  | "purchase-returns"
+  | "sales-returns"
+  | "fulfillment"
   | "adjustments"
   | "transfers"
   | "expenses"
   | "payments"
-  | "stock-report";
+  | "stock-report"
+  | "audit"
+  | "stock-opnames";
 
 type MenuItem = {
   label: string;
@@ -87,6 +100,14 @@ type DashboardMasterRow = {
   code?: string;
   isActive: boolean;
   createdAt: string;
+};
+
+type DashboardSummary = {
+  kpis: { purchaseValue: number; salesValue: number; expenseValue: number; stockUnits: number; lowStockLines: number };
+  monthly: Array<{ label: string; purchases: number; sales: number; expenses: number }>;
+  topProducts: Array<{ id: string; sku: string; name: string; quantity: number; minStock: number }>;
+  warehouseStock: Array<{ id: string; name: string; quantity: number }>;
+  lowStock: Array<{ productId: string; sku: string; productName: string; warehouseId: string; warehouseName: string; quantityOnHand: number; minStock: number; reorderQuantity: number }>;
 };
 
 // ==========================================
@@ -162,6 +183,24 @@ const otherMenus: MenuItem[] = [
     permission: "sales.read",
   },
   {
+    label: "Purchase Return",
+    icon: ArrowDownLeft,
+    page: "purchase-returns",
+    permission: "purchase-returns.read",
+  },
+  {
+    label: "Sales Return",
+    icon: RefreshCw,
+    page: "sales-returns",
+    permission: "sales-returns.read",
+  },
+  {
+    label: "Fulfillment",
+    icon: PackageCheck,
+    page: "fulfillment",
+    permission: "fulfillment.read",
+  },
+  {
     label: "Adjustment",
     icon: SlidersHorizontal,
     page: "adjustments",
@@ -191,6 +230,18 @@ const otherMenus: MenuItem[] = [
     page: "stock-report",
     permission: "reports.read",
   },
+  {
+    label: "Stock Opname",
+    icon: ClipboardCheck,
+    page: "stock-opnames",
+    permission: "stock-opnames.read",
+  },
+  {
+    label: "Audit Log",
+    icon: History,
+    page: "audit",
+    permission: "audit.read",
+  },
 ];
 
 // ==========================================
@@ -209,11 +260,16 @@ const pageTitles: Record<Page, string> = {
   suppliers: "Supplier Management",
   purchases: "Purchase Management",
   sales: "Sale Management",
+  "purchase-returns": "Purchase Returns",
+  "sales-returns": "Sales Returns",
+  fulfillment: "Sales Fulfillment",
   adjustments: "Stock Adjustment",
   transfers: "Stock Transfer",
   expenses: "Expense Management",
   payments: "Payment Report",
   "stock-report": "Stock Report",
+  audit: "Audit Log",
+  "stock-opnames": "Stock Opname",
 };
 
 const pagePermissions: Record<Page, string> = {
@@ -228,11 +284,16 @@ const pagePermissions: Record<Page, string> = {
   suppliers: "suppliers.read",
   purchases: "purchases.read",
   sales: "sales.read",
+  "purchase-returns": "purchase-returns.read",
+  "sales-returns": "sales-returns.read",
+  fulfillment: "fulfillment.read",
   adjustments: "adjustments.read",
   transfers: "transfers.read",
   expenses: "expenses.read",
   payments: "payments.read",
   "stock-report": "reports.read",
+  audit: "audit.read",
+  "stock-opnames": "stock-opnames.read",
 };
 
 // ==========================================
@@ -318,6 +379,8 @@ export default function Home() {
     useState<DashboardMasterRow[]>([]);
   const [masterLoading, setMasterLoading] =
     useState(true);
+  const [dashboardSummary, setDashboardSummary] =
+    useState<DashboardSummary | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -326,7 +389,7 @@ export default function Home() {
       setMasterLoading(true);
 
       try {
-        const [categoryResponse, brandResponse, unitResponse] =
+        const [categoryResponse, brandResponse, unitResponse, summaryResponse] =
           await Promise.all([
             can("categories.read")
               ? apiRequest<{ data?: DashboardMasterRow[] }>(
@@ -346,18 +409,26 @@ export default function Home() {
                   { signal: controller.signal }
                 )
               : Promise.resolve(null),
+            can("dashboard.read")
+              ? apiRequest<{ data?: DashboardSummary }>(
+                  "/api/operations/dashboard-summary",
+                  { signal: controller.signal }
+                )
+              : Promise.resolve(null),
           ]);
 
         if (!controller.signal.aborted) {
           setCategories(categoryResponse?.data ?? []);
           setBrands(brandResponse?.data ?? []);
           setUnits(unitResponse?.data ?? []);
+          setDashboardSummary(summaryResponse?.data ?? null);
         }
       } catch {
         if (!controller.signal.aborted) {
           setCategories([]);
           setBrands([]);
           setUnits([]);
+          setDashboardSummary(null);
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -454,7 +525,7 @@ export default function Home() {
         }
         ${
           sidebarCollapsed
-            ? "w-[250px] lg:w-[76px]"
+            ? "w-[250px] lg:w-[200px]"
             : "w-[250px]"
         }
       `}
@@ -503,7 +574,13 @@ export default function Home() {
       {/* ================================= */}
 
       <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-5">
-        <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+        <p
+          className={`mb-2 whitespace-nowrap px-3 font-bold uppercase text-slate-400 ${
+            sidebarCollapsed
+              ? "text-[9px] tracking-[0.12em]"
+              : "text-[10px] tracking-[0.18em]"
+          }`}
+        >
           Workspace
         </p>
         {/* DASHBOARD */}
@@ -631,7 +708,13 @@ export default function Home() {
         {/* ================================= */}
 
         <div className="mt-5 space-y-1 border-t border-slate-200/70 pt-5">
-          <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+          <p
+            className={`mb-2 whitespace-nowrap px-3 font-bold uppercase text-slate-400 ${
+              sidebarCollapsed
+                ? "text-[9px] tracking-[0.12em]"
+                : "text-[10px] tracking-[0.18em]"
+            }`}
+          >
             Operations & Reports
           </p>
           {visibleOtherMenus.map(
@@ -822,6 +905,8 @@ export default function Home() {
               {dark ? <Sun size={18} /> : <Moon size={18} />}
             </button>
 
+            <NotificationBell />
+
             <div className="relative border-l border-slate-200 pl-3 dark:border-slate-700">
               <button
                 type="button"
@@ -974,6 +1059,20 @@ export default function Home() {
             <OperationsView kind={activePage as "purchases" | "sales" | "adjustments" | "transfers" | "expenses" | "payments" | "stock-report"} />
           )}
 
+          {activePage === "purchase-returns" && can("purchase-returns.read") && (
+            <ReturnsView type="PURCHASE" />
+          )}
+          {activePage === "sales-returns" && can("sales-returns.read") && (
+            <ReturnsView type="SALE" />
+          )}
+          {activePage === "fulfillment" && can("fulfillment.read") && (
+            <FulfillmentView />
+          )}
+
+          {activePage === "audit" && can("audit.read") && <AuditLogsView />}
+
+          {activePage === "stock-opnames" && can("stock-opnames.read") && <StockOpnamesView />}
+
           {/* ================================= */}
           {/* DASHBOARD */}
           {/* ================================= */}
@@ -984,6 +1083,7 @@ export default function Home() {
               categories={categories}
               brands={brands}
               units={units}
+              summary={dashboardSummary}
               loading={loading}
               masterLoading={masterLoading}
               onNavigate={navigate}

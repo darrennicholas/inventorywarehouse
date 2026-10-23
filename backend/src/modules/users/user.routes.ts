@@ -6,6 +6,8 @@ import { z } from "zod";
 import { prisma } from "../../lib/prisma.ts";
 import { AppError } from "../../utils/AppError.ts";
 import { asyncHandler } from "../../utils/asyncHandler.ts";
+import { writeAuditLog } from "../audit/audit.service.ts";
+import { notifyByPermission } from "../notifications/notification.service.ts";
 
 import {
   authOf,
@@ -471,6 +473,9 @@ router.post(
       select: userSelect,
     });
 
+    await writeAuditLog({ userId: caller.userId, action: "CREATE", entity: "User", entityId: user.id, afterData: user, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") });
+    await notifyByPermission({ permission: "users.manage", type: "USER_CREATED", title: "User account created", message: `${user.fullName} was added with role ${user.role.name}.`, entity: "User", entityId: user.id });
+
     res.status(201).json({
       success: true,
       message: "User created successfully",
@@ -607,6 +612,9 @@ router.patch(
         }
       );
 
+    await writeAuditLog({ userId: caller.userId, action: "UPDATE", entity: "User", entityId: id, beforeData: { id: currentUser.id, email: currentUser.email, fullName: currentUser.fullName, roleId: currentUser.roleId, isActive: currentUser.isActive, staffId: currentUser.staffId }, afterData: updatedUser, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") });
+    await notifyByPermission({ permission: "users.manage", type: "USER_UPDATED", title: "User access updated", message: `${updatedUser.fullName} account or role was updated.`, entity: "User", entityId: updatedUser.id });
+
     res.status(200).json({
       success: true,
       message: "User updated successfully",
@@ -675,6 +683,9 @@ router.delete(
           return updated;
         }
       );
+
+    await writeAuditLog({ userId: caller.userId, action: "DEACTIVATE", entity: "User", entityId: id, beforeData: { id: currentUser.id, isActive: currentUser.isActive }, afterData: user, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") });
+    await notifyByPermission({ permission: "users.manage", type: "USER_DEACTIVATED", title: "User account deactivated", message: `${user.fullName} was deactivated.`, entity: "User", entityId: user.id });
 
     res.status(200).json({
       success: true,

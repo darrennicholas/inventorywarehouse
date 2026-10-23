@@ -5,6 +5,10 @@ import { AppError } from "../../utils/AppError.ts";
 import { asyncHandler } from "../../utils/asyncHandler.ts";
 
 import { productService } from "./product.service.ts";
+import { authOf } from "../../middlewares/auth.middleware.ts";
+import { writeAuditLog } from "../audit/audit.service.ts";
+import { notifyByPermission } from "../notifications/notification.service.ts";
+import { paginateArray } from "../../utils/pagination.ts";
 
 import type {
   CreateProductInput,
@@ -34,13 +38,14 @@ function validId(raw: unknown): string {
 // =====================================
 
 export const listProducts = asyncHandler(
-  async (_req, res) => {
+  async (req, res) => {
     const products = await productService.list();
+    const result = paginateArray(products, req.query as Record<string, unknown>);
 
     res.status(200).json({
       success: true,
       message: "Products retrieved successfully",
-      data: products,
+      ...result,
     });
   }
 );
@@ -87,6 +92,8 @@ export const createProduct = asyncHandler(
     const input = req.body as CreateProductInput;
 
     const product = await productService.create(input);
+    await writeAuditLog({ userId: authOf(req).userId, action: "CREATE", entity: "Product", entityId: product.id, afterData: product, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") });
+    await notifyByPermission({ permission: "products.read", type: "PRODUCT_CREATED", title: "New product added", message: `${product.name} (${product.sku}) is now available in the catalog.`, entity: "Product", entityId: product.id });
 
     res.status(201).json({
       success: true,
@@ -110,6 +117,8 @@ export const updateProduct = asyncHandler(
       id,
       input
     );
+    await writeAuditLog({ userId: authOf(req).userId, action: "UPDATE", entity: "Product", entityId: product.id, afterData: product, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") });
+    await notifyByPermission({ permission: "products.read", type: "PRODUCT_UPDATED", title: "Product updated", message: `${product.name} was updated.`, entity: "Product", entityId: product.id });
 
     res.status(200).json({
       success: true,
@@ -129,6 +138,8 @@ export const deactivateProduct = asyncHandler(
 
     const product =
       await productService.deactivate(id);
+    await writeAuditLog({ userId: authOf(req).userId, action: "DEACTIVATE", entity: "Product", entityId: product.id, afterData: product, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") });
+    await notifyByPermission({ permission: "products.read", type: "PRODUCT_DEACTIVATED", title: "Product deactivated", message: `${product.name} was deactivated.`, entity: "Product", entityId: product.id });
 
     res.status(200).json({
       success: true,

@@ -4,6 +4,10 @@ import { requireUuid } from "../../utils/requireUuid.ts";
 
 import { warehouseService } from "./warehouse.service.ts";
 import { createStockCountSheetPdf } from "./warehouse-pdf.ts";
+import { assertWarehouseAccess, warehouseScope } from "../../rbac/warehouse-scope.ts";
+import { authOf } from "../../middlewares/auth.middleware.ts";
+import { notifyByPermission } from "../notifications/notification.service.ts";
+import { paginateArray } from "../../utils/pagination.ts";
 
 import type {
   CreateWarehouseInput,
@@ -15,13 +19,14 @@ import type {
 // ======================================
 
 export const getWarehouses = asyncHandler(
-  async (_req, res) => {
-    const warehouses = await warehouseService.list();
+  async (req, res) => {
+    const warehouses = await warehouseService.list(warehouseScope(authOf(req)));
+    const result = paginateArray(warehouses, req.query as Record<string, unknown>);
 
     res.status(200).json({
       success: true,
       message: "Warehouses retrieved successfully",
-      data: warehouses,
+      ...result,
     });
   }
 );
@@ -33,6 +38,7 @@ export const getWarehouses = asyncHandler(
 export const getWarehouseById = asyncHandler(
   async (req, res) => {
     const id = requireUuid(req.params.id, "Warehouse ID");
+    assertWarehouseAccess(authOf(req), id);
 
     const warehouse = await warehouseService.detail(id);
 
@@ -53,6 +59,7 @@ export const createWarehouse = asyncHandler(
     const input = req.body as CreateWarehouseInput;
 
     const warehouse = await warehouseService.create(input);
+    await notifyByPermission({ permission: "warehouses.read", type: "WAREHOUSE_CREATED", title: "Warehouse created", message: `${warehouse.name} is now available for operations.`, entity: "Warehouse", entityId: warehouse.id, warehouseId: warehouse.id });
 
     res.status(201).json({
       success: true,
@@ -75,6 +82,7 @@ export const updateWarehouse = asyncHandler(
       id,
       input
     );
+    await notifyByPermission({ permission: "warehouses.read", type: "WAREHOUSE_UPDATED", title: "Warehouse updated", message: `${warehouse.name} was updated.`, entity: "Warehouse", entityId: warehouse.id, warehouseId: warehouse.id });
 
     res.status(200).json({
       success: true,
@@ -94,6 +102,7 @@ export const deactivateWarehouse = asyncHandler(
 
     const warehouse =
       await warehouseService.deactivate(id);
+    await notifyByPermission({ permission: "warehouses.read", type: "WAREHOUSE_DEACTIVATED", title: "Warehouse deactivated", message: `${warehouse.name} was deactivated.`, entity: "Warehouse", entityId: warehouse.id, warehouseId: warehouse.id });
 
     res.status(200).json({
       success: true,
@@ -105,6 +114,7 @@ export const deactivateWarehouse = asyncHandler(
 
 export const downloadStockCountSheet = asyncHandler(async (req, res) => {
   const id = requireUuid(req.params.id, "Warehouse ID");
+  assertWarehouseAccess(authOf(req), id);
   const { warehouse, rows } = await warehouseService.stockCountSheet(id);
   const pdf = createStockCountSheetPdf(warehouse, rows);
   const filename = `stock-count-${warehouse.code.toLowerCase().replace(/[^a-z0-9-]+/g, "-")}.pdf`;

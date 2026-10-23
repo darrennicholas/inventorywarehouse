@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Hide the Next.js developer tools badge from the application UI.
+  devIndicators: false,
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

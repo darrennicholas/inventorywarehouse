@@ -8,8 +8,11 @@ import apiRoutes from "./routes/index.ts";
 
 import { notFoundHandler } from "./middlewares/notFound.middleware.ts";
 import { errorHandler } from "./middlewares/error.middleware.ts";
+import { requestId } from "./middlewares/request-id.middleware.ts";
 
 const app = express();
+
+app.use(requestId);
 
 // ==========================================
 // EXPRESS CONFIGURATION
@@ -51,6 +54,7 @@ app.use(
       "Content-Type",
       "Authorization",
       "X-CSRF-Token",
+      "Idempotency-Key",
     ],
 
     optionsSuccessStatus: 204,
@@ -64,7 +68,9 @@ app.use(
 // Parse JSON request bodies
 app.use(
   express.json({
-    limit: "1mb",
+    // Attachment uploads use a validated base64 payload; the route still
+    // enforces a 10 MB binary limit after decoding.
+    limit: "16mb",
   })
 );
 
@@ -72,7 +78,7 @@ app.use(
 app.use(
   express.urlencoded({
     extended: true,
-    limit: "1mb",
+    limit: "16mb",
   })
 );
 
