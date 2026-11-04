@@ -35,6 +35,7 @@ jobs:
       NODE_ENV: test
       RUN_INTEGRATION_TESTS: "true"
       # Used only to create the disposable CI fixture database.
+      ADMIN_EMAIL: admin@stockflow.local
       ADMIN_PASSWORD: ci-only-password-for-disposable-database
     steps:
       - uses: actions/checkout@v4
@@ -46,8 +47,9 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - run: npx prisma migrate deploy
-      # The integration rollback test requires at least one persisted user.
-      - run: npm run seed
+      # The rollback integration test only needs an authenticated user; keep
+      # CI fixtures minimal instead of loading the full demo dataset.
+      - run: npm run seed:access
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
