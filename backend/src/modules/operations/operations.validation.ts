@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 const uuid = z.uuid();
-const positiveInt = z.coerce.number().int().positive();
-const money = z.coerce.number().min(0);
+const positiveInt = z.coerce.number().int().positive().max(1_000_000);
+const money = z.coerce.number().min(0).max(999_999_999_999.99);
 
 const purchaseItem = z.object({
   productId: uuid,
@@ -51,26 +51,30 @@ export const purchaseReceiveSchema = z.object({
   notes: z.string().trim().max(1000).nullable().optional(),
   items: z.array(z.object({
     productId: uuid,
-    quantity: positiveInt,
+    quantity: z.coerce.number().int().min(0),
     damagedQuantity: z.coerce.number().int().min(0).default(0),
     batchNumber: z.string().trim().max(80).nullable().optional(),
     productionDate: z.coerce.date().nullable().optional(),
     expiryDate: z.coerce.date().nullable().optional(),
     locationId: uuid.nullable().optional(),
     notes: z.string().trim().max(500).nullable().optional(),
-  }).strict()).min(1).optional(),
+  }).strict().refine((item) => item.quantity + item.damagedQuantity > 0, "Accepted plus damaged quantity must be positive")).min(1).optional(),
 }).strict();
 
 export const saleSchema = z.object({
   number: z.string().trim().min(2).max(40),
   customerId: uuid.nullable().optional(),
   warehouseId: uuid,
-  status: z.enum(["DRAFT", "RESERVED", "COMPLETED", "CANCELLED"]).optional(),
+  status: z.enum(["DRAFT", "RESERVED"]).optional(),
   notes: z.string().trim().max(1000).nullable().optional(),
   discount: money.optional(),
   tax: money.optional(),
-  items: z.array(saleItem).min(1),
-}).strict();
+  items: z.array(saleItem).min(1).max(100),
+}).strict().superRefine((input, ctx) => {
+  const subtotal = input.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  if ((input.discount ?? 0) > subtotal) ctx.addIssue({ code: "custom", path: ["discount"], message: "Discount cannot exceed subtotal" });
+  if (new Set(input.items.map((item) => item.productId)).size !== input.items.length) ctx.addIssue({ code: "custom", path: ["items"], message: "Combine duplicate products into one sale line" });
+});
 
 export const adjustmentSchema = z.object({
   number: z.string().trim().min(2).max(40),

@@ -9,11 +9,20 @@
 **/dist/
 **/.next/
 **/out/
+**/.vercel/
 **/coverage/
 **/.turbo/
 **/.cache/
+**/.next/cache/
+**/.npm/
+**/.eslintcache
+**/.turbo/
+**/.output/
+**/build/
 **/test-results/
 **/playwright-report/
+**/storybook-static/
+frontend/next-env.d.ts
 
 # Prisma generated client and local database artifacts
 backend/src/generated/prisma/
@@ -34,9 +43,11 @@ backups/
 *.dump
 *.backup
 *.sql.gz
+*.log.*
 .DS_Store
 .vscode/
 .idea/
+*.pem
 
 # TypeScript build metadata
 *.tsbuildinfo

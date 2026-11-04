@@ -6,14 +6,14 @@ import { Boxes, Package, Ruler, Tag, Truck, UserRound, Users, Warehouse } from "
 type MasterModuleKind = "categories" | "brands" | "units" | "products" | "warehouses" | "staff" | "customers" | "suppliers";
 
 const modules: Record<MasterModuleKind, { title: string; description: string; accent: string; icon: typeof Boxes; eyebrow: string; detail: string }> = {
-  categories: { title: "Category Management", description: "Build a clean taxonomy for fast product discovery.", accent: "from-blue-700 via-blue-600 to-indigo-500", icon: Tag, eyebrow: "Catalog architecture", detail: "GROUP · FILTER · DISCOVER" },
-  brands: { title: "Brand Gallery", description: "Curate product identities and keep naming consistent.", accent: "from-violet-700 via-fuchsia-600 to-pink-500", icon: Boxes, eyebrow: "Identity library", detail: "BRAND · STORY · STATUS" },
-  units: { title: "Measurement Studio", description: "Standardize the units used by purchasing and stock.", accent: "from-amber-500 via-orange-500 to-red-500", icon: Ruler, eyebrow: "Quantity standards", detail: "PCS · BOX · KG · L" },
-  products: { title: "Product Command Center", description: "Connect SKU, barcode, classification and stock rules.", accent: "from-emerald-700 via-teal-600 to-cyan-500", icon: Package, eyebrow: "Catalog operations", detail: "SKU · STOCK · ALERT" },
-  warehouses: { title: "Warehouse Operations", description: "Manage locations and prepare physical stock counts.", accent: "from-cyan-700 via-sky-600 to-blue-500", icon: Warehouse, eyebrow: "Storage network", detail: "LOCATE · COUNT · CONTROL" },
-  staff: { title: "Operations Team", description: "Connect people, responsibilities and warehouse assignments.", accent: "from-indigo-800 via-indigo-600 to-blue-500", icon: Users, eyebrow: "People directory", detail: "TEAM · ROLE · LOCATION" },
-  customers: { title: "Customer Workspace", description: "Maintain sales contacts individually or import them in bulk.", accent: "from-rose-700 via-pink-600 to-fuchsia-500", icon: UserRound, eyebrow: "Sales relationships", detail: "PROFILE · IMPORT · SERVE" },
-  suppliers: { title: "Supplier Network", description: "Organize purchasing partners and contact readiness.", accent: "from-orange-700 via-red-600 to-rose-500", icon: Truck, eyebrow: "Procurement partners", detail: "SOURCE · CONTACT · SUPPLY" },
+  categories: { title: "Kategori produk", description: "Kelompokkan barang agar lebih mudah dicari dan dianalisis.", accent: "from-blue-700 via-blue-600 to-indigo-500", icon: Tag, eyebrow: "Katalog produk", detail: "KELOMPOK · FILTER · CARI" },
+  brands: { title: "Merek", description: "Kelola nama merek agar informasi produk tetap konsisten.", accent: "from-violet-700 via-fuchsia-600 to-pink-500", icon: Boxes, eyebrow: "Identitas produk", detail: "MEREK · STATUS · PRODUK" },
+  units: { title: "Satuan barang", description: "Gunakan satuan seragam untuk pembelian dan pencatatan stok.", accent: "from-amber-500 via-orange-500 to-red-500", icon: Ruler, eyebrow: "Standar jumlah", detail: "PCS · KOTAK · KG · L" },
+  products: { title: "Produk", description: "Kelola SKU, barcode, kategori, satuan, dan batas stok dalam satu katalog.", accent: "from-emerald-700 via-teal-600 to-cyan-500", icon: Package, eyebrow: "Katalog dan stok", detail: "SKU · STOK · PERINGATAN" },
+  warehouses: { title: "Gudang", description: "Kelola gudang, lokasi penyimpanan, dan kegiatan hitung stok.", accent: "from-cyan-700 via-sky-600 to-blue-500", icon: Warehouse, eyebrow: "Jaringan penyimpanan", detail: "LOKASI · HITUNG · KENDALI" },
+  staff: { title: "Petugas", description: "Kelola data petugas dan penempatan mereka di gudang.", accent: "from-indigo-800 via-indigo-600 to-blue-500", icon: Users, eyebrow: "Tim operasional", detail: "PETUGAS · TUGAS · GUDANG" },
+  customers: { title: "Pelanggan", description: "Kelola kontak pelanggan satu per satu atau melalui impor data.", accent: "from-rose-700 via-pink-600 to-fuchsia-500", icon: UserRound, eyebrow: "Data penjualan", detail: "PROFIL · IMPOR · LAYANI" },
+  suppliers: { title: "Supplier", description: "Kelola mitra pembelian, informasi kontak, dan kesiapan pasokan.", accent: "from-orange-700 via-red-600 to-rose-500", icon: Truck, eyebrow: "Mitra pengadaan", detail: "SUMBER · KONTAK · PASOKAN" },
 };
 
 export default function MasterModuleFrame({ kind, children }: { kind: MasterModuleKind; children: ReactNode }) {

@@ -1,134 +1,180 @@
 "use client";
 
+import GlobalSelect from "@/components/ui/GlobalSelect";
+import GlobalLoading from "@/components/ui/GlobalLoading";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { AlertTriangle, ArrowRight, BarChart3, Boxes, ChartNoAxesCombined, Package, PieChart, Ruler, Tag, TrendingUp, Warehouse } from "lucide-react";
-import type { Product } from "@/types/product";
+import { Activity, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, CalendarDays, Check, ChevronDown, Package, RefreshCw, Warehouse as WarehouseIcon } from "lucide-react";
+import { apiRequest } from "@/lib/api";
+import { useAuth } from "@/components/auth/AuthProvider";
 import NotificationFeed from "@/components/dashboard/NotificationFeed";
 import InventoryIntelligence from "@/components/dashboard/InventoryIntelligence";
-import { useAuth } from "@/components/auth/AuthProvider";
+import CostAndProfitPanel from "./CostAndProfitPanel";
+import AttentionList from "@/components/dashboard/AttentionList";
+import type { NotificationDestination } from "@/types/notification";
+import type { Product } from "@/types/product";
 
 type MasterRow = { id: string; name: string; code?: string; isActive: boolean; createdAt: string };
 type DashboardPage = "categories" | "brands" | "units" | "products" | "warehouses";
+type Point = { label: string; date: string; receipts: number; issues: number; adjustments: number; transfers: number };
+type Segment = { label: string; count: number };
 type DashboardSummary = {
-  kpis: { purchaseValue: number; salesValue: number; expenseValue: number; stockUnits: number; lowStockLines: number };
+  period?: { from: string; to: string; bucketDays: number };
+  kpis: { purchaseValue: number; salesValue: number; expenseValue: number; stockUnits: number; lowStockLines: number; expiringUnits30d?: number; activeWarehouses?: number };
   monthly: Array<{ label: string; purchases: number; sales: number; expenses: number }>;
+  trend?: Point[];
+  operationStatus?: { purchases: Segment[]; sales: Segment[]; transfers: Segment[] };
+  categoryStock?: Array<{ id: string; name: string; quantity: number }>;
+  warehouses?: Array<{ id: string; name: string }>;
   topProducts: Array<{ id: string; sku: string; name: string; quantity: number; minStock: number }>;
-  warehouseStock: Array<{ id: string; name: string; quantity: number }>;
+  warehouseStock: Array<{ id: string; name: string; quantity: number; lines?: number }>;
   lowStock: Array<{ productId: string; sku: string; productName: string; warehouseId: string; warehouseName: string; quantityOnHand: number; minStock: number; reorderQuantity: number }>;
 };
-type Props = { products: Product[]; categories: MasterRow[]; brands: MasterRow[]; units: MasterRow[]; summary: DashboardSummary | null; loading: boolean; masterLoading: boolean; onNavigate: (page: DashboardPage) => void };
+type Props = { products: Product[]; categories: MasterRow[]; brands: MasterRow[]; units: MasterRow[]; summary: DashboardSummary | null; loading: boolean; masterLoading: boolean; onNavigate: (page: DashboardPage) => void; onOpenAttention: (target: NotificationDestination) => void };
 
-const colors = ["#3b82f6", "#8b5cf6", "#f59e0b", "#10b981", "#ec4899", "#06b6d4"];
-
-function percentage(part: number, total: number) {
-  return total ? Math.round((part / total) * 100) : 0;
+const colors = ["#2563eb", "#8b5cf6", "#10b981", "#f59e0b", "#ec4899", "#06b6d4", "#64748b"];
+const money = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value || 0);
+const localDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+const dateDaysAgo = (days: number) => localDate(new Date(Date.now() - days * 86_400_000));
+const readableDate = (value: string) => value ? new Date(`${value}T12:00:00`).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) : "—";
+function normalizeSummary(value: Partial<DashboardSummary> | null | undefined): DashboardSummary | null {
+  if (!value || typeof value !== "object") return null;
+  return {
+    ...value,
+    kpis: { purchaseValue: 0, salesValue: 0, expenseValue: 0, stockUnits: 0, lowStockLines: 0, ...value.kpis },
+    monthly: Array.isArray(value.monthly) ? value.monthly : [],
+    trend: Array.isArray(value.trend) ? value.trend : [],
+    operationStatus: {
+      purchases: Array.isArray(value.operationStatus?.purchases) ? value.operationStatus.purchases : [],
+      sales: Array.isArray(value.operationStatus?.sales) ? value.operationStatus.sales : [],
+      transfers: Array.isArray(value.operationStatus?.transfers) ? value.operationStatus.transfers : [],
+    },
+    categoryStock: Array.isArray(value.categoryStock) ? value.categoryStock : [],
+    warehouses: Array.isArray(value.warehouses) ? value.warehouses : [],
+    topProducts: Array.isArray(value.topProducts) ? value.topProducts : [],
+    warehouseStock: Array.isArray(value.warehouseStock) ? value.warehouseStock : [],
+    lowStock: Array.isArray(value.lowStock) ? value.lowStock : [],
+  } as DashboardSummary;
 }
 
-function formatMoney(value: number) {
-  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
-}
+export default function DashboardView({ products, categories, brands, units, summary: initialSummary, loading, masterLoading, onNavigate, onOpenAttention }: Props) {
+  const { user, can } = useAuth();
+  const [remoteSummary, setRemoteSummary] = useState<DashboardSummary | null>(null);
+  const summary = remoteSummary ?? normalizeSummary(initialSummary);
+  const [from, setFrom] = useState(() => localDate(new Date(Date.now() - 29 * 86_400_000)));
+  const [to, setTo] = useState(() => localDate(new Date()));
+  const [appliedFrom, setAppliedFrom] = useState(() => localDate(new Date(Date.now() - 29 * 86_400_000)));
+  const [appliedTo, setAppliedTo] = useState(() => localDate(new Date()));
+  const [warehouseId, setWarehouseId] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(true);
+  const [refreshing, setRefreshing] = useState(true);
+  const [chartRevision, setChartRevision] = useState(0);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams({ from: appliedFrom, to: appliedTo });
+    if (warehouseId) params.set("warehouseId", warehouseId);
+    void apiRequest<{ success: boolean; data?: DashboardSummary; message?: string }>(`/api/operations/dashboard-summary?${params}`, { signal: controller.signal })
+      .then((response) => { if (!controller.signal.aborted) { setRemoteSummary(normalizeSummary(response.data)); setChartRevision((revision) => revision + 1); setError(""); } })
+      .catch((reason) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Dashboard data could not be loaded."); })
+      .finally(() => { if (!controller.signal.aborted) setRefreshing(false); });
+    return () => controller.abort();
+  }, [appliedFrom, appliedTo, warehouseId]);
 
-function monthSeries(products: Product[]) {
-  const now = new Date();
-  return Array.from({ length: 6 }, (_, index) => {
-    const month = new Date(now.getFullYear(), now.getMonth() - 5 + index, 1);
-    const count = products.filter((product) => {
-      const createdAt = new Date(product.createdAt);
-      return createdAt.getFullYear() === month.getFullYear() && createdAt.getMonth() === month.getMonth();
-    }).length;
-    return { label: month.toLocaleDateString("id-ID", { month: "short" }), count };
-  });
-}
+  const applyRange = (start = from, end = to) => {
+    if (!start || !end || start > end) return;
+    if (start === appliedFrom && end === appliedTo) return;
+    setRefreshing(true);
+    setAppliedFrom(start);
+    setAppliedTo(end);
+  };
+  const applyPreset = (days: number) => {
+    const end = localDate(new Date());
+    const start = days === 0 ? `${end.slice(0, 8)}01` : dateDaysAgo(days - 1);
+    setFrom(start);
+    setTo(end);
+    applyRange(start, end);
+  };
 
-export default function DashboardView({ products, categories, brands, units, summary, loading, masterLoading, onNavigate }: Props) {
-  const { user } = useAuth();
-  const roleTitle = user?.role.code === "PROCUREMENT" ? "Procurement intelligence" : user?.role.code === "WAREHOUSE_STAFF" ? "Warehouse operations" : user?.role.code === "AUDITOR" ? "Audit-ready snapshot" : user?.role.code === "WAREHOUSE_MANAGER" ? "Warehouse portfolio" : "Inventory intelligence";
-  const counts = [
-    { label: "Categories", value: categories.length, icon: Tag, color: "from-blue-500 to-indigo-600", page: "categories" as const },
-    { label: "Brands", value: brands.length, icon: Boxes, color: "from-violet-500 to-fuchsia-600", page: "brands" as const },
-    { label: "Units", value: units.length, icon: Ruler, color: "from-amber-500 to-orange-600", page: "units" as const },
-    { label: "Products", value: products.length, icon: Package, color: "from-emerald-500 to-teal-600", page: "products" as const },
+  const catalog = [
+    { label: "Categories", value: categories.length, page: "categories" as const },
+    { label: "Brands", value: brands.length, page: "brands" as const },
+    { label: "Units", value: units.length, page: "units" as const },
+    { label: "Products", value: products.length, page: "products" as const },
   ];
-  const stockVisible = products.filter((product) => product.totalStock !== null);
-  const lowStock = stockVisible.filter((product) => Number(product.totalStock) <= product.minStock);
-  const categoryMap = products.reduce<Record<string, number>>((result, product) => {
-    const label = product.category?.name ?? "Uncategorized";
-    return { ...result, [label]: (result[label] ?? 0) + 1 };
-  }, {});
-  const categoryEntries = Object.entries(categoryMap).sort(([, left], [, right]) => right - left).slice(0, 5);
-  const categoryTotal = categoryEntries.reduce((total, [, value]) => total + value, 0) || 1;
-  const pieStops = categoryEntries.reduce<{ segments: string[]; offset: number }>((result, [, value], index) => {
-    const end = result.offset + (value / categoryTotal) * 100;
-    return { segments: [...result.segments, `${colors[index % colors.length]} ${result.offset}% ${end}%`], offset: end };
-  }, { segments: [], offset: 0 }).segments.join(", ");
-  const stockBars = [...stockVisible].sort((left, right) => Number(right.totalStock) - Number(left.totalStock)).slice(0, 6);
-  const maxStock = Math.max(...stockBars.map((product) => Number(product.totalStock)), 1);
-  const registrations = monthSeries(products);
-  const maxRegistration = Math.max(...registrations.map((item) => item.count), 1);
-  const linkedCategory = products.filter((product) => Boolean(product.categoryId)).length;
-  const linkedBrand = products.filter((product) => Boolean(product.brandId)).length;
-  const linkedUnit = products.filter((product) => Boolean(product.unitId)).length;
-  const barcodeReady = products.filter((product) => Boolean(product.barcode)).length;
-  const relationshipProgress = [
-    { label: "Category linked", value: percentage(linkedCategory, products.length), color: "bg-blue-500" },
-    { label: "Brand linked", value: percentage(linkedBrand, products.length), color: "bg-violet-500" },
-    { label: "Unit linked", value: percentage(linkedUnit, products.length), color: "bg-amber-500" },
-    { label: "Barcode ready", value: percentage(barcodeReady, products.length), color: "bg-emerald-500" },
-  ];
+  const composition = summary?.categoryStock ?? [];
+  const totalComposition = composition.reduce((sum, row) => sum + row.quantity, 0);
+  const maxWarehouse = Math.max(1, ...(summary?.warehouseStock ?? []).map((row) => row.quantity));
+  const maxProduct = Math.max(1, ...(summary?.topProducts ?? []).map((row) => row.quantity));
+  const activeTrend = summary?.trend ?? [];
+  const trendLines = activeTrend;
 
-  return <section className="space-y-6">
-    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#172b63] via-[#254ac2] to-[#5b45e8] p-6 text-white shadow-xl sm:p-8"><div className="absolute -right-20 -top-24 h-64 w-64 rounded-full border-[34px] border-white/10" /><div className="absolute bottom-[-80px] right-[30%] h-48 w-48 rounded-full bg-white/10" /><div className="relative flex flex-wrap items-end justify-between gap-6"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-100">StockFlow Analytics · {user?.role.name ?? "Role view"}</p><h2 className="mt-3 text-3xl font-bold tracking-tight">{roleTitle}</h2><p className="mt-2 max-w-xl text-sm leading-6 text-blue-100">Four analytical views drawn from your product catalog, its master-data relations, inventory balances, and registration dates.</p></div><div className="rounded-2xl bg-white/15 p-4 backdrop-blur"><TrendingUp size={34} /></div></div></div>
-
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{counts.map((item) => { const Icon = item.icon; return <button key={item.label} type="button" onClick={() => onNavigate(item.page)} className="group rounded-2xl border border-slate-100 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-lg dark:border-slate-800 dark:bg-slate-900"><div className="flex items-center justify-between"><span className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${item.color} text-white shadow-md`}><Icon size={20} /></span><ArrowRight size={17} className="text-slate-300 transition group-hover:translate-x-1 group-hover:text-blue-500" /></div><p className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">{item.label}</p><p className="mt-1 text-3xl font-bold text-slate-900 dark:text-white">{masterLoading || loading ? "—" : item.value}</p><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Master records available</p></button>; })}</div>
-
-    <div className="grid gap-6 xl:grid-cols-2">
-      <ChartCard title="Product mix by category" subtitle="Pie chart · Product.categoryId and Category.name" icon={<PieChart size={20} className="text-blue-500" />}><div className="flex flex-wrap items-center gap-7"><div className="relative h-44 w-44 shrink-0 rounded-full" style={{ background: pieStops ? `conic-gradient(${pieStops})` : "#26354d" }}><div className="absolute inset-8 flex flex-col items-center justify-center rounded-full bg-white dark:bg-slate-900"><span className="text-3xl font-bold text-slate-900 dark:text-white">{products.length}</span><span className="text-[10px] uppercase tracking-wide text-slate-400">products</span></div></div><div className="min-w-[160px] flex-1 space-y-3">{categoryEntries.map(([label, value], index) => <div key={label} className="flex items-center justify-between gap-3 text-xs"><span className="flex min-w-0 items-center gap-2 text-slate-600 dark:text-slate-300"><span className="h-2.5 w-2.5 rounded-full" style={{ background: colors[index % colors.length] }} /><span className="truncate">{label}</span></span><span className="font-bold text-slate-900 dark:text-white">{value} · {percentage(value, categoryTotal)}%</span></div>)}{categoryEntries.length === 0 && <EmptyChart />}</div></div></ChartCard>
-
-      <ChartCard title="Top stock by product" subtitle="Bar chart · Product.totalStock from InventoryBalance" icon={<BarChart3 size={20} className="text-emerald-500" />}><div className="mt-2 flex h-52 items-end gap-3 border-b border-l border-slate-200 px-4 pb-7 pt-4 dark:border-slate-700">{stockBars.map((product, index) => <div key={product.id} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-2"><span className="text-[10px] font-bold text-slate-500">{product.totalStock}</span><div className="w-full max-w-10 rounded-t-lg transition-all" style={{ height: `${Math.max((Number(product.totalStock) / maxStock) * 100, 4)}%`, background: colors[index % colors.length] }} title={`${product.name}: ${product.totalStock}`} /><span className="w-full truncate text-center text-[10px] text-slate-500">{product.sku}</span></div>)}{stockBars.length === 0 && <EmptyChart />}</div></ChartCard>
-
-      <ChartCard title="Product registration trend" subtitle="Line chart · Product.createdAt, last 6 months" icon={<ChartNoAxesCombined size={20} className="text-violet-500" />}><LineChart points={registrations.map((item) => item.count)} labels={registrations.map((item) => item.label)} maxValue={maxRegistration} /></ChartCard>
-
-      <ChartCard title="Catalog relationship readiness" subtitle="Progress chart · Product categoryId, brandId, unitId, barcode" icon={<Warehouse size={20} className="text-amber-500" />}><div className="mt-6 space-y-5">{relationshipProgress.map((item) => <div key={item.label}><div className="mb-2 flex items-center justify-between text-xs"><span className="font-semibold text-slate-600 dark:text-slate-300">{item.label}</span><span className="font-bold text-slate-900 dark:text-white">{item.value}%</span></div><div className="h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className={`h-full rounded-full ${item.color} transition-all duration-700`} style={{ width: `${item.value}%` }} /></div></div>)}<div className="mt-5 rounded-xl bg-amber-50 p-3 text-xs text-amber-700 dark:bg-amber-950/40 dark:text-amber-200">{lowStock.length} products are at or below their Product.minStock threshold.</div></div></ChartCard>
-    </div>
-
-    {summary && <section className="space-y-5 rounded-3xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-7">
-      <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-500">Operational intelligence</p><h3 className="mt-2 text-xl font-bold text-slate-900 dark:text-white">Business flow & reorder center</h3><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Live data from purchase orders, completed sales, expenses, and inventory balances.</p></div><button type="button" onClick={() => onNavigate("products")} className="rounded-xl bg-blue-50 px-4 py-2 text-xs font-bold text-blue-600 hover:bg-blue-100 dark:bg-blue-950/50 dark:text-blue-300">Open product catalog</button></div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><Metric label="Purchase value" value={formatMoney(summary.kpis.purchaseValue)} tone="blue" /><Metric label="Sales value" value={formatMoney(summary.kpis.salesValue)} tone="emerald" /><Metric label="Operating expense" value={formatMoney(summary.kpis.expenseValue)} tone="rose" /><Metric label="Units on hand" value={summary.kpis.stockUnits.toLocaleString("id-ID")} tone="violet" /><Metric label="Reorder lines" value={String(summary.kpis.lowStockLines)} tone="amber" /></div>
-      <div className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">
-        <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-5 dark:border-slate-800 dark:bg-slate-950/40"><div className="flex items-center justify-between"><div><h4 className="font-bold text-slate-900 dark:text-white">Monthly business flow</h4><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Purchase, sales, and expense value</p></div><div className="flex gap-3 text-[10px] font-semibold text-slate-500"><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-blue-500" />Purchase</span><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-emerald-500" />Sales</span></div></div><div className="mt-6 grid grid-cols-6 items-end gap-2 sm:gap-4">{summary.monthly.map((month) => { const max = Math.max(month.purchases, month.sales, month.expenses, 1); return <div key={month.label} className="flex min-w-0 flex-col items-center gap-2"><div className="flex h-36 w-full items-end justify-center gap-1 rounded-t-xl bg-white px-1 pt-2 dark:bg-slate-900"><span className="w-1/3 rounded-t bg-blue-500" style={{ height: `${Math.max((month.purchases / max) * 100, month.purchases ? 5 : 0)}%` }} title={`Purchase ${formatMoney(month.purchases)}`} /><span className="w-1/3 rounded-t bg-emerald-500" style={{ height: `${Math.max((month.sales / max) * 100, month.sales ? 5 : 0)}%` }} title={`Sales ${formatMoney(month.sales)}`} /><span className="w-1/3 rounded-t bg-rose-400" style={{ height: `${Math.max((month.expenses / max) * 100, month.expenses ? 5 : 0)}%` }} title={`Expense ${formatMoney(month.expenses)}`} /></div><span className="truncate text-[10px] font-semibold text-slate-500">{month.label}</span></div>; })}</div></div>
-        <div className="rounded-2xl border border-amber-100 bg-amber-50/60 p-5 dark:border-amber-900/60 dark:bg-amber-950/20"><div className="flex items-center justify-between"><div><h4 className="font-bold text-slate-900 dark:text-white">Reorder queue</h4><p className="mt-1 text-xs text-slate-600 dark:text-slate-300">Recommended quantity uses minStock × 2</p></div><AlertTriangle size={20} className="text-amber-500" /></div><div className="mt-4 space-y-3">{summary.lowStock.slice(0, 5).map((row) => <div key={`${row.productId}-${row.warehouseId}`} className="flex items-center justify-between gap-3 rounded-xl bg-white/80 p-3 dark:bg-slate-900/70"><div className="min-w-0"><p className="truncate text-xs font-bold text-slate-900 dark:text-white">{row.productName}</p><p className="truncate text-[10px] text-slate-500 dark:text-slate-400">{row.warehouseName} · {row.sku}</p></div><div className="shrink-0 text-right"><p className="text-xs font-bold text-red-600 dark:text-red-300">{row.quantityOnHand} / {row.minStock}</p><p className="text-[10px] text-slate-500">Order +{row.reorderQuantity}</p></div></div>)}{summary.lowStock.length === 0 && <p className="py-8 text-center text-sm text-emerald-700 dark:text-emerald-300">All stock levels are healthy.</p>}</div></div>
+  return <main className="space-y-5 pb-8">
+    <header className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-800 via-green-700 to-lime-600 px-6 py-5 text-white shadow-lg sm:px-8">
+      <div className="absolute -right-8 -top-24 h-72 w-72 rounded-full border-[36px] border-white/10" />
+      <div className="relative flex flex-wrap items-center justify-between gap-5">
+        <div><p className="text-xs font-semibold uppercase tracking-[.2em] text-green-100">StockFlow · {user?.role.name ?? "Inventory analytics"}</p><h2 className="mt-1 text-2xl font-bold sm:text-3xl">Inventory & Operations Dashboard</h2><p className="mt-1 text-sm text-green-50/90">Ringkasan pembelian, penjualan, pergerakan stok, dan kesehatan persediaan.</p></div>
+        <button type="button" aria-expanded={filtersOpen} aria-controls="dashboard-date-filters" onClick={() => setFiltersOpen((open) => !open)} className="rounded-xl border border-white/25 bg-white/10 px-4 py-3 text-left text-sm font-semibold backdrop-blur transition hover:bg-white/20"><CalendarDays className="mr-2 inline" size={16} />{readableDate(appliedFrom)} – {readableDate(appliedTo)}<ChevronDown className={`ml-2 inline transition-transform ${filtersOpen ? "rotate-180" : ""}`} size={15} /><span className="mt-1 block text-xs font-normal text-green-50">Klik untuk {filtersOpen ? "menutup" : "mengatur"} periode</span></button>
       </div>
+    </header>
+
+    {filtersOpen && <section id="dashboard-date-filters" className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Filter periode laporan</h3><p className="mt-1 text-xs text-slate-500">Pilih rentang tanggal. Data transaksi dihitung ulang setelah diterapkan.</p></div><div className="flex flex-wrap gap-2">{[{ label: "7 hari", days: 7 }, { label: "30 hari", days: 30 }, { label: "90 hari", days: 90 }, { label: "Bulan ini", days: 0 }].map((preset) => <button key={preset.label} type="button" onClick={() => applyPreset(preset.days)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">{preset.label}</button>)}</div></div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1.2fr_auto_auto]">
+        <label className="text-xs font-semibold text-slate-500">Dari tanggal<input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className="mt-1.5 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" /></label>
+        <label className="text-xs font-semibold text-slate-500">Sampai tanggal<input type="date" value={to} min={from || undefined} max={localDate(new Date())} onChange={(e) => setTo(e.target.value)} className="mt-1.5 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" /></label>
+        <label className="text-xs font-semibold text-slate-500">Gudang<GlobalSelect value={warehouseId} onChange={(e) => { setWarehouseId(e.target.value); setRefreshing(true); }} className="mt-1.5 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"><option value="">Semua gudang yang diizinkan</option>{summary?.warehouses?.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</GlobalSelect></label>
+        <button type="button" disabled={!from || !to || from > to || (from === appliedFrom && to === appliedTo)} onClick={() => applyRange()} className="self-end rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><Check size={15} className="mr-2 inline" />Terapkan</button>
+        <button type="button" onClick={() => { const start = dateDaysAgo(29); const end = localDate(new Date()); setFrom(start); setTo(end); if (warehouseId || start !== appliedFrom || end !== appliedTo) setRefreshing(true); setWarehouseId(""); setAppliedFrom(start); setAppliedTo(end); }} className="self-end rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"><RefreshCw size={15} className="mr-2 inline" />Reset filter</button>
+      </div>
+      {from > to && <p role="alert" className="text-xs font-medium text-rose-600">Tanggal mulai harus sebelum atau sama dengan tanggal akhir.</p>}
+      <p className="text-[11px] text-slate-400">Nilai pembelian, penjualan, biaya, tren, dan status transaksi mengikuti periode. Kartu stok/reorder menunjukkan saldo terkini.</p>
+    </section>}
+    {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">{error}</div>}
+
+    {!summary && refreshing ? <section aria-label="Memuat ringkasan dashboard" aria-busy="true" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">{Array.from({ length: 6 }, (_, index) => <div key={index} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900"><span className="sf-skeleton block h-3 w-2/3 rounded-full" /><span className="sf-skeleton mt-4 block h-6 w-1/2 rounded-lg" /><span className="sf-skeleton mt-3 block h-2 w-3/4 rounded-full" /></div>)}<span role="status" className="sr-only">Memuat ringkasan dashboard…</span></section> : <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+      <Kpi label="Nilai pembelian" value={can("purchases.read") ? money(summary?.kpis.purchaseValue ?? 0) : "Akses terbatas"} color="blue" note="PO non-cancelled" />
+      <Kpi label="Penjualan selesai" value={can("sales.read") ? money(summary?.kpis.salesValue ?? 0) : "Akses terbatas"} color="green" note="Sale completed" />
+      <Kpi label="Biaya operasional" value={can("expenses.read") ? money(summary?.kpis.expenseValue ?? 0) : "Akses terbatas"} color="rose" note="Periode terpilih" />
+      <Kpi label="Stok tersedia" value={can("inventory.read") ? `${(summary?.kpis.stockUnits ?? 0).toLocaleString("id-ID")} unit` : "Akses terbatas"} color="violet" note="Lokasi dan batch layak, setelah reservasi" />
+      <Kpi label="Perlu reorder" value={can("inventory.read") ? `${summary?.kpis.lowStockLines ?? 0} baris` : "Akses terbatas"} color="amber" note="Di bawah minimum" />
+      <Kpi label="Segera kedaluwarsa" value={can("inventory.read") ? `${summary?.kpis.expiringUnits30d ?? 0} unit` : "Akses terbatas"} color="cyan" note="Batch dalam 30 hari" />
     </section>}
 
-    <NotificationFeed />
-    <InventoryIntelligence />
+    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{catalog.map((item, i) => <button type="button" key={item.label} onClick={() => onNavigate(item.page)} className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"><span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Master · {item.label}</span><span className="mt-2 flex items-end justify-between"><strong className="text-3xl text-slate-900 dark:text-white">{masterLoading || loading ? "—" : item.value}</strong><span className="h-2 w-16 rounded-full" style={{ background: colors[i] }} /></span><span className="mt-1 block text-xs text-slate-400">Terhubung ke katalog produk →</span></button>)}</section>
 
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Insight label="Stock visibility" value={`${stockVisible.length}`} hint="Products with inventory balances" tone="blue" /><Insight label="Low-stock attention" value={`${lowStock.length}`} hint="Using totalStock and minStock" tone="amber" icon={<AlertTriangle size={17} />} /><Insight label="Catalog linked" value={`${percentage(linkedCategory + linkedBrand + linkedUnit, products.length * 3)}%`} hint="Across three master relationships" tone="violet" /><Insight label="Barcode coverage" value={`${percentage(barcodeReady, products.length)}%`} hint="Products ready for scanning" tone="emerald" /></div>
+    <div key={chartRevision} className="sf-dashboard-charts space-y-4">
+    <section className="grid gap-4 xl:grid-cols-[1.55fr_1fr]">
+      <Panel title="Tren pergerakan stok" subtitle={`Penerimaan, issue, adjustment, dan transfer · bucket ${summary?.period?.bucketDays ?? 1} hari`} icon={<Activity className="text-blue-500" size={19} />}><MovementChart points={trendLines} /></Panel>
+      <Panel title="Komposisi stok per kategori" subtitle="Jumlah available stock menurut Product → Category" icon={<Boxes className="text-violet-500" size={19} />}><Donut rows={composition.map((row) => ({ label: row.name, value: row.quantity }))} total={totalComposition} /></Panel>
+    </section>
 
-    <div className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"><div className="flex items-center justify-between border-b border-slate-100 p-6 dark:border-slate-800"><div><h3 className="font-bold text-slate-900 dark:text-white">Latest product catalog</h3><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Recent records connected to category, brand and unit.</p></div><button type="button" onClick={() => onNavigate("products")} className="text-xs font-bold text-blue-600 hover:text-blue-700">View catalog <ArrowRight size={14} className="ml-1 inline" /></button></div><div className="divide-y divide-slate-100 dark:divide-slate-800">{loading && <div className="p-8 text-center text-sm text-slate-400">Loading products...</div>}{!loading && products.slice(0, 5).map((product) => <div key={product.id} className="flex items-center gap-4 px-6 py-4"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300"><Package size={18} /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{product.name}</p><p className="mt-1 text-xs text-slate-400">{product.sku} · {product.category?.name ?? "Uncategorized"} · {product.brand?.name ?? "No brand"}</p></div><div className="hidden text-right sm:block"><p className="text-sm font-bold text-slate-800 dark:text-slate-100">{product.totalStock ?? "—"}</p><p className="text-[10px] uppercase tracking-wide text-slate-400">Stock</p></div></div>)}{!loading && products.length === 0 && <div className="p-8 text-center text-sm text-slate-400">No products available.</div>}</div></div>
-  </section>;
+    <section className="grid gap-4 xl:grid-cols-3">
+      <Panel title="Aktivitas transaksi" subtitle="Status PO, penjualan, dan transfer selama periode" icon={<ArrowDownToLine className="text-emerald-500" size={19} />}><div className="space-y-5">{([ ["Purchase", summary?.operationStatus?.purchases], ["Sales", summary?.operationStatus?.sales], ["Transfer", summary?.operationStatus?.transfers] ] as const).map(([name, rows]) => <StatusBars key={name} title={name} rows={rows ?? []} />)}</div></Panel>
+      <Panel title="Stok per warehouse" subtitle="Available units; mengikuti warehouse scope akun" icon={<WarehouseIcon className="text-cyan-500" size={19} />}><div className="space-y-4">{summary?.warehouseStock.slice(0, 7).map((row) => <HorizontalBar key={row.id} label={row.name} value={row.quantity} max={maxWarehouse} color="#06b6d4" />)}{!summary?.warehouseStock.length && <Empty />}</div></Panel>
+      <Panel title="Produk dengan stok terbanyak" subtitle="Saldo tersedia dari InventoryBalance" icon={<Package className="text-amber-500" size={19} />}><div className="space-y-4">{summary?.topProducts.slice(0, 7).map((row) => <HorizontalBar key={row.id} label={`${row.name} · ${row.sku}`} value={row.quantity} max={maxProduct} color="#f59e0b" />)}{!summary?.topProducts.length && <Empty />}</div></Panel>
+    </section>
+
+    <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+      <Panel title="Nilai aktivitas per bulan" subtitle="Nilai PO, sales selesai, dan expense (IDR)" icon={<ArrowUpFromLine className="text-indigo-500" size={19} />}><MonthlyBars rows={summary?.monthly ?? []} /></Panel>
+      <Panel title="Antrian reorder" subtitle="Rekomendasi sederhana: target minimum × 2" icon={<AlertTriangle className="text-amber-500" size={19} />}><div className="max-h-64 space-y-2 overflow-auto">{summary?.lowStock.slice(0, 8).map((row) => <div key={`${row.productId}:${row.warehouseId}`} className="flex items-center justify-between gap-3 rounded-xl bg-amber-50/70 p-3 dark:bg-amber-950/20"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{row.productName}</p><p className="text-xs text-slate-500">{row.warehouseName} · {row.sku}</p></div><span className="shrink-0 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold text-amber-700 dark:bg-slate-900 dark:text-amber-300">{row.quantityOnHand}/{row.minStock} · +{row.reorderQuantity}</span></div>)}{!summary?.lowStock.length && <p className="py-8 text-center text-sm text-emerald-700 dark:text-emerald-300">Semua stok berada di atas minimum.</p>}</div></Panel>
+    </section>
+    </div>
+
+    <section className="grid gap-4 xl:grid-cols-[1fr_1.2fr]"><Panel title="Kelengkapan katalog" subtitle="Relasi master data yang dipakai product" icon={<Boxes className="text-indigo-500" size={19} />}><div className="space-y-4">{[["Product → Category", products.filter((p) => Boolean(p.categoryId)).length, products.length], ["Product → Brand", products.filter((p) => Boolean(p.brandId)).length, products.length], ["Product → Unit", products.filter((p) => Boolean(p.unitId)).length, products.length], ["Barcode tersedia", products.filter((p) => Boolean(p.barcode)).length, products.length]].map(([label, value, total]) => <Progress key={String(label)} label={String(label)} value={Number(value)} total={Number(total)} />)}</div></Panel><Panel title="Pembaruan terbaru di katalog" subtitle="SKU, kategori, merek, dan saldo tersedia" icon={<Package className="text-blue-500" size={19} />}><div className="divide-y divide-slate-100 dark:divide-slate-800">{products.slice(0, 5).map((product) => <div key={product.id} className="flex items-center gap-3 py-3"><span className="rounded-xl bg-blue-50 p-2 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300"><Package size={17} /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{product.name}</p><p className="truncate text-xs text-slate-500">{product.sku} · {product.category?.name ?? "Tanpa kategori"} · {product.brand?.name ?? "Tanpa brand"}</p></div><strong className="text-sm text-slate-800 dark:text-white">{product.totalStock ?? "—"}</strong></div>)}{!products.length && <Empty />}</div><button type="button" onClick={() => onNavigate("products")} className="mt-3 text-sm font-semibold text-blue-600 hover:text-blue-700">Buka katalog →</button></Panel></section>
+
+    <div className="flex items-center justify-end">{refreshing && <GlobalLoading compact label="Memuat analitik…" />}</div>
+    <CostAndProfitPanel key={`${appliedFrom}:${appliedTo}:${warehouseId}`} from={appliedFrom} to={appliedTo} warehouseId={warehouseId || undefined} />
+    <AttentionList onOpen={onOpenAttention} /><NotificationFeed /><p className="text-xs text-slate-500 dark:text-slate-300">Valuasi WAC hanya mencakup modal yang tercatat; stok lama bermodal tidak diketahui ditampilkan terpisah. Saran pembelian tanpa izin membaca purchase tidak mencakup barang dalam perjalanan.</p><InventoryIntelligence />
+  </main>;
 }
 
-function ChartCard({ title, subtitle, icon, children }: { title: string; subtitle: string; icon: ReactNode; children: ReactNode }) {
-  return <article className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900"><div className="flex items-start justify-between gap-4"><div><h3 className="font-bold text-slate-900 dark:text-white">{title}</h3><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{subtitle}</p></div>{icon}</div><div className="mt-5">{children}</div></article>;
-}
-
-function LineChart({ points, labels, maxValue }: { points: number[]; labels: string[]; maxValue: number }) {
-  const width = 520; const height = 190; const padX = 28; const padY = 28;
-  const coordinates = points.map((point, index) => ({ x: padX + (index * (width - padX * 2)) / Math.max(points.length - 1, 1), y: height - padY - (point / maxValue) * (height - padY * 2), point }));
-  const path = coordinates.map((coordinate, index) => `${index === 0 ? "M" : "L"}${coordinate.x},${coordinate.y}`).join(" ");
-  const area = `${path} L ${coordinates.at(-1)?.x ?? width - padX},${height - padY} L ${coordinates[0]?.x ?? padX},${height - padY} Z`;
-  return <div className="relative"><svg viewBox={`0 0 ${width} ${height}`} className="h-52 w-full overflow-visible" role="img" aria-label="Product registration trend"><defs><linearGradient id="registration-area" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.32" /><stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" /></linearGradient></defs>{[0.25, 0.5, 0.75].map((position) => <line key={position} x1={padX} x2={width - padX} y1={height * position} y2={height * position} stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeDasharray="4 5" />)}<path d={area} fill="url(#registration-area)" /><path d={path} fill="none" stroke="#8b5cf6" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />{coordinates.map((coordinate, index) => <g key={labels[index]}><circle cx={coordinate.x} cy={coordinate.y} r="4" fill="#8b5cf6" stroke="white" strokeWidth="2" /><text x={coordinate.x} y={coordinate.y - 10} textAnchor="middle" className="fill-slate-500 text-[10px]">{coordinate.point}</text><text x={coordinate.x} y={height - 5} textAnchor="middle" className="fill-slate-400 text-[10px]">{labels[index]}</text></g>)}</svg><p className="mt-1 text-xs text-slate-400">Monthly count of product records created in the last six months.</p></div>;
-}
-
-function EmptyChart() { return <p className="m-auto py-12 text-center text-sm text-slate-400">No related data has been recorded yet.</p>; }
-
-function Metric({ label, value, tone }: { label: string; value: string; tone: "blue" | "emerald" | "rose" | "violet" | "amber" }) {
-  const colors = { blue: "bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300", emerald: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300", rose: "bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-300", violet: "bg-violet-50 text-violet-600 dark:bg-violet-950/50 dark:text-violet-300", amber: "bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-300" };
-  return <div className={`rounded-2xl p-4 ${colors[tone]}`}><p className="text-[10px] font-bold uppercase tracking-wide opacity-75">{label}</p><p className="mt-2 truncate text-lg font-bold">{value}</p></div>;
-}
-
-function Insight({ label, value, hint, tone, icon }: { label: string; value: string; hint: string; tone: "blue" | "amber" | "violet" | "emerald"; icon?: ReactNode }) {
-  const toneClasses = { blue: "bg-blue-50 text-blue-600 dark:bg-blue-950/50", amber: "bg-amber-50 text-amber-600 dark:bg-amber-950/50", violet: "bg-violet-50 text-violet-600 dark:bg-violet-950/50", emerald: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50" };
-  return <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"><div className="flex items-center justify-between"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p><span className={`rounded-lg p-2 ${toneClasses[tone]}`}>{icon ?? <TrendingUp size={17} />}</span></div><p className="mt-4 truncate text-2xl font-bold text-slate-900 dark:text-white">{value}</p><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{hint}</p></div>;
-}
+function Panel({ title, subtitle, icon, children }: { title: string; subtitle: string; icon: ReactNode; children: ReactNode }) { return <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:p-6"><div className="mb-5 flex items-start justify-between gap-3"><div><h3 className="font-bold text-slate-900 dark:text-white">{title}</h3><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{subtitle}</p></div>{icon}</div>{children}</article>; }
+function Kpi({ label, value, note, color }: { label: string; value: string; note: string; color: string }) { const tone: Record<string, string> = { blue: "border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/40", green: "border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40", rose: "border-rose-200 bg-rose-50 dark:border-rose-900 dark:bg-rose-950/40", violet: "border-violet-200 bg-violet-50 dark:border-violet-900 dark:bg-violet-950/40", amber: "border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40", cyan: "border-cyan-200 bg-cyan-50 dark:border-cyan-900 dark:bg-cyan-950/40" }; return <div className={`min-w-0 rounded-2xl border p-4 ${tone[color]}`}><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p><p className="mt-2 truncate text-xl font-extrabold text-slate-900 dark:text-white">{value}</p><p className="mt-1 truncate text-[10px] text-slate-500 dark:text-slate-400">{note}</p></div>; }
+function Donut({ rows, total }: { rows: { label: string; value: number }[]; total: number }) { const positiveRows = rows.filter((row) => row.value > 0); const gradient = positiveRows.reduce<{ stops: string[]; offset: number }>((result, row, index) => { const end = result.offset + (total ? row.value / total * 100 : 0); return { stops: [...result.stops, `${colors[index % colors.length]} ${result.offset}% ${end}%`], offset: end }; }, { stops: [], offset: 0 }).stops.join(", "); return <div className="flex flex-wrap items-center gap-6"><div className="relative h-44 w-44 shrink-0 rounded-full" style={{ background: gradient ? `conic-gradient(${gradient})` : "#e2e8f0" }}><div className="absolute inset-8 flex flex-col items-center justify-center rounded-full bg-white dark:bg-slate-900"><b className="text-2xl text-slate-900 dark:text-white">{total.toLocaleString("id-ID")}</b><span className="text-[10px] uppercase text-slate-500">unit tersedia</span></div></div><div className="min-w-[150px] flex-1 space-y-2.5">{rows.slice(0, 7).map((row, i) => <div className="flex justify-between gap-3 text-xs" key={row.label}><span className="flex min-w-0 items-center gap-2 text-slate-600 dark:text-slate-300"><i className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: colors[i % colors.length] }} /><span className="truncate">{row.label}</span></span><b className="shrink-0 text-slate-800 dark:text-white">{row.value.toLocaleString("id-ID")}</b></div>)}{!rows.length && <Empty />}</div></div>; }
+function MovementChart({ points }: { points: Point[] }) { const width = 620; const height = 220; const pad = 28; const max = Math.max(1, ...points.flatMap((p) => [p.receipts, p.issues, p.adjustments, p.transfers])); const keys = [["receipts", "#10b981", "Receipt"], ["issues", "#2563eb", "Sale issue"], ["adjustments", "#f59e0b", "Adjustment"], ["transfers", "#8b5cf6", "Transfer"]] as const; const coord = (v: number, i: number) => ({ x: pad + i * (width - pad * 2) / Math.max(points.length - 1, 1), y: height - pad - v / max * (height - pad * 2) }); return <><div className="flex flex-wrap gap-x-4 gap-y-2 text-[10px] text-slate-500">{keys.map(([key, color, label]) => <span key={key}><i className="mr-1 inline-block h-2 w-2 rounded-full" style={{ background: color }} />{label}</span>)}</div><svg viewBox={`0 0 ${width} ${height}`} className="mt-3 h-56 w-full" role="img" aria-label="Tren pergerakan stok"><defs><linearGradient id="movement-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#2563eb" stopOpacity=".16"/><stop offset="1" stopColor="#2563eb" stopOpacity="0"/></linearGradient></defs>{[0, 1, 2, 3].map((i) => <line key={i} x1={pad} x2={width - pad} y1={pad + i * (height - 2 * pad) / 3} y2={pad + i * (height - 2 * pad) / 3} stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeDasharray="4 5"/>)}{keys.map(([key, color]) => { const coords = points.map((p, i) => coord(p[key], i)); const path = coords.map((p, i) => `${i ? "L" : "M"}${p.x},${p.y}`).join(" "); return <g key={key}><path d={path} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>{coords.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="3" fill={color}><title>{points[i].label}: {points[i][key]}</title></circle>)}</g>; })}{points.map((p, i) => i % Math.max(1, Math.ceil(points.length / 7)) === 0 || i === points.length - 1 ? <text key={p.date} x={coord(0, i).x} y={height - 4} textAnchor="middle" className="fill-slate-400 text-[10px]">{p.label}</text> : null)}</svg>{!points.length && <Empty />}</>; }
+function StatusBars({ title, rows }: { title: string; rows: Segment[] }) { const max = Math.max(1, ...rows.map((r) => r.count)); return <div><p className="mb-2 text-xs font-bold text-slate-700 dark:text-slate-200">{title}</p><div className="space-y-2">{rows.slice(0, 4).map((r, i) => <div key={r.label} className="flex items-center gap-2 text-[10px]"><span className="w-24 truncate text-slate-500">{r.label.replaceAll("_", " ")}</span><div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full" style={{ width: `${r.count / max * 100}%`, background: colors[i] }} /></div><b className="w-6 text-right text-slate-700 dark:text-slate-200">{r.count}</b></div>)}{!rows.length && <p className="text-xs text-slate-400">Belum ada transaksi.</p>}</div></div>; }
+function HorizontalBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) { return <div><div className="mb-1 flex items-center justify-between gap-3 text-xs"><span className="truncate text-slate-600 dark:text-slate-300">{label}</span><b className="shrink-0 text-slate-800 dark:text-white">{value.toLocaleString("id-ID")}</b></div><div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full" style={{ width: `${Math.max(value ? 2 : 0, value / max * 100)}%`, background: color }} /></div></div>; }
+function MonthlyBars({ rows }: { rows: DashboardSummary["monthly"] }) { const max = Math.max(1, ...rows.flatMap((r) => [r.purchases, r.sales, r.expenses])); return <div className="grid grid-cols-6 gap-2 sm:grid-cols-12">{rows.map((r) => <div key={r.label} className="min-w-0 text-center"><div className="flex h-36 items-end justify-center gap-0.5 rounded-lg bg-slate-50 px-1 pb-1 dark:bg-slate-950/60"><div className="w-1/3 rounded-t bg-blue-500" style={{ height: `${Math.max(r.purchases ? 3 : 0, r.purchases / max * 100)}%` }} title={`Purchase ${money(r.purchases)}`}/><div className="w-1/3 rounded-t bg-emerald-500" style={{ height: `${Math.max(r.sales ? 3 : 0, r.sales / max * 100)}%` }} title={`Sales ${money(r.sales)}`}/><div className="w-1/3 rounded-t bg-rose-400" style={{ height: `${Math.max(r.expenses ? 3 : 0, r.expenses / max * 100)}%` }} title={`Expense ${money(r.expenses)}`}/></div><span className="mt-1 block truncate text-[10px] text-slate-500">{r.label}</span></div>)}<div className="col-span-full mt-2 flex gap-4 text-[10px] text-slate-500"><span>■ Pembelian</span><span className="text-emerald-600">■ Sales</span><span className="text-rose-500">■ Expense</span></div>{!rows.length && <Empty />}</div>; }
+function Progress({ label, value, total }: { label: string; value: number; total: number }) { const pct = total ? Math.round(value / total * 100) : 0; return <div><div className="mb-1.5 flex justify-between text-xs"><span className="text-slate-600 dark:text-slate-300">{label}</span><b className="text-slate-800 dark:text-white">{pct}% <span className="font-normal text-slate-400">({value}/{total})</span></b></div><div className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-violet-500" style={{ width: `${pct}%` }}/></div></div>; }
+function Empty() { return <p className="py-8 text-center text-sm text-slate-400">Belum ada data untuk ditampilkan.</p>; }

@@ -26,6 +26,7 @@ export type LocationType =
   | "DAMAGED";
 
 export interface ReturnItem {
+  inspection?: { condition: ReturnCondition; recommendedDisposition: ReturnDisposition; notes: string; inspectedAt: string; inspectedBy?: { fullName: string } } | null;
   id: string;
   productId: string;
   purchaseOrderItemId: string | null;
@@ -58,6 +59,7 @@ export interface ReturnItem {
 }
 
 export interface ReturnRecord {
+  inspection?: { status: "PENDING" | "COMPLETED" | "FOLLOW_UP"; notes: string | null; inspectedAt: string; inspectedBy?: { fullName: string } } | null;
   id: string;
   number: string;
   type: ReturnType;

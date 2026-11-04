@@ -1,6 +1,11 @@
 
 "use client";
 
+import GlobalLoading from "@/components/ui/GlobalLoading";
+import GlobalSelect from "@/components/ui/GlobalSelect";
+import { confirmAction } from "@/components/ui/GlobalAlert";
+import { Eye, Pencil, Trash2 } from "@/components/ui/ActionIcons";
+
 import {
   useCallback,
   useEffect,
@@ -8,18 +13,7 @@ import {
   useState,
 } from "react";
 
-import {
-  AlertCircle,
-  Barcode,
-  Eye,
-  LoaderCircle,
-  Package,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Search,
-  Trash2,
-} from "lucide-react";
+import { AlertCircle, Barcode, Package, Plus, RefreshCw, Search } from "lucide-react";
 
 import { productService } from "@/services/product.service";
 
@@ -194,7 +188,7 @@ export default function ProductsView({
   // DEACTIVATE PRODUCT
   // =====================================
   async function deactivate(product: Product) {
-    const confirmed = window.confirm(
+    const confirmed = await confirmAction(
       `Nonaktifkan produk ${product.name}? Data dan histori tidak akan dihapus.`
     );
 
@@ -303,7 +297,7 @@ export default function ProductsView({
           <div className="flex items-center gap-2 text-xs text-slate-600">
             Show
 
-            <select
+            <GlobalSelect
               aria-label="Entries per page"
               value={pageSize}
               onChange={(event) => {
@@ -317,7 +311,7 @@ export default function ProductsView({
               <option value={10}>10</option>
               <option value={25}>25</option>
               <option value={50}>50</option>
-            </select>
+            </GlobalSelect>
 
             entries
           </div>
@@ -511,11 +505,7 @@ export default function ProductsView({
           {/* LOADING */}
           {loading && (
             <div className="flex items-center justify-center gap-2 py-14 text-sm text-slate-500">
-              <LoaderCircle
-                size={18}
-                className="animate-spin"
-              />
-              Loading products...
+              <GlobalLoading label="Loading products..." />
             </div>
           )}
 
@@ -585,7 +575,7 @@ export default function ProductsView({
         options.units.length === 0 ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60">
             <div className="rounded-lg bg-white p-6 text-sm text-slate-700">
-              Loading form options...
+              <GlobalLoading label="Loading form options..." />
             </div>
           </div>
         ) : (
@@ -600,7 +590,7 @@ export default function ProductsView({
         ))}
 
       {viewing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setViewing(null); }}>
+        <div className="sf-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setViewing(null); }}>
           <div role="dialog" aria-modal="true" className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-blue-600">Product detail</p><h2 className="mt-1 text-xl font-bold text-slate-900">{viewing.name}</h2><p className="mt-1 text-sm text-slate-500">{viewing.sku}</p></div><button type="button" onClick={() => setViewing(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">×</button></div>
             <div className="mt-6 grid gap-3 sm:grid-cols-2">{[["Code", viewing.code || "—"], ["Category", viewing.category?.name || "—"], ["Brand", viewing.brand?.name || "—"], ["Unit", viewing.unit?.code || "—"], ["Stock", viewing.totalStock ?? "—"], ["Alert quantity", viewing.minStock]].map(([label, value]) => <div key={label} className="rounded-xl bg-slate-50 p-4"><p className="text-xs text-slate-400">{label}</p><p className="mt-1 font-semibold text-slate-800">{value}</p></div>)}</div>

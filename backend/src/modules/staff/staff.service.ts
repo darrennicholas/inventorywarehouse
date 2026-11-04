@@ -166,8 +166,11 @@ function translateWriteError(error: unknown): never {
 
 export const staffService = {
   // GET ALL STAFF
-  list() {
-    return staffRepository.findAll();
+  list(options?: { skip?: number; take?: number; search?: string; isActive?: boolean }) {
+    return staffRepository.findAll(options);
+  },
+  count(options?: { search?: string; isActive?: boolean }) {
+    return staffRepository.count(options);
   },
 
   // GET STAFF DETAIL

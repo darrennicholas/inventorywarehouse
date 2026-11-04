@@ -15,9 +15,11 @@ export default function DataTable<T extends { id: string }>({
   columns,
   search,
   onSearch,
-  searchPlaceholder = "Search records...",
-  empty = "No records found",
+  searchPlaceholder = "Cari data...",
+  empty = "Belum ada data untuk ditampilkan.",
   loading = false,
+  error,
+  onRetry,
 }: {
   rows: T[];
   columns: DataColumn<T>[];
@@ -26,9 +28,12 @@ export default function DataTable<T extends { id: string }>({
   searchPlaceholder?: string;
   empty?: string;
   loading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
 }) {
-  return <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-    {(onSearch || search !== undefined) && <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4"><div className="flex items-center gap-2 text-sm font-semibold text-slate-700"><SlidersHorizontal size={16} className="text-blue-600" /> Data explorer</div><div className="relative w-full sm:w-72"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search ?? ""} onChange={(event) => onSearch?.(event.target.value)} placeholder={searchPlaceholder} className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" /></div></div>}
-    <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr>{columns.map((column) => <th key={column.key} className={`px-5 py-3 font-bold ${column.className ?? ""}`}>{column.header}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{loading ? <tr><td colSpan={columns.length} className="px-5 py-12 text-center text-slate-400">Loading records...</td></tr> : rows.map((row) => <tr key={row.id} className="transition hover:bg-blue-50/40">{columns.map((column) => <td key={column.key} className={`px-5 py-4 ${column.className ?? ""}`}>{column.render(row)}</td>)}</tr>)}</tbody></table>{!loading && rows.length === 0 && <div className="px-5 py-14 text-center text-sm text-slate-400">{empty}</div>}</div>
+  return <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+    {(onSearch || search !== undefined) && <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4 dark:border-slate-700"><div className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200"><SlidersHorizontal size={16} className="text-blue-600" /> Cari dan kelola data</div><div className="relative w-full sm:w-72"><Search size={15} className="absolute left-3 top-3 text-slate-400" /><input aria-label="Cari data" value={search ?? ""} onChange={(event) => onSearch?.(event.target.value)} placeholder={searchPlaceholder} className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" /></div></div>}
+    {error && <div role="alert" className="flex flex-wrap items-center gap-3 border-b border-rose-100 bg-rose-50 px-5 py-3 text-sm text-rose-800"><span>{error}</span>{onRetry && <button type="button" onClick={onRetry} className="font-bold underline underline-offset-2">Coba lagi</button>}</div>}
+    <div className="overflow-x-auto"><table aria-busy={loading} className="w-full min-w-[720px] text-left text-sm"><thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600 dark:bg-slate-800 dark:text-slate-300"><tr>{columns.map((column) => <th key={column.key} scope="col" className={`px-5 py-3 font-bold ${column.className ?? ""}`}>{column.header}</th>)}</tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-700">{loading ? Array.from({ length: 4 }, (_, row) => <tr key={row} aria-hidden="true">{columns.map((column) => <td key={column.key} className="px-5 py-5"><span className="sf-skeleton block h-3 w-3/4 rounded-full" /></td>)}</tr>) : rows.map((row) => <tr key={row.id} className="sf-data-row text-slate-800 transition hover:bg-blue-50/70 dark:text-slate-100 dark:hover:bg-slate-800">{columns.map((column) => <td key={column.key} className={`px-5 py-4 ${column.className ?? ""}`}>{column.render(row)}</td>)}</tr>)}</tbody></table>{loading && <p role="status" className="sr-only">Memuat data…</p>}{!loading && rows.length === 0 && <div className="sf-appear px-5 py-14 text-center text-sm text-slate-600 dark:text-slate-300">{empty}</div>}</div>
   </div>;
 }

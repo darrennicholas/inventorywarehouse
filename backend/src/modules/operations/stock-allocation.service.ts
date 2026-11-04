@@ -2,9 +2,12 @@ import { randomUUID } from "node:crypto";
 
 import { Prisma } from "../../generated/prisma/client.ts";
 import { AppError } from "../../utils/AppError.ts";
+import { assertUsableBatch } from "./batch-safety.ts";
+import { lockCostBalance, receiveCost } from "./costing.service.ts";
 
 export type InventoryTx = Prisma.TransactionClient;
 export type StockAllocation = {
+  unitCost?: Prisma.Decimal | null;
   locationBalanceId: string;
   locationId: string;
   batchId: string | null;
@@ -72,13 +75,16 @@ async function assertBatchScope(tx: InventoryTx, productId: string, warehouseId:
   return batch;
 }
 
-export async function postStockIn(tx: InventoryTx, input: StockLocationInput & { quantity: number; reactivateBatch?: boolean }) {
+export async function postStockIn(tx: InventoryTx, input: StockLocationInput & { quantity: number; reactivateBatch?: boolean; unitCost?: Prisma.Decimal | number | string | null }) {
   if (!Number.isSafeInteger(input.quantity) || input.quantity <= 0) throw new AppError(400, "Stock quantity must be a positive integer");
   const product = await tx.product.findUnique({ where: { id: input.productId }, select: { trackBatch: true } });
   if (!product) throw new AppError(404, "Product not found");
   if (product.trackBatch && !input.batchId) throw new AppError(400, "Batch is required for a batch-tracked product");
   if (!product.trackBatch && input.batchId) throw new AppError(400, "Non-batch product cannot use a batch");
+  const unitCost = await receiveCost(tx, input.productId, input.warehouseId, input.quantity, input.unitCost);
+  if (input.batchId) await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "ProductBatch" WHERE "id" = ${input.batchId}::uuid FOR UPDATE`);
   const batch = await assertBatchScope(tx, input.productId, input.warehouseId, input.batchId ?? null);
+  if (batch && input.reactivateBatch !== false) assertUsableBatch(batch, {});
   const balance = await ensureLocationBalance(tx, input);
   const detail = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     UPDATE "InventoryLocationBalance"
@@ -89,7 +95,7 @@ export async function postStockIn(tx: InventoryTx, input: StockLocationInput & {
   if (detail.length !== 1) throw new AppError(409, "Unable to update location stock");
   await updateWarehouseBalance(tx, input.productId, input.warehouseId, input.quantity, balance.locationId);
   if (batch) await tx.productBatch.update({ where: { id: batch.id }, data: { quantityOnHand: { increment: input.quantity }, ...(input.reactivateBatch === false ? {} : { status: "ACTIVE" as const }) } });
-  return { locationBalanceId: balance.id, locationId: balance.locationId, batchId: balance.batchId, quantity: input.quantity } satisfies StockAllocation;
+  return { locationBalanceId: balance.id, locationId: balance.locationId, batchId: balance.batchId, quantity: input.quantity, unitCost } satisfies StockAllocation;
 }
 
 export async function allocateAvailableStock(
@@ -136,6 +142,7 @@ export async function allocateAvailableStock(
 }
 
 export async function postStockOut(tx: InventoryTx, productId: string, warehouseId: string, quantity: number, filters: { locationId?: string | null; batchId?: string | null } = {}) {
+  const cost = await lockCostBalance(tx, productId, warehouseId);
   const allocations = await allocateAvailableStock(tx, productId, warehouseId, quantity, filters);
   for (const allocation of allocations) {
     const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
@@ -160,7 +167,7 @@ export async function postStockOut(tx: InventoryTx, productId: string, warehouse
     }
     await updateWarehouseBalance(tx, productId, warehouseId, -allocation.quantity, allocation.locationId);
   }
-  return allocations;
+  return allocations.map((allocation) => ({ ...allocation, unitCost: cost.averageUnitCost }));
 }
 
 export async function changeLocationReservation(tx: InventoryTx, locationBalanceId: string, delta: number) {
@@ -187,6 +194,10 @@ export async function consumeLocationReservation(tx: InventoryTx, locationBalanc
 
 export async function linkMovementAllocations(tx: InventoryTx, movementId: string, allocations: StockAllocation[], sign: 1 | -1) {
   if (!allocations.length) return;
+  const quantity = allocations.reduce((sum, row) => sum + row.quantity, 0);
+  const known = allocations.every((row) => row.unitCost != null);
+  const unitCost = known ? allocations.reduce((sum, row) => sum.plus(row.unitCost!.mul(row.quantity)), new Prisma.Decimal(0)).div(quantity).toDecimalPlaces(6) : null;
+  await tx.stockMovement.update({ where: { id: movementId }, data: { unitCost, costMethod: known ? "WAC" : "UNKNOWN" } });
   await tx.stockMovementAllocation.createMany({ data: allocations.map((allocation) => ({ stockMovementId: movementId, inventoryLocationBalanceId: allocation.locationBalanceId, quantity: allocation.quantity * sign })) });
 }
 
@@ -198,7 +209,7 @@ export async function postPurchaseReturnStock(tx: InventoryTx, input: StockLocat
 }
 
 /** Sales return is physically received at the stated location; SCRAP has no stock entry. */
-export async function postSalesReturnStock(tx: InventoryTx, input: StockLocationInput & { quantity: number; locationId: string; disposition: "RESTOCK" | "QUARANTINE" | "SCRAP" }) {
+export async function postSalesReturnStock(tx: InventoryTx, input: StockLocationInput & { quantity: number; locationId: string; disposition: "RESTOCK" | "QUARANTINE" | "SCRAP"; unitCost?: Prisma.Decimal | null }) {
   const expectedType = input.disposition === "RESTOCK" ? "STORAGE" : input.disposition === "QUARANTINE" ? "QUARANTINE" : "DAMAGED";
   const location = await tx.warehouseLocation.findFirst({ where: { id: input.locationId, warehouseId: input.warehouseId, isActive: true, locationType: expectedType } });
   if (!location) throw new AppError(400, `Sales return ${input.disposition} requires active ${expectedType} location`);
@@ -208,6 +219,6 @@ export async function postSalesReturnStock(tx: InventoryTx, input: StockLocation
   if (input.disposition === "RESTOCK" && batch && (batch.status === "EXPIRED" || batch.status === "QUARANTINED" || (batch.expiryDate && batch.expiryDate <= new Date()))) {
     throw new AppError(409, "Expired or quarantined batch cannot be RESTOCKED for sale");
   }
-  const posted = await postStockIn(tx, { productId: input.productId, warehouseId: input.warehouseId, locationId: input.locationId, batchId: input.batchId ?? null, quantity: input.quantity, reactivateBatch: input.disposition === "RESTOCK" });
+  const posted = await postStockIn(tx, { productId: input.productId, warehouseId: input.warehouseId, locationId: input.locationId, batchId: input.batchId ?? null, quantity: input.quantity, reactivateBatch: input.disposition === "RESTOCK", unitCost: input.unitCost ?? null });
   return [posted];
 }

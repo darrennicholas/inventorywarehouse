@@ -1,7 +1,8 @@
 "use client";
 
+import { LoaderCircle } from "@/components/ui/GlobalLoading";
 import { useState, type FormEvent } from "react";
-import { Barcode, LoaderCircle, Search } from "lucide-react";
+import { Barcode, Search } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 
 type LookupResult = {

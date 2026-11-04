@@ -1,6 +1,10 @@
 
 "use client";
 
+import GlobalSelect from "@/components/ui/GlobalSelect";
+import { confirmAction } from "@/components/ui/GlobalAlert";
+import { Eye, Pencil, Trash2 } from "@/components/ui/ActionIcons";
+import GlobalLoading, { LoaderCircle } from "@/components/ui/GlobalLoading";
 import {
   useEffect,
   useMemo,
@@ -8,22 +12,7 @@ import {
   type FormEvent,
 } from "react";
 
-import {
-  AlertCircle,
-  Boxes,
-  CheckCircle2,
-  Eye,
-  LoaderCircle,
-  LayoutGrid,
-  List,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Ruler,
-  Search,
-  Trash2,
-  X,
-} from "lucide-react";
+import { AlertCircle, Boxes, CheckCircle2, LayoutGrid, List, Plus, RefreshCw, Ruler, Search, X } from "lucide-react";
 
 import { brandService, unitService } from "@/services/master.service";
 import { useMasterData } from "@/hooks/useMasterData";
@@ -255,7 +244,7 @@ export default function MasterDataView({ kind }: Props) {
   // =====================================
 
   async function handleDeactivate(item: MasterRecord) {
-    const confirmed = window.confirm(
+    const confirmed = await confirmAction(
       `Nonaktifkan ${isUnit ? "Unit" : "Brand"} "${item.name}"? Data tidak akan dihapus permanen.`
     );
 
@@ -373,7 +362,7 @@ export default function MasterDataView({ kind }: Props) {
         <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-5 sm:px-7">
           <div className="flex items-center gap-2 text-xs text-slate-600">
             Show
-            <select
+            <GlobalSelect
               aria-label="Entries per page"
               value={pageSize}
               onChange={e => {
@@ -385,7 +374,7 @@ export default function MasterDataView({ kind }: Props) {
               <option value={10}>10</option>
               <option value={25}>25</option>
               <option value={50}>50</option>
-            </select>
+            </GlobalSelect>
             entries
           </div>
 
@@ -521,11 +510,7 @@ export default function MasterDataView({ kind }: Props) {
 
           {loading && (
             <div className="flex items-center justify-center gap-2 py-14 text-sm text-slate-500">
-              <LoaderCircle
-                size={18}
-                className="animate-spin"
-              />
-              Loading {title.toLowerCase()}...
+              <GlobalLoading label={`Loading ${title.toLowerCase()}...`} />
             </div>
           )}
 
@@ -607,7 +592,7 @@ export default function MasterDataView({ kind }: Props) {
       {/* ADD / EDIT MODAL */}
       {modalOpen && canWrite && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4"
+          className="sf-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4"
           onMouseDown={event => {
             if (event.target === event.currentTarget) {
               closeModal();
@@ -711,7 +696,7 @@ export default function MasterDataView({ kind }: Props) {
                   Status
                 </label>
 
-                <select
+                <GlobalSelect
                   id="master-status"
                   value={isActive ? "active" : "inactive"}
                   onChange={event =>
@@ -727,7 +712,7 @@ export default function MasterDataView({ kind }: Props) {
                   <option value="inactive">
                     Inactive
                   </option>
-                </select>
+                </GlobalSelect>
               </div>
 
               {formError && (
@@ -781,7 +766,7 @@ export default function MasterDataView({ kind }: Props) {
       )}
 
       {viewing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setViewing(null); }}>
+        <div className="sf-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setViewing(null); }}>
           <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-widest text-blue-600">{isUnit ? "Unit" : "Brand"} detail</p><h2 className="mt-1 text-xl font-bold text-slate-900">{viewing.name}</h2></div><button type="button" onClick={() => setViewing(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18} /></button></div>
             <div className="mt-6 grid gap-3 text-sm">{isUnit && <div className="flex items-center justify-between rounded-xl bg-slate-50 p-4"><span className="text-slate-500">Code</span><span className="font-mono font-semibold text-slate-800">{viewing.code ?? "—"}</span></div>}<div className="flex items-center justify-between rounded-xl bg-slate-50 p-4"><span className="text-slate-500">Status</span><span className="font-semibold text-slate-800">{viewing.isActive ? "Active" : "Inactive"}</span></div><div className="flex items-center justify-between rounded-xl bg-slate-50 p-4"><span className="text-slate-500">Created</span><span className="font-semibold text-slate-800">{formatDate(viewing.createdAt)}</span></div></div>

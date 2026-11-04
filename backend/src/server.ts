@@ -4,6 +4,7 @@ import app from "./app.ts";
 import { prisma } from "./lib/prisma.ts";
 import { env } from "./config/env.ts";
 import { releaseExpiredReservations, updateExpiredBatches } from "./modules/operations/inventory.service.ts";
+import { captureDailyInventoryValuationSnapshot } from "./modules/operations/valuation-snapshot.service.ts";
 
 async function startServer() {
   try {
@@ -22,7 +23,7 @@ async function startServer() {
     });
 
     const maintenanceTimer = setInterval(() => {
-      void Promise.all([updateExpiredBatches(), releaseExpiredReservations()]).catch((error) => {
+      void Promise.all([updateExpiredBatches(), releaseExpiredReservations(), captureDailyInventoryValuationSnapshot()]).catch((error) => {
         console.error("Inventory maintenance error:", error);
       });
     }, 60_000);

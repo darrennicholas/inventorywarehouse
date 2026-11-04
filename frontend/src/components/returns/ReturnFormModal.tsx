@@ -1,13 +1,12 @@
 
 "use client";
 
+import GlobalLoading from "@/components/ui/GlobalLoading";
+import GlobalSelect from "@/components/ui/GlobalSelect";
+import { Trash2 } from "@/components/ui/ActionIcons";
+import { LoaderCircle } from "@/components/ui/GlobalLoading";
 import { useEffect, useId, useMemo, useState } from "react";
-import {
-  LoaderCircle,
-  Plus,
-  Trash2,
-  X,
-} from "lucide-react";
+import { Plus, X } from "lucide-react";
 
 import { returnService } from "@/services/return.service";
 
@@ -258,7 +257,7 @@ export default function ReturnFormModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-3"
+      className="sf-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-3"
       onMouseDown={(e) => {
         if (
           e.target === e.currentTarget &&
@@ -313,8 +312,7 @@ export default function ReturnFormModal({
 
         {loading ? (
           <div className="flex items-center gap-2 py-12 text-slate-500">
-            <LoaderCircle className="animate-spin" />
-            Loading sources...
+            <GlobalLoading label="Loading sources..." />
           </div>
         ) : (
           <div className="mt-5 space-y-5">
@@ -339,7 +337,7 @@ export default function ReturnFormModal({
                       ? "Purchase Order"
                       : "Sale"}
 
-                    <select
+                    <GlobalSelect
                       className={`${box} mt-1`}
                       value={sourceId}
                       onChange={(e) =>
@@ -358,7 +356,7 @@ export default function ReturnFormModal({
                           {s.number} — {s.status}
                         </option>
                       ))}
-                    </select>
+                    </GlobalSelect>
                   </label>
                 </>
               )}
@@ -480,7 +478,7 @@ export default function ReturnFormModal({
                         <label className="text-xs text-slate-500">
                           Source product
 
-                          <select
+                          <GlobalSelect
                             value={
                               item[rowKey] ?? ""
                             }
@@ -514,7 +512,7 @@ export default function ReturnFormModal({
                                 </option>
                               )
                             )}
-                          </select>
+                          </GlobalSelect>
                         </label>
 
                         <label className="text-xs text-slate-500">
@@ -550,7 +548,7 @@ export default function ReturnFormModal({
                         <label className="text-xs text-slate-500">
                           Condition
 
-                          <select
+                          <GlobalSelect
                             value={item.condition}
                             onChange={(e) =>
                               changeItem(
@@ -574,13 +572,13 @@ export default function ReturnFormModal({
                                 {v}
                               </option>
                             ))}
-                          </select>
+                          </GlobalSelect>
                         </label>
 
                         <label className="text-xs text-slate-500">
                           Disposition
 
-                          <select
+                          <GlobalSelect
                             value={
                               item.disposition
                             }
@@ -612,13 +610,13 @@ export default function ReturnFormModal({
                                 {v}
                               </option>
                             ))}
-                          </select>
+                          </GlobalSelect>
                         </label>
 
                         <label className="text-xs text-slate-500">
                           Location ({locationType})
 
-                          <select
+                          <GlobalSelect
                             value={
                               item.locationId
                             }
@@ -654,7 +652,7 @@ export default function ReturnFormModal({
                                   — {l.name}
                                 </option>
                               ))}
-                          </select>
+                          </GlobalSelect>
                         </label>
 
                         <label className="text-xs text-slate-500">
@@ -663,7 +661,7 @@ export default function ReturnFormModal({
                             ? "(required)"
                             : "(not used)"}
 
-                          <select
+                          <GlobalSelect
                             value={
                               item.batchId ?? ""
                             }
@@ -695,7 +693,7 @@ export default function ReturnFormModal({
                                 </option>
                               )
                             )}
-                          </select>
+                          </GlobalSelect>
                         </label>
 
                         <label className="text-xs text-slate-500 sm:col-span-3">

@@ -4,7 +4,7 @@ import { requireUuid } from "../../utils/requireUuid.ts";
 
 import { staffService } from "./staff.service.ts";
 import { notifyByPermission } from "../notifications/notification.service.ts";
-import { paginateArray } from "../../utils/pagination.ts";
+import { masterListOptions, pageMeta, paginateArray } from "../../utils/pagination.ts";
 
 import type {
   CreateStaffInput,
@@ -17,6 +17,12 @@ import type {
 
 export const getStaff = asyncHandler(
   async (req, res) => {
+    const options = masterListOptions(req.query as Record<string, unknown>);
+    if (options) {
+      const [data, total] = await Promise.all([staffService.list(options), staffService.count(options)]);
+      res.status(200).json({ success: true, data, meta: pageMeta(options.page, options.pageSize, total) });
+      return;
+    }
     const data = await staffService.list();
     const result = paginateArray(data, req.query as Record<string, unknown>);
 

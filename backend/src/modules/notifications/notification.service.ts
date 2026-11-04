@@ -1,6 +1,5 @@
-import { randomUUID } from "node:crypto";
-
 import { prisma } from "../../lib/prisma.ts";
+import { notificationEventKey } from "./notification-key.ts";
 
 type NotificationEvent = {
   permission: string;
@@ -40,7 +39,9 @@ export async function notifyByPermission(event: NotificationEvent, client: any =
     });
 
     if (users.length === 0) return;
-    const eventKey = event.eventKey ?? randomUUID();
+    // Suppress identical events for the same document in a short window while
+    // allowing later genuine changes and explicitly keyed events through.
+    const eventKey = notificationEventKey(event);
     await client.notification.createMany({
       data: users.map((user: { id: string }) => ({
         fingerprint: `${eventKey}:${user.id}`,

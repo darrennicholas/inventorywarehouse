@@ -125,6 +125,43 @@ router.get("/:id", authorizeDocument("read"), asyncHandler(async (req, res) => {
   res.json({ success: true, data });
 }));
 
+router.put("/:id/inspection", authorizeDocument("write"), asyncHandler(async (req, res) => {
+  const id = asId(req); const auth = authOf(req);
+  const input = z.object({ status: z.enum(["PENDING", "COMPLETED", "FOLLOW_UP"]), notes: z.string().trim().min(3).max(1000) }).strict().parse(req.body);
+  const data = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "ReturnOrder" WHERE "id" = ${id}::uuid FOR UPDATE`;
+    const doc = await tx.returnOrder.findUnique({ where: { id } });
+    if (!doc) throw new AppError(404, "Return not found");
+    assertWarehouseAccess(auth, doc.warehouseId);
+    if (!["DRAFT", "PENDING", "APPROVED"].includes(doc.status)) throw new AppError(409, "Inspection cannot be changed after posting or cancellation");
+    const before = await tx.returnInspection.findUnique({ where: { returnOrderId: id } });
+    const updated = await tx.returnInspection.upsert({ where: { returnOrderId: id }, create: { returnOrderId: id, status: input.status, notes: input.notes, inspectedById: auth.userId }, update: { status: input.status, notes: input.notes, inspectedById: auth.userId, inspectedAt: new Date() }, include: { inspectedBy: { select: { id: true, fullName: true } } } });
+    await writeAuditLog({ userId: auth.userId, action: "INSPECTION", entity: "ReturnOrder", entityId: id, beforeData: before, afterData: updated }, tx as never);
+    return { inspection: updated, doc };
+  });
+  await sendAlert(data.doc.type, "INSPECTION_UPDATED", data.doc);
+  res.json({ success: true, data: data.inspection });
+}));
+
+router.put("/:id/items/:itemId/inspection", authorizeDocument("write"), asyncHandler(async (req, res) => {
+  const id = asId(req); const itemId = z.uuid().parse(req.params.itemId); const auth = authOf(req);
+  const input = z.object({ condition: z.enum(["GOOD", "DAMAGED", "EXPIRED", "DEFECTIVE"]), recommendedDisposition: z.enum(["RESTOCK", "QUARANTINE", "SCRAP"]), notes: z.string().trim().min(3).max(1000) }).strict().parse(req.body);
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "ReturnOrder" WHERE "id" = ${id}::uuid FOR UPDATE`;
+    const doc = await tx.returnOrder.findUnique({ where: { id } }); if (!doc) throw new AppError(404, "Return not found");
+    assertWarehouseAccess(auth, doc.warehouseId);
+    if (doc.type === "SALE" && input.recommendedDisposition === "RESTOCK" && input.condition !== "GOOD") throw new AppError(400, "Only goods in good condition may be recommended for restock");
+    if (!["DRAFT", "PENDING", "APPROVED"].includes(doc.status)) throw new AppError(409, "Inspection cannot be changed after posting or cancellation");
+    const item = await tx.returnOrderItem.findFirst({ where: { id: itemId, returnOrderId: id } }); if (!item) throw new AppError(404, "Return item not found");
+    const before = await tx.returnItemInspection.findUnique({ where: { returnOrderItemId: itemId } });
+    const data = await tx.returnItemInspection.upsert({ where: { returnOrderItemId: itemId }, create: { returnOrderItemId: itemId, ...input, inspectedById: auth.userId }, update: { ...input, inspectedById: auth.userId, inspectedAt: new Date() }, include: { inspectedBy: { select: { fullName: true } } } });
+    await writeAuditLog({ userId: auth.userId, action: "ITEM_INSPECTION", entity: "ReturnOrder", entityId: id, beforeData: before, afterData: data }, tx as never);
+    return { data, doc };
+  });
+  await sendAlert(result.doc.type, "ITEM_INSPECTED", result.doc);
+  res.json({ success: true, data: result.data });
+}));
+
 router.patch("/:id", authorizeDocument("write"), asyncHandler(async (req, res) => {
   const input = updateReturnSchema.parse(req.body);
   const auth = authOf(req);

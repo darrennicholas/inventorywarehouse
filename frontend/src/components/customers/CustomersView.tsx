@@ -1,21 +1,11 @@
 "use client";
 
+import GlobalLoading from "@/components/ui/GlobalLoading";
+import { confirmAction } from "@/components/ui/GlobalAlert";
+import { Eye, Pencil, Trash2 } from "@/components/ui/ActionIcons";
+import { LoaderCircle } from "@/components/ui/GlobalLoading";
 import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import {
-  AlertCircle,
-  CheckCircle2,
-  Download,
-  Eye,
-  LoaderCircle,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Search,
-  Trash2,
-  Upload,
-  UserRound,
-  X,
-} from "lucide-react";
+import { AlertCircle, CheckCircle2, Download, Plus, RefreshCw, Search, Upload, UserRound, X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 
 import { useCustomers } from "@/hooks/useCustomers";
@@ -173,7 +163,7 @@ export default function CustomersView() {
   }
 
   async function handleDeactivate(customer: import("@/types/customer").Customer) {
-    if (!window.confirm(`Deactivate customer "${customer.name}"? The record will be retained.`)) return;
+    if (!await confirmAction(`Deactivate customer "${customer.name}"? The record will be retained.`)) return;
     try {
       await deactivateCustomer(customer.id);
       setNotice({ type: "success", message: "Customer deactivated successfully." });
@@ -270,13 +260,13 @@ export default function CustomersView() {
             </tbody>
           </table>
 
-          {loading && <div className="flex items-center justify-center gap-2 py-14 text-sm text-slate-500"><LoaderCircle size={19} className="animate-spin" /> Loading customers...</div>}
+          {loading && <div className="flex items-center justify-center gap-2 py-14 text-sm text-slate-500"><GlobalLoading label="Loading customers..." /></div>}
           {!loading && filteredCustomers.length === 0 && <div className="flex flex-col items-center py-14 text-center"><UserRound size={35} className="text-slate-300" /><h3 className="mt-3 text-sm font-semibold text-slate-700">{search ? "No matching customers" : "No customers found"}</h3><p className="mt-1 text-xs text-slate-400">Add your first customer.</p></div>}
         </div>
       </section>
 
       {modalOpen && canWrite && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setModalOpen(false); }}>
+        <div className="sf-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setModalOpen(false); }}>
           <div role="dialog" aria-modal="true" className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
               <div><h2 className="text-lg font-bold text-slate-800">{editing ? "Edit Customer" : "Add New Customer"}</h2><p className="mt-1 text-xs text-slate-400">{editing ? "Update customer master data." : "Register a customer in StockFlow."}</p></div>
@@ -302,7 +292,7 @@ export default function CustomersView() {
       )}
 
       {viewing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setViewing(null); }}>
+        <div className="sf-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setViewing(null); }}>
           <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-blue-600">Customer detail</p><h2 className="mt-1 text-xl font-bold text-slate-900">{viewing.name}</h2></div><button type="button" onClick={() => setViewing(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18} /></button></div>
             <div className="mt-5 grid gap-3 text-sm">{[["Code", viewing.code], ["Email", viewing.email || "—"], ["Phone", viewing.phone || "—"], ["Address", viewing.address || "—"], ["Status", viewing.isActive ? "Active" : "Inactive"]].map(([label, value]) => <div key={label} className="flex items-center justify-between gap-4 rounded-xl bg-slate-50 p-4"><span className="text-slate-500">{label}</span><span className="text-right font-semibold text-slate-800">{value}</span></div>)}</div>

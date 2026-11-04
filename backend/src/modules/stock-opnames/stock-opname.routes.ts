@@ -79,15 +79,19 @@ router.patch("/:id/lines/:lineId", requirePermission("stock-opnames.write"), asy
   const lineId = idSchema.parse(req.params.lineId);
   const input = countSchema.parse(req.body);
   const userId = authOf(req).userId;
-  const session = await prisma.stockTakeSession.findUnique({ where: { id }, select: { status: true, warehouseId: true } });
-  if (!session) throw new AppError(404, "Stock opname session not found");
-  assertWarehouseAccess(authOf(req), session.warehouseId);
-  if (!["COUNTING", "DRAFT"].includes(session.status)) throw new AppError(409, "This session is no longer countable");
-  const line = await prisma.stockTakeLine.findFirst({ where: { id: lineId, sessionId: id } });
-  if (!line) throw new AppError(404, "Stock opname line not found");
-  const updated = await prisma.stockTakeLine.update({ where: { id: lineId }, data: { physicalQuantity: input.physicalQuantity, variance: input.physicalQuantity - line.systemQuantity, notes: input.notes ?? null, countedAt: new Date() }, include: { product: { select: { sku: true, name: true } } } });
-  await writeAuditLog({ userId, action: "COUNT", entity: "StockTakeLine", entityId: lineId, beforeData: line, afterData: updated });
-  await notifyByPermission({ permission: "stock-opnames.read", type: "STOCK_TAKE_COUNTED", title: "Stock opname count updated", message: `${updated.product.name} count was recorded.`, entity: "StockTakeLine", entityId: updated.id, warehouseId: session.warehouseId });
+  const { updated, warehouseId } = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "StockTakeSession" WHERE "id" = ${id}::uuid FOR UPDATE`;
+    const session = await tx.stockTakeSession.findUnique({ where: { id }, select: { status: true, warehouseId: true } });
+    if (!session) throw new AppError(404, "Stock opname session not found");
+    assertWarehouseAccess(authOf(req), session.warehouseId);
+    if (!["COUNTING", "DRAFT"].includes(session.status)) throw new AppError(409, "This session is no longer countable");
+    const line = await tx.stockTakeLine.findFirst({ where: { id: lineId, sessionId: id } });
+    if (!line) throw new AppError(404, "Stock opname line not found");
+    const updated = await tx.stockTakeLine.update({ where: { id: lineId }, data: { physicalQuantity: input.physicalQuantity, variance: input.physicalQuantity - line.systemQuantity, notes: input.notes ?? null, countedAt: new Date() }, include: { product: { select: { sku: true, name: true } } } });
+    await writeAuditLog({ userId, action: "COUNT", entity: "StockTakeLine", entityId: lineId, beforeData: line, afterData: updated }, tx as never);
+    return { updated, warehouseId: session.warehouseId };
+  });
+  await notifyByPermission({ permission: "stock-opnames.read", type: "STOCK_TAKE_COUNTED", title: "Stock opname count updated", message: `${updated.product.name} count was recorded.`, entity: "StockTakeLine", entityId: updated.id, warehouseId });
   res.json({ success: true, data: updated });
 }));
 
@@ -95,6 +99,7 @@ router.post("/:id/submit", requirePermission("stock-opnames.write"), asyncHandle
   const id = idSchema.parse(req.params.id);
   const userId = authOf(req).userId;
   const data = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "StockTakeSession" WHERE "id" = ${id}::uuid FOR UPDATE`;
     const session = await tx.stockTakeSession.findUnique({ where: { id }, include: { lines: true } });
     if (!session) throw new AppError(404, "Stock opname session not found");
     assertWarehouseAccess(authOf(req), session.warehouseId);
@@ -113,27 +118,32 @@ router.post("/:id/approve", requirePermission("stock-opnames.approve"), asyncHan
   const auth = authOf(req);
   const userId = auth.userId;
   const data = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "StockTakeSession" WHERE "id" = ${id}::uuid FOR UPDATE`;
     const session = await tx.stockTakeSession.findUnique({ where: { id }, include: { lines: true } });
     if (!session) throw new AppError(404, "Stock opname session not found");
     assertWarehouseAccess(authOf(req), session.warehouseId);
     if (session.status !== "SUBMITTED") throw new AppError(409, "Only submitted sessions can be approved");
+    for (const line of [...session.lines].sort((a, b) => a.productId.localeCompare(b.productId))) {
+      await tx.$queryRaw`SELECT "id" FROM "InventoryBalance" WHERE "productId" = ${line.productId}::uuid AND "warehouseId" = ${session.warehouseId}::uuid FOR UPDATE`;
+      const current = await tx.inventoryBalance.findUnique({ where: { productId_warehouseId: { productId: line.productId, warehouseId: session.warehouseId } }, select: { quantityOnHand: true } });
+      if ((current?.quantityOnHand ?? 0) !== line.systemQuantity) throw new AppError(409, `Stock changed since counting began for product ${line.productId}; start a new count before approval`);
+    }
     let varianceValue = 0;
     for (const line of session.lines) {
-      const latestCost = await tx.purchaseOrderItem.findFirst({
-        where: { productId: line.productId, purchaseOrder: { status: { in: ["PARTIALLY_RECEIVED", "RECEIVED"] } } },
-        select: { unitPrice: true },
-        orderBy: { purchaseOrder: { orderDate: "desc" } },
-      });
-      varianceValue += Math.abs((line.physicalQuantity ?? line.systemQuantity) - line.systemQuantity) * Number(latestCost?.unitPrice ?? 0);
+      const variance = Math.abs((line.physicalQuantity ?? line.systemQuantity) - line.systemQuantity);
+      if (!variance) continue;
+      const balance = await tx.inventoryBalance.findUnique({ where: { productId_warehouseId: { productId: line.productId, warehouseId: session.warehouseId } }, select: { averageUnitCost: true } });
+      if (balance?.averageUnitCost == null) throw new AppError(409, "Record unknown opening cost in Stock Report before approving a stock variance");
+      varianceValue += variance * Number(balance.averageUnitCost);
     }
     await assertApprovalAuthority(tx, "STOCK_OPNAME", varianceValue, auth, session.createdById);
     for (const line of session.lines) {
       const variance = (line.physicalQuantity ?? line.systemQuantity) - line.systemQuantity;
       if (!variance) continue;
       const product = await tx.product.findUnique({ where: { id: line.productId }, select: { trackBatch: true } });
-      const batch = product?.trackBatch ? await tx.productBatch.findFirst({ where: { productId: line.productId, warehouseId: session.warehouseId, status: "ACTIVE" }, orderBy: [{ expiryDate: "asc" }, { createdAt: "asc" }] }) : null;
+      const batch = product?.trackBatch ? await tx.productBatch.findFirst({ where: { productId: line.productId, warehouseId: session.warehouseId, status: "ACTIVE", OR: [{ expiryDate: null }, { expiryDate: { gt: new Date() } }], location: { isActive: true, locationType: "STORAGE" } }, orderBy: [{ expiryDate: "asc" }, { createdAt: "asc" }] }) : null;
       if (product?.trackBatch && !batch) throw new AppError(409, `Batch allocation is required for stock opname variance of ${line.productId}`);
-      const locationId = batch?.locationId ?? (await tx.warehouseLocation.findFirst({ where: { warehouseId: session.warehouseId, isActive: true }, orderBy: { code: "asc" } }))?.id;
+      const locationId = batch?.locationId ?? (await tx.warehouseLocation.findFirst({ where: { warehouseId: session.warehouseId, isActive: true, locationType: "STORAGE" }, orderBy: { code: "asc" } }))?.id;
       const allocations = variance > 0
         ? [await postStockIn(tx, { productId: line.productId, warehouseId: session.warehouseId, locationId, batchId: batch?.id ?? null, quantity: variance })]
         : await postStockOut(tx, line.productId, session.warehouseId, Math.abs(variance));
@@ -143,7 +153,7 @@ router.post("/:id/approve", requirePermission("stock-opnames.approve"), asyncHan
     const updated = await tx.stockTakeSession.update({ where: { id }, data: { status: "APPROVED", approvedById: userId, approvedAt: new Date() }, include: detailInclude });
     await writeAuditLog({ userId, action: "APPROVE", entity: "StockTakeSession", entityId: id, beforeData: session, afterData: updated }, tx as never);
     return updated;
-  });
+  }, { isolationLevel: "Serializable" });
   await notifyByPermission({ permission: "stock-opnames.read", type: "STOCK_TAKE_APPROVED", title: "Stock opname approved", message: `${data.number} was approved and inventory was adjusted.`, entity: "StockTakeSession", entityId: data.id, warehouseId: data.warehouseId });
   res.json({ success: true, message: "Stock opname approved and inventory adjusted", data });
 }));

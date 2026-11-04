@@ -8,8 +8,11 @@ import type {
 } from "./unit.validation.ts";
 
 export const unitService = {
-  list() {
-    return unitRepository.findAll();
+  list(options?: { skip?: number; take?: number; search?: string; isActive?: boolean }) {
+    return unitRepository.findAll(options);
+  },
+  count(options?: { search?: string; isActive?: boolean }) {
+    return unitRepository.count(options);
   },
 
   async detail(id: string) {

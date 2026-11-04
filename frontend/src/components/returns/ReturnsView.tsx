@@ -1,22 +1,18 @@
 
 "use client";
 
+import GlobalLoading from "@/components/ui/GlobalLoading";
+import GlobalSelect from "@/components/ui/GlobalSelect";
+import { confirmAction } from "@/components/ui/GlobalAlert";
+import { Eye, Trash2 } from "@/components/ui/ActionIcons";
+
 import {
   useCallback,
   useEffect,
   useState,
 } from "react";
 
-import {
-  ArrowLeft,
-  ArrowRight,
-  Eye,
-  LoaderCircle,
-  Plus,
-  RefreshCw,
-  Search,
-  Trash2,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight, Plus, RefreshCw, Search } from "lucide-react";
 
 import { useAuth } from "@/components/auth/AuthProvider";
 import { returnService } from "@/services/return.service";
@@ -30,11 +26,14 @@ import type {
 import ReturnFormModal from "./ReturnFormModal";
 import ReturnDetailDrawer from "./ReturnDetailDrawer";
 import ReturnStatusBadge from "./ReturnStatusBadge";
+import type { NotificationTarget } from "@/types/notification";
 
 export default function ReturnsView({
   type,
+  target = null,
 }: {
   type: ReturnType;
+  target?: NotificationTarget | null;
 }) {
   const { can, user } = useAuth();
 
@@ -117,6 +116,13 @@ export default function ReturnsView({
     }
   }
 
+  useEffect(() => {
+    if (!target || target.page !== (type === "PURCHASE" ? "purchase-returns" : "sales-returns")) return;
+    let active = true;
+    void returnService.get(target.recordId).then((result) => { if (active) setSelected(result.data); }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Retur tidak dapat dibuka."); });
+    return () => { active = false; };
+  }, [target, type]);
+
   async function action(
     row: ReturnRecord,
     kind: "submit" | "approve" | "post" | "cancel"
@@ -126,7 +132,8 @@ export default function ReturnsView({
         ? "Post this return? This will change physical stock and cannot be undone by cancellation."
         : `${kind.toUpperCase()} return ${row.number}?`;
 
-    if (!window.confirm(message)) return;
+    const actionLabel = { submit: "Kirim untuk persetujuan", approve: "Setujui retur", post: "Proses retur", cancel: "Batalkan retur" }[kind];
+    if (!await confirmAction(message, { title: actionLabel, confirmLabel: actionLabel, tone: kind === "cancel" || kind === "post" ? "warning" : "info" })) return;
 
     setWorking(row.id);
     setError("");
@@ -263,7 +270,7 @@ export default function ReturnsView({
             />
           </label>
 
-          <select
+          <GlobalSelect
             value={status}
             onChange={(e) => {
               setStatus(
@@ -286,7 +293,7 @@ export default function ReturnsView({
                 {s}
               </option>
             ))}
-          </select>
+          </GlobalSelect>
         </div>
 
         {error && (
@@ -470,11 +477,7 @@ export default function ReturnsView({
 
         {loading && (
           <div className="flex justify-center gap-2 p-12 text-sm text-slate-500">
-            <LoaderCircle
-              size={18}
-              className="animate-spin"
-            />
-            Loading returns...
+            <GlobalLoading label="Loading returns..." />
           </div>
         )}
 
@@ -535,6 +538,7 @@ export default function ReturnsView({
       {selected && (
         <ReturnDetailDrawer
           record={selected}
+          onChanged={() => { setSelected(null); void load(); }}
           onClose={() =>
             setSelected(null)
           }

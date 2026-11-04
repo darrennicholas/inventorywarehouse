@@ -1,6 +1,7 @@
 
 "use client";
 
+import GlobalLoading from "@/components/ui/GlobalLoading";
 import { useEffect, useState } from "react";
 
 import {
@@ -57,6 +58,7 @@ import NotificationBell from "@/components/notifications/NotificationBell";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { apiRequest } from "@/lib/api";
+import type { NotificationDestination, NotificationTarget } from "@/types/notification";
 
 import { useProducts } from "@/hooks/useProducts";
 
@@ -100,14 +102,6 @@ type DashboardMasterRow = {
   code?: string;
   isActive: boolean;
   createdAt: string;
-};
-
-type DashboardSummary = {
-  kpis: { purchaseValue: number; salesValue: number; expenseValue: number; stockUnits: number; lowStockLines: number };
-  monthly: Array<{ label: string; purchases: number; sales: number; expenses: number }>;
-  topProducts: Array<{ id: string; sku: string; name: string; quantity: number; minStock: number }>;
-  warehouseStock: Array<{ id: string; name: string; quantity: number }>;
-  lowStock: Array<{ productId: string; sku: string; productName: string; warehouseId: string; warehouseName: string; quantityOnHand: number; minStock: number; reorderQuantity: number }>;
 };
 
 // ==========================================
@@ -330,6 +324,7 @@ export default function Home() {
 
   const [activePage, setActivePage] =
     useState<Page>("dashboard");
+  const [notificationTarget, setNotificationTarget] = useState<NotificationTarget | null>(null);
 
   const [
     productMenuOpen,
@@ -379,9 +374,6 @@ export default function Home() {
     useState<DashboardMasterRow[]>([]);
   const [masterLoading, setMasterLoading] =
     useState(true);
-  const [dashboardSummary, setDashboardSummary] =
-    useState<DashboardSummary | null>(null);
-
   useEffect(() => {
     const controller = new AbortController();
 
@@ -389,7 +381,7 @@ export default function Home() {
       setMasterLoading(true);
 
       try {
-        const [categoryResponse, brandResponse, unitResponse, summaryResponse] =
+        const [categoryResponse, brandResponse, unitResponse] =
           await Promise.all([
             can("categories.read")
               ? apiRequest<{ data?: DashboardMasterRow[] }>(
@@ -409,26 +401,18 @@ export default function Home() {
                   { signal: controller.signal }
                 )
               : Promise.resolve(null),
-            can("dashboard.read")
-              ? apiRequest<{ data?: DashboardSummary }>(
-                  "/api/operations/dashboard-summary",
-                  { signal: controller.signal }
-                )
-              : Promise.resolve(null),
           ]);
 
         if (!controller.signal.aborted) {
           setCategories(categoryResponse?.data ?? []);
           setBrands(brandResponse?.data ?? []);
           setUnits(unitResponse?.data ?? []);
-          setDashboardSummary(summaryResponse?.data ?? null);
         }
       } catch {
         if (!controller.signal.aborted) {
           setCategories([]);
           setBrands([]);
           setUnits([]);
-          setDashboardSummary(null);
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -482,6 +466,12 @@ export default function Home() {
     }
   }
 
+  function openNotification(target: NotificationDestination) {
+    if (!can(pagePermissions[target.page])) return;
+    setNotificationTarget((previous) => ({ ...target, token: (previous?.token ?? 0) + 1 }));
+    navigate(target.page);
+  }
+
   async function handleLogout() {
     try {
       await logout();
@@ -513,7 +503,7 @@ export default function Home() {
   const sidebar = (
     <aside
       className={`
-        fixed inset-y-0 left-0 z-40 flex flex-col
+        sf-sidebar fixed inset-y-0 left-0 z-40 flex flex-col
         border-r border-slate-200/80 bg-gradient-to-b from-white to-[#f8faff]
         shadow-xl shadow-slate-200/30
         transition-all duration-200
@@ -587,6 +577,7 @@ export default function Home() {
         {can("dashboard.read") && <button
           type="button"
           title="Dashboard"
+          aria-current={activePage === "dashboard" ? "page" : undefined}
           onClick={() =>
             navigate("dashboard")
           }
@@ -674,6 +665,7 @@ export default function Home() {
                     type="button"
                     disabled={!item.page}
                     title={item.label}
+                    aria-current={active ? "page" : undefined}
                     onClick={() => {
                       if (item.page) {
                         navigate(
@@ -729,6 +721,7 @@ export default function Home() {
                   key={item.label}
                   type="button"
                   disabled={!item.page}
+                  aria-current={active ? "page" : undefined}
                   title={
                     item.page
                       ? item.label
@@ -905,7 +898,7 @@ export default function Home() {
               {dark ? <Sun size={18} /> : <Moon size={18} />}
             </button>
 
-            <NotificationBell />
+            <NotificationBell onOpen={openNotification} />
 
             <div className="relative border-l border-slate-200 pl-3 dark:border-slate-700">
               <button
@@ -1056,22 +1049,22 @@ export default function Home() {
           {/* ================================= */}
 
           {(["purchases", "sales", "adjustments", "transfers", "expenses", "payments", "stock-report"] as Page[]).includes(activePage) && (
-            <OperationsView kind={activePage as "purchases" | "sales" | "adjustments" | "transfers" | "expenses" | "payments" | "stock-report"} />
+            <OperationsView key={activePage} kind={activePage as "purchases" | "sales" | "adjustments" | "transfers" | "expenses" | "payments" | "stock-report"} target={notificationTarget?.page === activePage ? notificationTarget : null} />
           )}
 
           {activePage === "purchase-returns" && can("purchase-returns.read") && (
-            <ReturnsView type="PURCHASE" />
+            <ReturnsView type="PURCHASE" target={notificationTarget?.page === activePage ? notificationTarget : null} />
           )}
           {activePage === "sales-returns" && can("sales-returns.read") && (
-            <ReturnsView type="SALE" />
+            <ReturnsView type="SALE" target={notificationTarget?.page === activePage ? notificationTarget : null} />
           )}
           {activePage === "fulfillment" && can("fulfillment.read") && (
-            <FulfillmentView />
+            <FulfillmentView target={notificationTarget?.page === activePage ? notificationTarget : null} />
           )}
 
           {activePage === "audit" && can("audit.read") && <AuditLogsView />}
 
-          {activePage === "stock-opnames" && can("stock-opnames.read") && <StockOpnamesView />}
+          {activePage === "stock-opnames" && can("stock-opnames.read") && <StockOpnamesView target={notificationTarget?.page === activePage ? notificationTarget : null} />}
 
           {/* ================================= */}
           {/* DASHBOARD */}
@@ -1083,10 +1076,11 @@ export default function Home() {
               categories={categories}
               brands={brands}
               units={units}
-              summary={dashboardSummary}
+              summary={null}
               loading={loading}
               masterLoading={masterLoading}
               onNavigate={navigate}
+              onOpenAttention={openNotification}
             />
           )}
 
@@ -1203,7 +1197,7 @@ export default function Home() {
 
                     {loading && (
                       <div className="py-12 text-center text-sm text-slate-400">
-                        Loading products...
+                        <GlobalLoading label="Loading products..." />
                       </div>
                     )}
                   </div>

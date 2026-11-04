@@ -1,20 +1,14 @@
 
 "use client";
 
+import { Eye } from "@/components/ui/ActionIcons";
+import { LoaderCircle } from "@/components/ui/GlobalLoading";
 import {
   useState,
   type FormEvent,
 } from "react";
 
-import {
-  Eye,
-  EyeOff,
-  LoaderCircle,
-  LockKeyhole,
-  Moon,
-  PackageCheck,
-  Sun,
-} from "lucide-react";
+import { EyeOff, LockKeyhole, Moon, PackageCheck, Sun } from "lucide-react";
 
 import { useAuth } from "./AuthProvider";
 import { useTheme } from "@/components/theme/ThemeProvider";

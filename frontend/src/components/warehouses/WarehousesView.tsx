@@ -1,6 +1,11 @@
 
 "use client";
 
+import GlobalLoading from "@/components/ui/GlobalLoading";
+import GlobalSelect from "@/components/ui/GlobalSelect";
+import { confirmAction } from "@/components/ui/GlobalAlert";
+import { Eye, Pencil, Trash2 } from "@/components/ui/ActionIcons";
+import { LoaderCircle } from "@/components/ui/GlobalLoading";
 import {
   useEffect,
   useMemo,
@@ -8,26 +13,13 @@ import {
   type FormEvent,
 } from "react";
 
-import {
-  AlertCircle,
-  CheckCircle2,
-  Download,
-  Eye,
-  LoaderCircle,
-  MapPin,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Search,
-  Trash2,
-  Warehouse as WarehouseIcon,
-  X,
-} from "lucide-react";
+import { AlertCircle, CheckCircle2, Download, MapPin, Plus, RefreshCw, Search, Warehouse as WarehouseIcon, X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 
 import { useWarehouses } from "@/hooks/useWarehouses";
 import { warehouseService } from "@/services/warehouse.service";
 import WarehouseLocationsPanel from "@/components/warehouses/WarehouseLocationsPanel";
+import QuarantinePanel from "@/components/warehouses/QuarantinePanel";
 
 import type {
   Warehouse,
@@ -338,7 +330,7 @@ export default function WarehousesView() {
   ) {
     if (!warehouse.isActive) return;
 
-    const confirmed = window.confirm(
+    const confirmed = await confirmAction(
       `Nonaktifkan gudang "${warehouse.name}" (${warehouse.code})? Data tidak akan dihapus permanen.`
     );
 
@@ -471,7 +463,7 @@ export default function WarehousesView() {
           <div className="flex items-center gap-2 text-xs text-slate-600">
             Show
 
-            <select
+            <GlobalSelect
               aria-label="Entries per page"
               value={pageSize}
               onChange={(event) => {
@@ -483,7 +475,7 @@ export default function WarehousesView() {
               <option value={10}>10</option>
               <option value={25}>25</option>
               <option value={50}>50</option>
-            </select>
+            </GlobalSelect>
 
             entries
           </div>
@@ -662,11 +654,7 @@ export default function WarehousesView() {
           {/* LOADING */}
           {loading && (
             <div className="flex items-center justify-center gap-2 py-14 text-sm text-slate-500">
-              <LoaderCircle
-                size={18}
-                className="animate-spin"
-              />
-              Loading warehouses...
+              <GlobalLoading label="Loading warehouses..." />
             </div>
           )}
 
@@ -744,7 +732,7 @@ export default function WarehousesView() {
 
       {modalOpen && canWrite && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4"
+          className="sf-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
               closeModal();
@@ -790,6 +778,7 @@ export default function WarehousesView() {
             {/* FORM */}
             <form
               onSubmit={handleSubmit}
+              autoComplete="off"
               className="space-y-5 p-6"
             >
               {/* CODE */}
@@ -804,6 +793,7 @@ export default function WarehousesView() {
                 <input
                   id="warehouse-code"
                   type="text"
+                  autoComplete="off"
                   value={code}
                   onChange={(event) =>
                     setCode(event.target.value)
@@ -828,6 +818,7 @@ export default function WarehousesView() {
                 <input
                   id="warehouse-name"
                   type="text"
+                  autoComplete="off"
                   value={name}
                   onChange={(event) =>
                     setName(event.target.value)
@@ -850,6 +841,7 @@ export default function WarehousesView() {
 
                 <textarea
                   id="warehouse-address"
+                  autoComplete="off"
                   value={address}
                   onChange={(event) =>
                     setAddress(event.target.value)
@@ -870,7 +862,7 @@ export default function WarehousesView() {
                   Status
                 </label>
 
-                <select
+                <GlobalSelect
                   id="warehouse-status"
                   value={isActive ? "active" : "inactive"}
                   onChange={(event) =>
@@ -887,7 +879,7 @@ export default function WarehousesView() {
                   <option value="inactive">
                     Inactive
                   </option>
-                </select>
+                </GlobalSelect>
               </div>
 
               {/* VALIDATION ERROR */}
@@ -946,7 +938,7 @@ export default function WarehousesView() {
 
       {viewing && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4"
+          className="sf-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
               setViewing(null);
@@ -1016,6 +1008,7 @@ export default function WarehousesView() {
               ))}
 
               <WarehouseLocationsPanel warehouseId={viewing.id} canWrite={canWrite} />
+              {can("inventory.read") && <QuarantinePanel key={viewing.id} warehouseId={viewing.id} />}
 
               <div className="flex justify-end gap-3 pt-2">
                 <button

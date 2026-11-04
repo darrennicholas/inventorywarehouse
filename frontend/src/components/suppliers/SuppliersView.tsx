@@ -1,6 +1,11 @@
 
 "use client";
 
+import GlobalLoading from "@/components/ui/GlobalLoading";
+import GlobalSelect from "@/components/ui/GlobalSelect";
+import { confirmAction } from "@/components/ui/GlobalAlert";
+import { Eye, Pencil, Trash2 } from "@/components/ui/ActionIcons";
+import { LoaderCircle } from "@/components/ui/GlobalLoading";
 import {
   useEffect,
   useMemo,
@@ -8,19 +13,7 @@ import {
   type FormEvent,
 } from "react";
 
-import {
-  AlertCircle,
-  CheckCircle2,
-  Eye,
-  LoaderCircle,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Search,
-  Trash2,
-  Truck,
-  X,
-} from "lucide-react";
+import { AlertCircle, CheckCircle2, Plus, RefreshCw, Search, Truck, X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 
 import { useSuppliers } from "@/hooks/useSuppliers";
@@ -349,7 +342,7 @@ export default function SuppliersView() {
   ) {
     if (saving || !supplier.isActive) return;
 
-    const confirmed = window.confirm(
+    const confirmed = await confirmAction(
       `Deactivate supplier "${supplier.name}" (${supplier.code})? The record will be retained.`
     );
 
@@ -482,7 +475,7 @@ export default function SuppliersView() {
           <div className="flex items-center gap-2 text-xs text-slate-600">
             Show
 
-            <select
+            <GlobalSelect
               aria-label="Entries per page"
               value={pageSize}
               onChange={(event) => {
@@ -496,13 +489,13 @@ export default function SuppliersView() {
               <option value={10}>10</option>
               <option value={25}>25</option>
               <option value={50}>50</option>
-            </select>
+            </GlobalSelect>
 
             entries
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <select
+            <GlobalSelect
               aria-label="Status filter"
               value={statusFilter}
               onChange={(event) => {
@@ -516,7 +509,7 @@ export default function SuppliersView() {
               <option value="inactive">
                 Inactive
               </option>
-            </select>
+            </GlobalSelect>
 
             <div className="relative">
               <Search
@@ -671,11 +664,7 @@ export default function SuppliersView() {
           {/* LOADING */}
           {loading && (
             <div className="flex items-center justify-center gap-2 py-14 text-sm text-slate-500">
-              <LoaderCircle
-                size={18}
-                className="animate-spin"
-              />
-              Loading suppliers...
+              <GlobalLoading label="Loading suppliers..." />
             </div>
           )}
 
@@ -738,7 +727,7 @@ export default function SuppliersView() {
 
       {modalOpen && canWrite && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4"
+          className="sf-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4"
           onMouseDown={(event) => {
             if (
               event.target ===
@@ -918,7 +907,7 @@ export default function SuppliersView() {
                   Status
                 </label>
 
-                <select
+                <GlobalSelect
                   id="supplier-status"
                   value={
                     form.isActive
@@ -941,7 +930,7 @@ export default function SuppliersView() {
                   <option value="inactive">
                     Inactive
                   </option>
-                </select>
+                </GlobalSelect>
               </div>
 
               {formError && (
@@ -998,7 +987,7 @@ export default function SuppliersView() {
 
       {viewing && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4"
+          className="sf-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4"
           onMouseDown={(event) => {
             if (
               event.target ===

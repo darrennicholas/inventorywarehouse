@@ -7,10 +7,16 @@ import type {
 } from "./unit.validation.ts";
 
 export const unitRepository = {
-  findAll() {
+  findAll(options?: { skip?: number; take?: number; search?: string; isActive?: boolean }) {
     return prisma.unit.findMany({
+      ...(options?.skip !== undefined ? { skip: options.skip, take: options.take } : {}),
+      where: { ...(options?.isActive !== undefined ? { isActive: options.isActive } : {}), ...(options?.search ? { OR: [{ code: { contains: options.search, mode: "insensitive" } }, { name: { contains: options.search, mode: "insensitive" } }] } : {}) },
       orderBy: { code: "asc" },
     });
+  },
+
+  count(options?: { search?: string; isActive?: boolean }) {
+    return prisma.unit.count({ where: { ...(options?.isActive !== undefined ? { isActive: options.isActive } : {}), ...(options?.search ? { OR: [{ code: { contains: options.search, mode: "insensitive" } }, { name: { contains: options.search, mode: "insensitive" } }] } : {}) } });
   },
 
   findById(id: string) {

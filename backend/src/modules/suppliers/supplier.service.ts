@@ -50,8 +50,11 @@ function handleDatabaseError(error: unknown): never {
 }
 
 export const supplierService = {
-  list() {
-    return supplierRepository.findAll();
+  list(options?: { skip?: number; take?: number; search?: string; isActive?: boolean }) {
+    return supplierRepository.findAll(options);
+  },
+  count(options?: { search?: string; isActive?: boolean }) {
+    return supplierRepository.count(options);
   },
 
   async detail(id: string) {

@@ -1,6 +1,11 @@
 
 "use client";
 
+import GlobalLoading from "@/components/ui/GlobalLoading";
+import GlobalSelect from "@/components/ui/GlobalSelect";
+import { confirmAction } from "@/components/ui/GlobalAlert";
+import { Eye, Pencil, Trash2 } from "@/components/ui/ActionIcons";
+import { LoaderCircle } from "@/components/ui/GlobalLoading";
 import {
   useEffect,
   useMemo,
@@ -8,19 +13,7 @@ import {
   type FormEvent,
 } from "react";
 
-import {
-  AlertCircle,
-  CheckCircle2,
-  Eye,
-  LoaderCircle,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Search,
-  Tags,
-  Trash2,
-  X,
-} from "lucide-react";
+import { AlertCircle, CheckCircle2, Plus, RefreshCw, Search, Tags, X } from "lucide-react";
 
 import { useCategories } from "@/hooks/useCategories";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -231,7 +224,7 @@ export default function CategoriesView() {
   }
 
   async function handleDeactivate(category: Category) {
-    if (!window.confirm(`Deactivate category "${category.name}"? The record will be retained.`)) return;
+    if (!await confirmAction(`Deactivate category "${category.name}"? The record will be retained.`)) return;
     try {
       await deactivateCategory(category.id);
       setNotice({ type: "success", message: "Category deactivated successfully." });
@@ -345,7 +338,7 @@ export default function CategoriesView() {
         <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-5 sm:px-7">
           <div className="flex items-center gap-2 text-xs text-slate-600">
             Show
-            <select
+            <GlobalSelect
               aria-label="Entries per page"
               value={pageSize}
               onChange={(event) => {
@@ -357,7 +350,7 @@ export default function CategoriesView() {
               <option value={10}>10</option>
               <option value={25}>25</option>
               <option value={50}>50</option>
-            </select>
+            </GlobalSelect>
             entries
           </div>
 
@@ -496,11 +489,7 @@ export default function CategoriesView() {
 
           {loading && (
             <div className="flex items-center justify-center gap-2 py-14 text-sm text-slate-500">
-              <LoaderCircle
-                size={19}
-                className="animate-spin"
-              />
-              Loading categories...
+              <GlobalLoading label="Loading categories..." />
             </div>
           )}
 
@@ -583,7 +572,7 @@ export default function CategoriesView() {
 
       {modalOpen && canWrite && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
+          className="sf-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
               closeModal();
@@ -686,7 +675,7 @@ export default function CategoriesView() {
                   Status
                 </label>
 
-                <select
+                <GlobalSelect
                   id="category-status"
                   value={isActive ? "active" : "inactive"}
                   onChange={(event) =>
@@ -698,7 +687,7 @@ export default function CategoriesView() {
                 >
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
-                </select>
+                </GlobalSelect>
               </div>
 
               {/* VALIDATION ERROR */}
@@ -752,7 +741,7 @@ export default function CategoriesView() {
       )}
 
       {viewingCategory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setViewingCategory(null); }}>
+        <div className="sf-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setViewingCategory(null); }}>
           <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div><p className="text-xs font-bold uppercase tracking-widest text-blue-600">Category detail</p><h2 className="mt-1 text-xl font-bold text-slate-900">{viewingCategory.name}</h2></div>

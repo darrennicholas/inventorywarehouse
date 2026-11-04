@@ -11,6 +11,9 @@ export async function assertApprovalAuthority(
   auth: Pick<AuthContext, "userId" | "roleCode">,
   creatorId?: string | null,
 ) {
+  if (creatorId && creatorId === auth.userId) {
+    throw new AppError(403, "The document creator cannot approve their own document");
+  }
   const normalizedAmount = Math.max(0, Number.isFinite(amount) ? amount : 0);
   const policy = await tx.approvalPolicy.findFirst({
     where: {
@@ -29,15 +32,9 @@ export async function assertApprovalAuthority(
     if (auth.roleCode !== "ADMIN") {
       throw new AppError(403, `No approval policy is configured for ${subject.toLowerCase()}`);
     }
-    if (creatorId && creatorId === auth.userId) {
-      throw new AppError(403, "The document creator cannot approve their own document");
-    }
     return null;
   }
 
-  if (policy.requiresDifferentCreator && creatorId && creatorId === auth.userId) {
-    throw new AppError(403, "The document creator cannot approve their own document");
-  }
   if (auth.roleCode !== "ADMIN" && auth.roleCode !== policy.approverRole.code) {
     throw new AppError(403, `Approval for this value requires the ${policy.approverRole.name} role`);
   }

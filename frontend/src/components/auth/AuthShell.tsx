@@ -1,6 +1,7 @@
 
 "use client";
 
+import GlobalLoading from "@/components/ui/GlobalLoading";
 import {
   useState,
   type ReactNode,
@@ -9,13 +10,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import {
-  LoaderCircle,
-  LogOut,
-  ShieldCheck,
-  Moon,
-  Sun,
-} from "lucide-react";
+import { LogOut, ShieldCheck, Moon, Sun } from "lucide-react";
 
 import { usePathname } from "next/navigation";
 
@@ -54,13 +49,7 @@ export default function AuthShell({
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center gap-3 bg-slate-100 text-slate-700 dark:bg-slate-950 dark:text-slate-200">
-        <LoaderCircle
-          size={22}
-          className="animate-spin text-blue-600"
-        />
-        <span className="text-sm text-slate-600">
-          Checking your session...
-        </span>
+        <GlobalLoading label="Memeriksa sesi..." />
       </main>
     );
   }

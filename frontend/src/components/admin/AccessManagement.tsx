@@ -1,6 +1,10 @@
 
 "use client";
 
+import GlobalLoading from "@/components/ui/GlobalLoading";
+import GlobalSelect from "@/components/ui/GlobalSelect";
+import { confirmAction } from "@/components/ui/GlobalAlert";
+import { Pencil, Trash2 } from "@/components/ui/ActionIcons";
 import {
   useCallback,
   useEffect,
@@ -9,16 +13,7 @@ import {
   type FormEvent,
 } from "react";
 
-import {
-  Pencil,
-  Plus,
-  RefreshCw,
-  Search,
-  ShieldCheck,
-  Trash2,
-  Users,
-  X,
-} from "lucide-react";
+import { Plus, RefreshCw, Search, ShieldCheck, Users, X } from "lucide-react";
 
 import { authApi } from "@/lib/auth-api";
 
@@ -493,7 +488,7 @@ export default function AccessManagement() {
       return;
     }
 
-    const confirmed = window.confirm(
+    const confirmed = await confirmAction(
       `Deactivate account "${item.fullName}"?`
     );
 
@@ -711,7 +706,7 @@ export default function AccessManagement() {
       return;
     }
 
-    const confirmed = window.confirm(
+    const confirmed = await confirmAction(
       `Deactivate role "${role.name}"?`
     );
 
@@ -1098,7 +1093,7 @@ export default function AccessManagement() {
 
                   {loading && (
                     <p className="p-8 text-center text-sm text-slate-500">
-                      Loading users...
+                      <GlobalLoading label="Loading users..." />
                     </p>
                   )}
 
@@ -1272,7 +1267,7 @@ export default function AccessManagement() {
 
                   {loading && (
                     <p className="p-8 text-center text-sm text-slate-500">
-                      Loading roles...
+                      <GlobalLoading label="Loading roles..." />
                     </p>
                   )}
 
@@ -1295,7 +1290,7 @@ export default function AccessManagement() {
       ==================================== */}
 
       {showUserForm && canManageUsers && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 p-4">
+        <div className="sf-modal-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 p-4">
 
           <section
             role="dialog"
@@ -1412,7 +1407,7 @@ export default function AccessManagement() {
                 <label className="block text-sm font-medium text-slate-700">
                   Role *
 
-                  <select
+                  <GlobalSelect
                     required
                     value={userForm.roleId}
                     disabled={
@@ -1438,13 +1433,13 @@ export default function AccessManagement() {
                         {role.name}
                       </option>
                     ))}
-                  </select>
+                  </GlobalSelect>
                 </label>
 
                 <label className="block text-sm font-medium text-slate-700">
                   Staff (Optional)
 
-                  <select
+                  <GlobalSelect
                     value={userForm.staffId}
                     onChange={(event) =>
                       setUserForm({
@@ -1466,7 +1461,7 @@ export default function AccessManagement() {
                         {staff.staffCode} — {staff.fullName}
                       </option>
                     ))}
-                  </select>
+                  </GlobalSelect>
                 </label>
 
               </div>
@@ -1544,7 +1539,7 @@ export default function AccessManagement() {
       ==================================== */}
 
       {showRoleForm && canManageRoles && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 p-4">
+        <div className="sf-modal-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 p-4">
 
           <section
             role="dialog"

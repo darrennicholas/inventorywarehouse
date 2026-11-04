@@ -185,7 +185,7 @@ export async function createShipment(tx: FulfillmentTx, saleId: string, input: C
     },
     include: shipmentInclude,
   });
-  await tx.sale.update({ where: { id: saleId }, data: { status: "PICKING" } });
+  await setSaleProgress(tx, saleId, "PICKING");
   return created;
 }
 
@@ -210,7 +210,7 @@ export async function packShipment(tx: FulfillmentTx, id: string, userId: string
   const items = await tx.saleShipmentItem.findMany({ where: { shipmentId: id }, select: { id: true, quantity: true } });
   for (const item of items) await tx.saleShipmentItem.update({ where: { id: item.id }, data: { packedQuantity: item.quantity, packedById: userId, packedAt: new Date() } });
   await tx.saleShipment.update({ where: { id }, data: { status: "PACKED", packedAt: new Date() } });
-  await tx.sale.update({ where: { id: shipment.saleId }, data: { status: "PACKED" } });
+  await setSaleProgress(tx, shipment.saleId, "PACKED");
   return getShipmentForRoute(tx, id);
 }
 

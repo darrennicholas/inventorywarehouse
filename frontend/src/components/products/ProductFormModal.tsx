@@ -1,18 +1,15 @@
 
 "use client";
 
+import GlobalSelect from "@/components/ui/GlobalSelect";
+import { LoaderCircle } from "@/components/ui/GlobalLoading";
 import {
   useEffect,
   useState,
   type FormEvent,
 } from "react";
 
-import {
-  AlertCircle,
-  LoaderCircle,
-  PackagePlus,
-  X,
-} from "lucide-react";
+import { AlertCircle, PackagePlus, X } from "lucide-react";
 
 import type {
   Product,
@@ -170,7 +167,7 @@ export default function ProductFormModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"
+      className="sf-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"
       onMouseDown={(event) => {
         if (
           event.target === event.currentTarget &&
@@ -309,7 +306,7 @@ export default function ProductFormModal({
                 Category
               </label>
 
-              <select
+              <GlobalSelect
                 id="p-category"
                 className={inputClass}
                 value={categoryId}
@@ -332,7 +329,7 @@ export default function ProductFormModal({
                     {!item.isActive ? " (Inactive)" : ""}
                   </option>
                 ))}
-              </select>
+              </GlobalSelect>
             </div>
 
             {/* BRAND */}
@@ -344,7 +341,7 @@ export default function ProductFormModal({
                 Brand
               </label>
 
-              <select
+              <GlobalSelect
                 id="p-brand"
                 className={inputClass}
                 value={brandId}
@@ -367,7 +364,7 @@ export default function ProductFormModal({
                     {!item.isActive ? " (Inactive)" : ""}
                   </option>
                 ))}
-              </select>
+              </GlobalSelect>
             </div>
 
             {/* UNIT */}
@@ -379,7 +376,7 @@ export default function ProductFormModal({
                 Unit
               </label>
 
-              <select
+              <GlobalSelect
                 id="p-unit"
                 className={inputClass}
                 value={unitId}
@@ -402,7 +399,7 @@ export default function ProductFormModal({
                     {!item.isActive ? " (Inactive)" : ""}
                   </option>
                 ))}
-              </select>
+              </GlobalSelect>
             </div>
 
             {/* MINIMUM STOCK */}
@@ -437,7 +434,7 @@ export default function ProductFormModal({
                 Status
               </label>
 
-              <select
+              <GlobalSelect
                 id="p-active"
                 className={inputClass}
                 value={
@@ -451,7 +448,7 @@ export default function ProductFormModal({
               >
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
-              </select>
+              </GlobalSelect>
             </div>
 
             <label className="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 sm:col-span-2">

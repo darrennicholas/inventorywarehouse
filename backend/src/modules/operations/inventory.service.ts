@@ -5,6 +5,7 @@ import { AppError } from "../../utils/AppError.ts";
 import { notifyByPermission } from "../notifications/notification.service.ts";
 import type { InventoryTx, StockAllocation } from "./stock-allocation.service.ts";
 import { allocateAvailableStock, changeLocationReservation, consumeLocationReservation } from "./stock-allocation.service.ts";
+import { lockCostBalance } from "./costing.service.ts";
 
 const reservationTtlMinutes = Math.max(5, Number(process.env.STOCKFLOW_RESERVATION_TTL_MINUTES ?? 60));
 
@@ -92,6 +93,10 @@ export async function consumeSaleReservationsForItems(
   const allocations: StockAllocation[] = [];
   for (const item of items) {
     if (!Number.isSafeInteger(item.quantity) || item.quantity <= 0) throw new AppError(400, "Shipment quantity must be a positive integer");
+    const saleItem = await tx.saleItem.findUniqueOrThrow({ where: { id: item.saleItemId } });
+    if (saleItem.saleId !== saleId) throw new AppError(400, "Shipment item does not belong to this sale");
+    const sale = await tx.sale.findUniqueOrThrow({ where: { id: saleId }, select: { warehouseId: true } });
+    const cost = await lockCostBalance(tx, saleItem.productId, sale.warehouseId);
     let remaining = item.quantity;
     const reservations = await tx.stockReservation.findMany({
       where: { saleId, saleItemId: item.saleItemId, status: "ACTIVE" },
@@ -101,9 +106,12 @@ export async function consumeSaleReservationsForItems(
       if (remaining <= 0) break;
       const take = Math.min(remaining, reservation.quantity);
       const locationBalance = reservation.locationBalanceId
-        ? await tx.inventoryLocationBalance.findUnique({ where: { id: reservation.locationBalanceId }, select: { id: true, locationId: true } })
+        ? await tx.inventoryLocationBalance.findUnique({ where: { id: reservation.locationBalanceId }, select: { id: true, locationId: true, location: { select: { isActive: true, locationType: true } } } })
         : null;
       if (!locationBalance) throw new AppError(409, "Shipment reservation is missing a location allocation");
+      await tx.$queryRaw`SELECT "id" FROM "WarehouseLocation" WHERE "id" = ${locationBalance.locationId}::uuid FOR SHARE`;
+      const currentLocation = await tx.warehouseLocation.findUniqueOrThrow({ where: { id: locationBalance.locationId }, select: { isActive: true, locationType: true } });
+      if (!currentLocation.isActive || currentLocation.locationType !== "STORAGE") throw new AppError(409, "Reserved location is no longer active storage; review the allocation before shipping");
       if (reservation.batchId) {
         const batch = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
           UPDATE "ProductBatch"
@@ -114,6 +122,8 @@ export async function consumeSaleReservationsForItems(
           WHERE "id" = ${reservation.batchId}::uuid
             AND "quantityOnHand" >= ${take}
             AND "reservedQuantity" >= ${take}
+            AND "status" = 'ACTIVE'::"BatchStatus"
+            AND ("expiryDate" IS NULL OR "expiryDate" > NOW())
           RETURNING "id"
         `);
         if (batch.length !== 1) throw new AppError(409, "Reserved batch cannot be consumed");
@@ -136,36 +146,12 @@ export async function consumeSaleReservationsForItems(
       } else {
         await tx.stockReservation.update({ where: { id: reservation.id }, data: { quantity: { decrement: take } } });
       }
-      allocations.push({ locationBalanceId: locationBalance.id, locationId: locationBalance.locationId, batchId: reservation.batchId, quantity: take });
+      allocations.push({ locationBalanceId: locationBalance.id, locationId: locationBalance.locationId, batchId: reservation.batchId, quantity: take, unitCost: cost.averageUnitCost });
       remaining -= take;
     }
     if (remaining > 0) throw new AppError(409, `Reserved stock is insufficient for sale item ${item.saleItemId}`);
   }
   return allocations;
-}
-
-export async function consumeSaleReservations(tx: InventoryTx, saleId: string) {
-  const reservations = await tx.stockReservation.findMany({ where: { saleId, status: "ACTIVE" }, orderBy: { id: "asc" } });
-  for (const reservation of reservations) {
-    if (reservation.batchId) {
-      const batch = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-        UPDATE "ProductBatch" SET "quantityOnHand" = "quantityOnHand" - ${reservation.quantity}, "reservedQuantity" = "reservedQuantity" - ${reservation.quantity},
-          "status" = CASE WHEN "quantityOnHand" - ${reservation.quantity} = 0 THEN 'DEPLETED'::"BatchStatus" ELSE "status" END, "updatedAt" = NOW()
-        WHERE "id" = ${reservation.batchId}::uuid AND "quantityOnHand" >= ${reservation.quantity} AND "reservedQuantity" >= ${reservation.quantity}
-        RETURNING "id"
-      `);
-      if (batch.length !== 1) throw new AppError(409, "Reserved batch cannot be consumed");
-    }
-    if (reservation.locationBalanceId) await consumeLocationReservation(tx, reservation.locationBalanceId, reservation.quantity);
-    const aggregate = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-      UPDATE "InventoryBalance" SET "quantityOnHand" = "quantityOnHand" - ${reservation.quantity}, "reservedQuantity" = "reservedQuantity" - ${reservation.quantity}, "updatedAt" = NOW()
-      WHERE "productId" = ${reservation.productId}::uuid AND "warehouseId" = ${reservation.warehouseId}::uuid
-        AND "quantityOnHand" >= ${reservation.quantity} AND "reservedQuantity" >= ${reservation.quantity}
-      RETURNING "id"
-    `);
-    if (aggregate.length !== 1) throw new AppError(409, "Reserved warehouse stock cannot be consumed");
-    await tx.stockReservation.update({ where: { id: reservation.id }, data: { status: "CONSUMED", consumedAt: new Date(), expiresAt: null } });
-  }
 }
 
 export async function releaseExpiredReservations() {
@@ -175,8 +161,11 @@ export async function releaseExpiredReservations() {
   let released = 0;
   for (const candidate of candidates) {
     await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Sale" WHERE "id" = ${candidate.saleId}::uuid FOR UPDATE`;
       const sale = await tx.sale.findUnique({ where: { id: candidate.saleId }, select: { id: true, number: true, warehouseId: true, status: true } });
       if (!sale || sale.status !== "RESERVED") return;
+      if (await tx.saleShipment.count({ where: { saleId: sale.id, status: { not: "CANCELLED" } } })) return;
+      if (!await tx.stockReservation.count({ where: { saleId: sale.id, status: "ACTIVE", expiresAt: { lte: new Date() } } })) return;
       await releaseSaleReservations(tx, sale.id, "RELEASED", "Reservation expired");
       await tx.sale.update({ where: { id: sale.id }, data: { status: "DRAFT" } });
       expiredSales.push({ id: sale.id, number: sale.number, warehouseId: sale.warehouseId });

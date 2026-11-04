@@ -6,6 +6,11 @@ import test from "node:test";
 
 import { ROLE_PRESETS } from "../src/rbac/permissions.ts";
 import { hasPermission } from "../src/rbac/permission-utils.ts";
+import { assertApprovalAuthority, type ApprovalTx } from "../src/modules/approvals/approval-policy.service.ts";
+import { reconstructStockBalances } from "../src/modules/operations/inventory-history.ts";
+import { csvCell, csvDocument } from "../src/utils/csv.ts";
+import { notificationEventKey } from "../src/modules/notifications/notification-key.ts";
+import { assertUsableBatch } from "../src/modules/operations/batch-safety.ts";
 
 const integrationEnabled = Boolean(
   process.env.DATABASE_URL && process.env.RUN_INTEGRATION_TESTS === "true"
@@ -17,6 +22,41 @@ test("permission helper enforces the role permission matrix", () => {
   assert.equal(hasPermission(ROLE_PRESETS.PROCUREMENT, ["purchases.approve"]), true);
   assert.equal(hasPermission(ROLE_PRESETS.WAREHOUSE_STAFF, ["purchases.approve"]), false);
   assert.equal(hasPermission(ROLE_PRESETS.AUDITOR, ["products.write"]), false);
+});
+
+test("approval always requires a different creator even when an old policy allows self approval", async () => {
+  const tx = { approvalPolicy: { findFirst: async () => ({ requiresDifferentCreator: false, approverRole: { code: "PROCUREMENT", name: "Procurement" } }) } } as unknown as ApprovalTx;
+  await assert.rejects(() => assertApprovalAuthority(tx, "PURCHASE", 100, { userId: "creator", roleCode: "PROCUREMENT" }, "creator"), /creator cannot approve/i);
+  await assert.doesNotReject(() => assertApprovalAuthority(tx, "PURCHASE", 100, { userId: "reviewer", roleCode: "PROCUREMENT" }, "creator"));
+  await assert.rejects(() => assertApprovalAuthority(tx, "PURCHASE", 100, { userId: "reviewer", roleCode: "WAREHOUSE_STAFF" }, "creator"), /requires the Procurement role/i);
+});
+
+test("stock history reconstructs signed movements and newer pages correctly", () => {
+  assert.deepEqual(reconstructStockBalances(12, 2, [-3, 5]), [{ before: 13, after: 10 }, { before: 8, after: 13 }]);
+  assert.deepEqual(reconstructStockBalances(4, 0, []), []);
+});
+
+test("CSV output escapes quotes and blocks spreadsheet formula cells", () => {
+  assert.equal(csvCell('=HYPERLINK("x")'), '"\'=HYPERLINK(""x"")"');
+  assert.equal(csvCell(-5), '"-5"');
+  assert.ok(csvDocument([["Nama", "Jumlah"], ["Produk", 2]]).startsWith("\uFEFF"));
+});
+
+test("duplicate notification events share a key while changed events remain distinct", () => {
+  const event = { permission: "purchases.read", type: "PURCHASE_STATUS", title: "Purchase", message: "PENDING", entity: "PurchaseOrder", entityId: "one" };
+  assert.equal(notificationEventKey(event, 301_000), notificationEventKey(event, 302_000));
+  assert.notEqual(notificationEventKey(event, 301_000), notificationEventKey({ ...event, message: "APPROVED" }, 301_000));
+  assert.notEqual(notificationEventKey(event, 301_000), notificationEventKey(event, 601_000));
+});
+
+test("receiving and transfers cannot revive or silently rewrite batches", () => {
+  const now = new Date("2026-01-01T00:00:00Z");
+  const batch = { status: "ACTIVE", expiryDate: new Date("2027-01-01T00:00:00Z"), productionDate: new Date("2025-01-01T00:00:00Z") };
+  assert.doesNotThrow(() => assertUsableBatch(batch, { expiryDate: batch.expiryDate }, now));
+  assert.throws(() => assertUsableBatch({ ...batch, status: "QUARANTINED" }, {}, now), /quarantined/);
+  assert.throws(() => assertUsableBatch({ ...batch, status: "EXPIRED" }, {}, now), /expired/);
+  assert.throws(() => assertUsableBatch(batch, { expiryDate: new Date("2028-01-01T00:00:00Z") }, now), /differs/);
+  assert.throws(() => assertUsableBatch(batch, { expiryDate: new Date("2025-01-01T00:00:00Z") }, now), /Expired goods/);
 });
 
 test("concurrent stock changes remain consistent and never go negative", { skip: !integrationEnabled }, async () => {

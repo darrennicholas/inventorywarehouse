@@ -5,6 +5,7 @@ import type {
 
 import { AppError } from "../utils/AppError.ts";
 import { reportError } from "../lib/monitoring.ts";
+import { ZodError } from "zod";
 
 function isPrismaUniqueError(
   error: unknown
@@ -24,7 +25,9 @@ export const errorHandler: ErrorRequestHandler = (
   _next
 ) => {
   const requestId = res.locals.requestId as string | undefined;
-  reportError(error, { requestId, method: req.method, path: req.originalUrl });
+  // Do not put query-string values (which can contain tokens or identifiers)
+  // into application error logs; the request ID is the safe correlation key.
+  reportError(error, { requestId, method: req.method, path: req.path });
   const responseMeta = requestId ? { requestId } : {};
 
   // Custom Application Error
@@ -38,6 +41,16 @@ export const errorHandler: ErrorRequestHandler = (
         : {}),
     });
 
+    return;
+  }
+
+  if (error instanceof ZodError) {
+    res.status(400).json({
+      success: false,
+      message: error.issues[0]?.message ?? "Invalid request data",
+      errors: error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message })),
+      ...responseMeta,
+    });
     return;
   }
 
@@ -67,6 +80,15 @@ export const errorHandler: ErrorRequestHandler = (
   }
 
   // Unexpected Server Error
+  const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
+  if (["P2034", "P2003", "P2004"].includes(code)) {
+    res.status(409).json({ success: false, message: code === "P2034" ? "Data changed during this transaction. Reload and try again; no partial changes were saved." : "This action conflicts with linked data or a database constraint.", ...responseMeta }); return;
+  }
+  if (code === "P2025") { res.status(404).json({ success: false, message: "Record no longer exists. Reload the page.", ...responseMeta }); return; }
+  if (code === "P2010" && typeof error === "object" && error !== null && "meta" in error) {
+    const meta = error.meta as { code?: string } | undefined;
+    if (meta?.code && ["23514", "40001", "40P01"].includes(meta.code)) { res.status(409).json({ success: false, message: "Stock or related data changed. Reload and retry; the transaction was rolled back.", ...responseMeta }); return; }
+  }
   res.status(500).json({
     success: false,
     message: "Internal server error",

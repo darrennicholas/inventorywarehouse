@@ -1,6 +1,11 @@
 
 "use client";
 
+import GlobalLoading from "@/components/ui/GlobalLoading";
+import GlobalSelect from "@/components/ui/GlobalSelect";
+import { confirmAction } from "@/components/ui/GlobalAlert";
+import { Eye, Pencil, Trash2 } from "@/components/ui/ActionIcons";
+import { LoaderCircle } from "@/components/ui/GlobalLoading";
 import {
   useEffect,
   useMemo,
@@ -8,19 +13,7 @@ import {
   type FormEvent,
 } from "react";
 
-import {
-  AlertCircle,
-  CheckCircle2,
-  Eye,
-  LoaderCircle,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Search,
-  Trash2,
-  UserRound,
-  X,
-} from "lucide-react";
+import { AlertCircle, CheckCircle2, Plus, RefreshCw, Search, UserRound, X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 
 import { useStaff } from "@/hooks/useStaff";
@@ -500,7 +493,7 @@ export default function StaffView() {
       return;
     }
 
-    const confirmed = window.confirm(
+    const confirmed = await confirmAction(
       `Deactivate ${person.fullName} (${person.staffCode})? The record will remain stored.`
     );
 
@@ -631,7 +624,7 @@ export default function StaffView() {
           <div className="flex items-center gap-2 text-xs text-slate-600">
             Show
 
-            <select
+            <GlobalSelect
               aria-label="Entries per page"
               value={pageSize}
               onChange={(event) => {
@@ -652,14 +645,14 @@ export default function StaffView() {
                   </option>
                 )
               )}
-            </select>
+            </GlobalSelect>
 
             entries
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             {/* STATUS FILTER */}
-            <select
+            <GlobalSelect
               aria-label="Filter staff by status"
               value={statusFilter}
               onChange={(event) => {
@@ -681,7 +674,7 @@ export default function StaffView() {
               <option value="inactive">
                 Inactive
               </option>
-            </select>
+            </GlobalSelect>
 
             {/* SEARCH */}
             <div className="relative">
@@ -854,11 +847,7 @@ export default function StaffView() {
           {/* LOADING */}
           {loading && (
             <div className="flex items-center justify-center gap-2 py-14 text-sm text-slate-500">
-              <LoaderCircle
-                size={18}
-                className="animate-spin"
-              />
-              Loading staff...
+              <GlobalLoading label="Loading staff..." />
             </div>
           )}
 
@@ -925,7 +914,7 @@ export default function StaffView() {
 
       {modalOpen && canWrite && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4"
+          className="sf-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4"
           onMouseDown={(event) => {
             if (
               event.target ===
@@ -1121,7 +1110,7 @@ export default function StaffView() {
                   Assigned Warehouse
                 </label>
 
-                <select
+                <GlobalSelect
                   id="staff-warehouse"
                   value={
                     form.warehouseId ?? ""
@@ -1164,11 +1153,11 @@ export default function StaffView() {
                         </option>
                       )
                     )}
-                </select>
+                </GlobalSelect>
 
                 {warehouseLoading && (
                   <p className="mt-1 text-xs text-slate-400">
-                    Loading warehouses...
+                    <GlobalLoading label="Loading warehouses..." />
                   </p>
                 )}
 
@@ -1191,7 +1180,7 @@ export default function StaffView() {
                   Status
                 </label>
 
-                <select
+                <GlobalSelect
                   id="staff-status"
                   value={
                     form.isActive
@@ -1214,7 +1203,7 @@ export default function StaffView() {
                   <option value="inactive">
                     Inactive
                   </option>
-                </select>
+                </GlobalSelect>
               </div>
 
               {/* FORM ERROR */}
@@ -1277,7 +1266,7 @@ export default function StaffView() {
 
       {viewing && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4"
+          className="sf-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4"
           onMouseDown={(event) => {
             if (
               event.target ===

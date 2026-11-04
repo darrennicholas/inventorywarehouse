@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: inventorywarehouse_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d inventorywarehouse_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/inventorywarehouse_test?schema=public
+      SESSION_SECRET: ci-only-secret-at-least-32-characters-long
+      FRONTEND_URL: http://localhost:3000
+      NODE_ENV: test
+      RUN_INTEGRATION_TESTS: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_PUBLIC_API_URL: http://localhost:5000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run lint
+      - run: npm run build

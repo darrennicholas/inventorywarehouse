@@ -8,10 +8,13 @@ import { authOf } from "../../middlewares/auth.middleware.ts";
 import { asyncHandler } from "../../utils/asyncHandler.ts";
 import { AppError } from "../../utils/AppError.ts";
 import { pageMeta, pagination } from "../../utils/pagination.ts";
+import { assertWarehouseAccess, warehouseScope } from "../../rbac/warehouse-scope.ts";
 
 const router = Router();
 const uploadRoot = path.resolve(process.env.ATTACHMENT_STORAGE_PATH || path.join(process.cwd(), "storage", "attachments"));
-const maxAttachmentBytes = Math.min(Math.max(Number(process.env.ATTACHMENT_MAX_BYTES || 10 * 1024 * 1024), 1024), 25 * 1024 * 1024);
+// JSON/base64 adds roughly one third to the wire payload; keep the binary cap
+// aligned with app.ts's 16 MB body parser so accepted files are uploadable.
+const maxAttachmentBytes = Math.min(Math.max(Number(process.env.ATTACHMENT_MAX_BYTES || 10 * 1024 * 1024), 1024), 10 * 1024 * 1024);
 const attachmentEntity = z.enum(["PurchaseOrder", "ReturnOrder", "StockAdjustment", "Payment", "StockTakeSession", "Expense"]);
 const attachmentSchema = z.object({
   entity: attachmentEntity,
@@ -24,6 +27,7 @@ const attachmentSchema = z.object({
 type AttachmentEntity = z.infer<typeof attachmentEntity>;
 async function assertAttachmentPermission(entity: AttachmentEntity, entityId: string, action: "read" | "write", req: Parameters<typeof authOf>[0]) {
   const auth = authOf(req);
+  const id = z.uuid().parse(entityId);
   const keys: Record<Exclude<AttachmentEntity, "ReturnOrder">, string> = {
     PurchaseOrder: `purchases.${action}`,
     StockAdjustment: `adjustments.${action}`,
@@ -32,14 +36,24 @@ async function assertAttachmentPermission(entity: AttachmentEntity, entityId: st
     Expense: `expenses.${action}`,
   };
   if (entity === "ReturnOrder") {
-    const doc = await prisma.returnOrder.findUnique({ where: { id: entityId }, select: { type: true } });
+    const doc = await prisma.returnOrder.findUnique({ where: { id }, select: { type: true, warehouseId: true } });
     if (!doc) throw new AppError(404, "Return record not found");
     const key = `${doc.type === "PURCHASE" ? "purchase-returns" : "sales-returns"}.${action}`;
     if (!auth.permissions.includes(key)) throw new AppError(403, "You do not have permission to access attachments for this record");
+    assertWarehouseAccess(auth, doc.warehouseId);
     return;
   }
   const key = keys[entity];
   if (!auth.permissions.includes(key)) throw new AppError(403, "You do not have permission to access attachments for this record");
+  const doc = entity === "PurchaseOrder" ? await prisma.purchaseOrder.findUnique({ where: { id }, select: { warehouseId: true } })
+    : entity === "StockAdjustment" ? await prisma.stockAdjustment.findUnique({ where: { id }, select: { warehouseId: true } })
+    : entity === "StockTakeSession" ? await prisma.stockTakeSession.findUnique({ where: { id }, select: { warehouseId: true } })
+    : entity === "Expense" ? await prisma.expense.findUnique({ where: { id }, select: { warehouseId: true } })
+    : await prisma.payment.findUnique({ where: { id }, select: { purchaseOrder: { select: { warehouseId: true } }, sale: { select: { warehouseId: true } }, expense: { select: { warehouseId: true } } } });
+  if (!doc) throw new AppError(404, "Attachment record not found");
+  const warehouseId = "warehouseId" in doc ? doc.warehouseId : doc.purchaseOrder?.warehouseId ?? doc.sale?.warehouseId ?? doc.expense?.warehouseId ?? null;
+  if (warehouseId) assertWarehouseAccess(auth, warehouseId);
+  else if (warehouseScope(auth)) throw new AppError(403, "You cannot access attachments without an assigned warehouse");
 }
 
 const extensionByMime: Record<z.infer<typeof attachmentSchema>["mimeType"], string> = {

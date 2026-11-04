@@ -3,6 +3,7 @@ import type { StockAllocation } from "../operations/stock-allocation.service.ts"
 import { postPurchaseReturnStock, postSalesReturnStock, linkMovementAllocations } from "../operations/stock-allocation.service.ts";
 import { assertInventoryInvariant } from "../operations/inventory-invariant.service.ts";
 import { Prisma } from "../../generated/prisma/client.ts";
+import { originalSaleCost } from "../operations/costing.service.ts";
 import type { ReturnTx } from "./return.repository.ts";
 import { makeReturnRepository, listReturns } from "./return.repository.ts";
 import {
@@ -89,6 +90,7 @@ export async function validateReturnSource(tx: ReturnTx, input: ReturnSourceInpu
   for (const line of data.items) {
     const sourceLine = source.items.find(item => item.id === line.saleItemId);
     if (!sourceLine || sourceLine.productId !== line.productId) fail(400, "Return item is not part of this sale");
+    if (line.disposition === "RESTOCK" && line.condition !== "GOOD") fail(400, "Only goods in GOOD condition may be returned to saleable stock; use quarantine or scrap");
     quantities.set(sourceLine.id, (quantities.get(sourceLine.id) ?? 0) + line.quantity);
     await validateLineLocationAndBatch(tx, {
       warehouseId: data.warehouseId, productId: line.productId,
@@ -319,6 +321,8 @@ export async function postReturn(tx: ReturnTx, id: string, actorId: string) {
   await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "ReturnOrder" WHERE "id" = ${id}::uuid FOR UPDATE`);
   const doc = await getReturn(tx, id);
   if (doc.status !== "APPROVED") fail(409, "Only APPROVED returns can be posted");
+  if (doc.inspection && doc.inspection.status !== "COMPLETED") fail(409, "Complete the recorded inspection before posting this return");
+  if (doc.items.some((item) => item.inspection && (item.inspection.condition !== item.condition || item.inspection.recommendedDisposition !== item.disposition))) fail(409, "Item inspection differs from the return line; cancel and create a corrected return before posting");
   if (doc.items.length === 0) fail(409, "Cannot post an empty return");
 
   const items = [...doc.items].sort((a, b) => a.productId.localeCompare(b.productId) || a.id.localeCompare(b.id));
@@ -390,7 +394,8 @@ export async function postReturn(tx: ReturnTx, id: string, actorId: string) {
       if (item.disposition !== "RESTOCK" || location.locationType !== "STORAGE") fail(409, "Purchase return requires STORAGE and outbound disposition");
       allocations = await postPurchaseReturnStock(tx, { productId: item.productId, warehouseId: doc.warehouseId, locationId: item.locationId, batchId: item.batchId, quantity: item.quantity });
     } else {
-      allocations = await postSalesReturnStock(tx, { productId: item.productId, warehouseId: doc.warehouseId, locationId: item.locationId, batchId: item.batchId, quantity: item.quantity, disposition: item.disposition });
+      if (item.disposition === "RESTOCK" && item.condition !== "GOOD") fail(409, "Only goods in GOOD condition may be returned to saleable stock; use quarantine or scrap");
+      allocations = await postSalesReturnStock(tx, { productId: item.productId, warehouseId: doc.warehouseId, locationId: item.locationId, batchId: item.batchId, quantity: item.quantity, disposition: item.disposition, unitCost: await originalSaleCost(tx, doc.saleId!, item.productId) });
     }
 
     // SCRAP is an auditable zero-quantity disposition: no InventoryBalance change.

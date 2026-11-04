@@ -33,6 +33,7 @@ const locationSchema = z.object({
   shelf: z.string().trim().max(40).nullable().optional(),
   bin: z.string().trim().max(40).nullable().optional(),
   capacity: z.coerce.number().int().positive().nullable().optional(),
+  capacityUnit: z.enum(["ITEM_UNITS", "PALLET_POSITIONS", "CUBIC_METERS"]).optional(),
   isActive: z.boolean().optional(),
 }).strict();
 
@@ -47,7 +48,7 @@ router.post("/:warehouseId/locations", asyncHandler(async (req, res) => {
   const warehouseId = z.uuid().parse(req.params.warehouseId);
   assertWarehouseAccess(authOf(req), warehouseId);
   const input = locationSchema.parse(req.body);
-  const data = await prisma.warehouseLocation.create({ data: { warehouseId, code: input.code.toUpperCase(), name: input.name, zone: input.zone ?? null, rack: input.rack ?? null, shelf: input.shelf ?? null, bin: input.bin ?? null, capacity: input.capacity ?? null, isActive: input.isActive ?? true } });
+  const data = await prisma.warehouseLocation.create({ data: { warehouseId, code: input.code.toUpperCase(), name: input.name, zone: input.zone ?? null, rack: input.rack ?? null, shelf: input.shelf ?? null, bin: input.bin ?? null, capacity: input.capacity ?? null, capacityUnit: input.capacityUnit ?? "ITEM_UNITS", isActive: input.isActive ?? true } });
   await notifyByPermission({ permission: "warehouses.read", type: "LOCATION_CREATED", title: "Warehouse location added", message: `${data.code} was added to warehouse storage.`, entity: "WarehouseLocation", entityId: data.id, warehouseId });
   res.status(201).json({ success: true, message: "Warehouse location created successfully", data });
 }));

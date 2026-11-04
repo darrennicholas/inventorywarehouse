@@ -71,11 +71,11 @@ model Product {
   description String?
   imageUrl    String?
 
-  minStock   Int     @default(0)
-  maxStock   Int?
-  reorderLeadDays Int @default(7)
-  trackBatch Boolean @default(false)
-  isActive   Boolean @default(true)
+  minStock        Int     @default(0)
+  maxStock        Int?
+  reorderLeadDays Int     @default(7)
+  trackBatch      Boolean @default(false)
+  isActive        Boolean @default(true)
 
   // FOREIGN KEYS
   categoryId String? @db.Uuid
@@ -88,6 +88,7 @@ model Product {
   unit     Unit?     @relation(fields: [unitId], references: [id], onDelete: SetNull)
 
   inventoryBalances         InventoryBalance[]
+  valuationSnapshots        InventoryValuationSnapshot[]
   inventoryLocationBalances InventoryLocationBalance[]
   purchaseItems             PurchaseOrderItem[]
   saleItems                 SaleItem[]
@@ -124,13 +125,14 @@ model Warehouse {
 
   // RELATIONS
   inventoryBalances         InventoryBalance[]
+  valuationSnapshots        InventoryValuationSnapshot[]
   inventoryLocationBalances InventoryLocationBalance[]
   staffMembers              Staff[]
   purchaseOrders            PurchaseOrder[]
   sales                     Sale[]
   adjustments               StockAdjustment[]
-  transfersFrom             StockTransfer[]            @relation("TransferFromWarehouse")
-  transfersTo               StockTransfer[]            @relation("TransferToWarehouse")
+  transfersFrom             StockTransfer[]              @relation("TransferFromWarehouse")
+  transfersTo               StockTransfer[]              @relation("TransferToWarehouse")
   expenses                  Expense[]
   stockMovements            StockMovement[]
   stockTakeSessions         StockTakeSession[]
@@ -216,12 +218,13 @@ model Customer {
 // ==========================================
 
 model InventoryBalance {
-  id               String  @id @default(uuid()) @db.Uuid
-  productId        String  @db.Uuid
-  warehouseId      String  @db.Uuid
-  quantityOnHand   Int     @default(0)
-  reservedQuantity Int     @default(0)
-  locationId       String? @db.Uuid
+  averageUnitCost  Decimal? @db.Decimal(20, 6)
+  id               String   @id @default(uuid()) @db.Uuid
+  productId        String   @db.Uuid
+  warehouseId      String   @db.Uuid
+  quantityOnHand   Int      @default(0)
+  reservedQuantity Int      @default(0)
+  locationId       String?  @db.Uuid
 
   // RELATIONS
   product   Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
@@ -237,10 +240,29 @@ model InventoryBalance {
   @@index([warehouseId])
 }
 
+// Daily point-in-time stock/cost snapshots. History starts at deployment; it is
+// intentionally not fabricated for dates before the first captured snapshot.
+model InventoryValuationSnapshot {
+  id              String    @id @default(uuid()) @db.Uuid
+  snapshotDate    DateTime  @db.Date
+  productId       String    @db.Uuid
+  warehouseId     String    @db.Uuid
+  quantityOnHand  Int
+  averageUnitCost Decimal?  @db.Decimal(20, 6)
+  knownValue      Decimal?  @db.Decimal(20, 2)
+  capturedAt      DateTime  @default(now())
+  product         Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
+  warehouse       Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+
+  @@unique([snapshotDate, productId, warehouseId])
+  @@index([snapshotDate, warehouseId])
+}
+
 // Detail saldo per Product + Warehouse + Location + Batch.
 // IMPORTANT: Backend stock posting must be upgraded before this becomes the live source of truth.
 model InventoryLocationBalance {
-  id String @id @default(uuid()) @db.Uuid
+  quarantineDecisions QuarantineDecision[]
+  id                  String               @id @default(uuid()) @db.Uuid
 
   productId   String  @db.Uuid
   warehouseId String  @db.Uuid
@@ -275,21 +297,29 @@ model InventoryLocationBalance {
 // WAREHOUSE LOCATIONS & PRODUCT BATCHES
 // ==========================================
 
+enum WarehouseCapacityUnit {
+  ITEM_UNITS
+  PALLET_POSITIONS
+  CUBIC_METERS
+}
+
 model WarehouseLocation {
-  locationType WarehouseLocationType @default(STORAGE)
+  quarantineDestinations QuarantineDecision[]
+  locationType           WarehouseLocationType @default(STORAGE)
 
   returnOrderItems ReturnOrderItem[]
 
-  id          String  @id @default(uuid()) @db.Uuid
-  warehouseId String  @db.Uuid
-  code        String
-  name        String
-  zone        String?
-  rack        String?
-  shelf       String?
-  bin         String?
-  capacity    Int?
-  isActive    Boolean @default(true)
+  id           String                @id @default(uuid()) @db.Uuid
+  warehouseId  String                @db.Uuid
+  code         String
+  name         String
+  zone         String?
+  rack         String?
+  shelf        String?
+  bin          String?
+  capacity     Int?
+  capacityUnit WarehouseCapacityUnit @default(ITEM_UNITS)
+  isActive     Boolean               @default(true)
 
   warehouse                 Warehouse                  @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
   inventoryBalances         InventoryBalance[]
@@ -299,8 +329,8 @@ model WarehouseLocation {
   sourceTransferItems       StockTransferItem[]        @relation("TransferSourceLocation")
   destinationTransferItems  StockTransferItem[]        @relation("TransferDestinationLocation")
   adjustmentItems           StockAdjustmentItem[]
-  relocationsFrom           StockRelocation[]        @relation("RelocationFromLocation")
-  relocationsTo             StockRelocation[]        @relation("RelocationToLocation")
+  relocationsFrom           StockRelocation[]          @relation("RelocationFromLocation")
+  relocationsTo             StockRelocation[]          @relation("RelocationToLocation")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -381,8 +411,14 @@ model Staff {
 // ==========================================
 
 model User {
-  createdReturnOrders  ReturnOrder[] @relation("ReturnCreatedBy")
-  approvedReturnOrders ReturnOrder[] @relation("ReturnApprovedBy")
+  returnSettlements    ReturnSettlement[]
+  creditApplications   CreditApplication[]
+  quarantineRequests   QuarantineDecision[]   @relation("QuarantineCreator")
+  quarantineApprovals  QuarantineDecision[]   @relation("QuarantineApprover")
+  returnInspections    ReturnInspection[]
+  inspectedReturnItems ReturnItemInspection[]
+  createdReturnOrders  ReturnOrder[]          @relation("ReturnCreatedBy")
+  approvedReturnOrders ReturnOrder[]          @relation("ReturnApprovedBy")
 
   id           String  @id @default(uuid()) @db.Uuid
   email        String  @unique
@@ -415,10 +451,10 @@ model User {
   stockReservations         StockReservation[]
   goodsReceipts             GoodsReceipt[]
   idempotencyKeys           IdempotencyKey[]
-  createdShipments           SaleShipment[]     @relation("ShipmentCreatedBy")
-  pickedShipmentItems        SaleShipmentItem[] @relation("ShipmentPickedBy")
-  packedShipmentItems        SaleShipmentItem[] @relation("ShipmentPackedBy")
-  relocations                StockRelocation[]  @relation("RelocationCreatedBy")
+  createdShipments          SaleShipment[]     @relation("ShipmentCreatedBy")
+  pickedShipmentItems       SaleShipmentItem[] @relation("ShipmentPickedBy")
+  packedShipmentItems       SaleShipmentItem[] @relation("ShipmentPackedBy")
+  relocations               StockRelocation[]  @relation("RelocationCreatedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -438,8 +474,8 @@ model Role {
   isSystem    Boolean @default(false)
   isActive    Boolean @default(true)
 
-  users       User[]
-  permissions RolePermission[]
+  users            User[]
+  permissions      RolePermission[]
   approvalPolicies ApprovalPolicy[]
 
   createdAt DateTime @default(now())
@@ -570,7 +606,9 @@ enum PurchaseStatus {
 }
 
 model PurchaseOrder {
-  returnOrders ReturnOrder[]
+  creditApplications CreditApplication[]
+  paymentDueDate     DateTime?
+  returnOrders       ReturnOrder[]
 
   id           String         @id @default(uuid()) @db.Uuid
   number       String         @unique
@@ -608,7 +646,8 @@ model PurchaseOrder {
 }
 
 model PurchaseOrderItem {
-  returnOrderItems ReturnOrderItem[]
+  quarantineDecisions QuarantineDecision[]
+  returnOrderItems    ReturnOrderItem[]
 
   id               String    @id @default(uuid()) @db.Uuid
   purchaseOrderId  String    @db.Uuid
@@ -641,7 +680,9 @@ enum SaleStatus {
 }
 
 model Sale {
-  returnOrders ReturnOrder[]
+  creditApplications CreditApplication[]
+  paymentDueDate     DateTime?
+  returnOrders       ReturnOrder[]
 
   id          String     @id @default(uuid()) @db.Uuid
   number      String     @unique
@@ -686,9 +727,9 @@ model SaleItem {
   unitPrice Decimal @db.Decimal(14, 2)
   total     Decimal @db.Decimal(14, 2)
 
-  sale         Sale               @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  product      Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
-  reservations StockReservation[]
+  sale          Sale               @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product       Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  reservations  StockReservation[]
   shipmentItems SaleShipmentItem[]
 
   @@unique([saleId, productId])
@@ -760,10 +801,10 @@ model SaleShipment {
   completedAt     DateTime?
   notes           String?
 
-  sale       Sale       @relation(fields: [saleId], references: [id], onDelete: Restrict)
-  warehouse  Warehouse  @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  createdBy  User       @relation("ShipmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  items      SaleShipmentItem[]
+  sale      Sale               @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  warehouse Warehouse          @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  createdBy User               @relation("ShipmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  items     SaleShipmentItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -774,24 +815,24 @@ model SaleShipment {
 }
 
 model SaleShipmentItem {
-  id            String   @id @default(uuid()) @db.Uuid
-  shipmentId    String   @db.Uuid
-  saleItemId    String   @db.Uuid
-  productId     String   @db.Uuid
-  quantity      Int
-  pickedQuantity Int     @default(0)
-  packedQuantity Int     @default(0)
-  pickedById    String?  @db.Uuid
-  packedById    String?  @db.Uuid
-  pickedAt      DateTime?
-  packedAt      DateTime?
-  notes         String?
+  id             String    @id @default(uuid()) @db.Uuid
+  shipmentId     String    @db.Uuid
+  saleItemId     String    @db.Uuid
+  productId      String    @db.Uuid
+  quantity       Int
+  pickedQuantity Int       @default(0)
+  packedQuantity Int       @default(0)
+  pickedById     String?   @db.Uuid
+  packedById     String?   @db.Uuid
+  pickedAt       DateTime?
+  packedAt       DateTime?
+  notes          String?
 
   shipment SaleShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
-  saleItem SaleItem      @relation(fields: [saleItemId], references: [id], onDelete: Restrict)
-  product  Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
-  pickedBy User?         @relation("ShipmentPickedBy", fields: [pickedById], references: [id], onDelete: SetNull)
-  packedBy User?         @relation("ShipmentPackedBy", fields: [packedById], references: [id], onDelete: SetNull)
+  saleItem SaleItem     @relation(fields: [saleItemId], references: [id], onDelete: Restrict)
+  product  Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  pickedBy User?        @relation("ShipmentPickedBy", fields: [pickedById], references: [id], onDelete: SetNull)
+  packedBy User?        @relation("ShipmentPackedBy", fields: [packedById], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1070,6 +1111,7 @@ enum StockMovementType {
 }
 
 model StockMovement {
+  costMethod    String?
   returnOrderId String?      @db.Uuid
   returnOrder   ReturnOrder? @relation(fields: [returnOrderId], references: [id], onDelete: SetNull)
 
@@ -1078,7 +1120,7 @@ model StockMovement {
   warehouseId     String            @db.Uuid
   quantity        Int
   movementType    StockMovementType
-  unitCost        Decimal?          @db.Decimal(14, 2)
+  unitCost        Decimal?          @db.Decimal(20, 6)
   purchaseOrderId String?           @db.Uuid
   saleId          String?           @db.Uuid
   adjustmentId    String?           @db.Uuid
@@ -1121,10 +1163,10 @@ model StockRelocation {
   status         StockRelocationStatus @default(COMPLETED)
   reason         String?
 
-  warehouse    Warehouse         @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  fromLocation WarehouseLocation @relation("RelocationFromLocation", fields: [fromLocationId], references: [id], onDelete: Restrict)
-  toLocation   WarehouseLocation @relation("RelocationToLocation", fields: [toLocationId], references: [id], onDelete: Restrict)
-  createdBy    User              @relation("RelocationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  warehouse    Warehouse             @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  fromLocation WarehouseLocation     @relation("RelocationFromLocation", fields: [fromLocationId], references: [id], onDelete: Restrict)
+  toLocation   WarehouseLocation     @relation("RelocationToLocation", fields: [toLocationId], references: [id], onDelete: Restrict)
+  createdBy    User                  @relation("RelocationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   items        StockRelocationItem[]
 
   createdAt DateTime @default(now())
@@ -1261,6 +1303,12 @@ enum ReturnDisposition {
   SCRAP
 }
 
+enum ReturnInspectionStatus {
+  PENDING
+  COMPLETED
+  FOLLOW_UP
+}
+
 enum WarehouseLocationType {
   STORAGE
   RECEIVING
@@ -1272,21 +1320,24 @@ enum WarehouseLocationType {
 // Its purchaseOrderId/saleId XOR is also enforced in migration.sql.
 // Approval and posting are separate actions: only POSTED affects stock.
 model ReturnOrder {
-  id              String       @id @default(uuid()) @db.Uuid
-  number          String       @unique
-  type            ReturnType
-  purchaseOrderId String?      @db.Uuid
-  saleId          String?      @db.Uuid
-  warehouseId     String       @db.Uuid
-  createdById     String       @db.Uuid
-  approvedById    String?      @db.Uuid
-  status          ReturnStatus @default(DRAFT)
-  reason          String
-  notes           String?
-  approvedAt      DateTime?
-  postedAt        DateTime?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  settlements         ReturnSettlement[]
+  quarantineDecisions QuarantineDecision[]
+  inspection          ReturnInspection?
+  id                  String               @id @default(uuid()) @db.Uuid
+  number              String               @unique
+  type                ReturnType
+  purchaseOrderId     String?              @db.Uuid
+  saleId              String?              @db.Uuid
+  warehouseId         String               @db.Uuid
+  createdById         String               @db.Uuid
+  approvedById        String?              @db.Uuid
+  status              ReturnStatus         @default(DRAFT)
+  reason              String
+  notes               String?
+  approvedAt          DateTime?
+  postedAt            DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   purchaseOrder PurchaseOrder?    @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
   sale          Sale?             @relation(fields: [saleId], references: [id], onDelete: Restrict)
@@ -1304,23 +1355,38 @@ model ReturnOrder {
   @@index([approvedById])
 }
 
+model ReturnInspection {
+  id            String                 @id @default(uuid()) @db.Uuid
+  returnOrderId String                 @unique @db.Uuid
+  status        ReturnInspectionStatus @default(PENDING)
+  notes         String?
+  inspectedById String                 @db.Uuid
+  inspectedAt   DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  returnOrder   ReturnOrder            @relation(fields: [returnOrderId], references: [id], onDelete: Cascade)
+  inspectedBy   User                   @relation(fields: [inspectedById], references: [id], onDelete: Restrict)
+
+  @@index([status, inspectedAt])
+}
+
 // The source item ID allows safe cumulative return quantity validation.
 // For SALE: RESTOCK/QUARANTINE/SCRAP require dedicated post logic.
 // For PURCHASE: any disposition must be validated against the outbound return policy.
 model ReturnOrderItem {
-  id                  String            @id @default(uuid()) @db.Uuid
-  returnOrderId       String            @db.Uuid
-  productId           String            @db.Uuid
-  purchaseOrderItemId String?           @db.Uuid
-  saleItemId          String?           @db.Uuid
-  locationId          String?           @db.Uuid
-  batchId             String?           @db.Uuid
+  inspection          ReturnItemInspection?
+  id                  String                @id @default(uuid()) @db.Uuid
+  returnOrderId       String                @db.Uuid
+  productId           String                @db.Uuid
+  purchaseOrderItemId String?               @db.Uuid
+  saleItemId          String?               @db.Uuid
+  locationId          String?               @db.Uuid
+  batchId             String?               @db.Uuid
   quantity            Int
   condition           ReturnCondition
   disposition         ReturnDisposition
   notes               String?
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
 
   returnOrder       ReturnOrder        @relation(fields: [returnOrderId], references: [id], onDelete: Cascade)
   product           Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
@@ -1335,4 +1401,98 @@ model ReturnOrderItem {
   @@index([saleItemId])
   @@index([locationId])
   @@index([batchId])
+}
+
+model ReturnItemInspection {
+  id                     String            @id @default(uuid()) @db.Uuid
+  returnOrderItemId      String            @unique @db.Uuid
+  condition              ReturnCondition
+  recommendedDisposition ReturnDisposition
+  notes                  String
+  inspectedById          String            @db.Uuid
+  inspectedAt            DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+  item                   ReturnOrderItem   @relation(fields: [returnOrderItemId], references: [id], onDelete: Cascade)
+  inspectedBy            User              @relation(fields: [inspectedById], references: [id], onDelete: Restrict)
+}
+
+enum ReturnSettlementKind {
+  REFUND
+  CREDIT
+}
+
+model ReturnSettlement {
+  id                   String               @id @default(uuid()) @db.Uuid
+  returnOrderId        String               @db.Uuid
+  kind                 ReturnSettlementKind
+  amount               Decimal              @db.Decimal(14, 2)
+  isReversal           Boolean              @default(false)
+  reversesSettlementId String?              @unique @db.Uuid
+  reference            String
+  notes                String
+  createdById          String               @db.Uuid
+  createdAt            DateTime             @default(now())
+  returnOrder          ReturnOrder          @relation(fields: [returnOrderId], references: [id], onDelete: Restrict)
+  createdBy            User                 @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  applications         CreditApplication[]
+  reversalOf           ReturnSettlement?    @relation("SettlementReversal", fields: [reversesSettlementId], references: [id], onDelete: Restrict)
+  reversal             ReturnSettlement?    @relation("SettlementReversal")
+
+  @@index([returnOrderId, createdAt])
+}
+
+model CreditApplication {
+  id              String           @id @default(uuid()) @db.Uuid
+  settlementId    String           @db.Uuid
+  purchaseOrderId String?          @db.Uuid
+  saleId          String?          @db.Uuid
+  amount          Decimal          @db.Decimal(14, 2)
+  createdById     String           @db.Uuid
+  createdAt       DateTime         @default(now())
+  settlement      ReturnSettlement @relation(fields: [settlementId], references: [id], onDelete: Restrict)
+  purchaseOrder   PurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  sale            Sale?            @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  createdBy       User             @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([settlementId])
+  @@index([purchaseOrderId])
+  @@index([saleId])
+}
+
+enum QuarantineAction {
+  RELEASE
+  SCRAP
+  RETURN_SUPPLIER
+}
+
+enum QuarantineDecisionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model QuarantineDecision {
+  id                    String                   @id @default(uuid()) @db.Uuid
+  locationBalanceId     String                   @db.Uuid
+  destinationLocationId String?                  @db.Uuid
+  purchaseOrderItemId   String?                  @db.Uuid
+  returnOrderId         String?                  @db.Uuid
+  quantity              Int
+  action                QuarantineAction
+  status                QuarantineDecisionStatus @default(PENDING)
+  reason                String
+  reviewNotes           String?
+  createdById           String                   @db.Uuid
+  approvedById          String?                  @db.Uuid
+  createdAt             DateTime                 @default(now())
+  reviewedAt            DateTime?
+  source                InventoryLocationBalance @relation(fields: [locationBalanceId], references: [id], onDelete: Restrict)
+  destination           WarehouseLocation?       @relation(fields: [destinationLocationId], references: [id], onDelete: Restrict)
+  purchaseOrderItem     PurchaseOrderItem?       @relation(fields: [purchaseOrderItemId], references: [id], onDelete: Restrict)
+  returnOrder           ReturnOrder?             @relation(fields: [returnOrderId], references: [id], onDelete: Restrict)
+  createdBy             User                     @relation("QuarantineCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy            User?                    @relation("QuarantineApprover", fields: [approvedById], references: [id], onDelete: Restrict)
+
+  @@index([locationBalanceId, status])
+  @@index([purchaseOrderItemId, status])
 }

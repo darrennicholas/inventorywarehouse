@@ -27,13 +27,19 @@ const withWarehouse = {
 
 export const staffRepository = {
   // GET ALL STAFF
-  findAll() {
+  findAll(options?: { skip?: number; take?: number; search?: string; isActive?: boolean }) {
     return prisma.staff.findMany({
+      ...(options?.skip !== undefined ? { skip: options.skip, take: options.take } : {}),
+      where: { ...(options?.isActive !== undefined ? { isActive: options.isActive } : {}), ...(options?.search ? { OR: [{ staffCode: { contains: options.search, mode: "insensitive" } }, { fullName: { contains: options.search, mode: "insensitive" } }, { email: { contains: options.search, mode: "insensitive" } }] } : {}) },
       include: withWarehouse,
       orderBy: {
         createdAt: "desc",
       },
     });
+  },
+
+  count(options?: { search?: string; isActive?: boolean }) {
+    return prisma.staff.count({ where: { ...(options?.isActive !== undefined ? { isActive: options.isActive } : {}), ...(options?.search ? { OR: [{ staffCode: { contains: options.search, mode: "insensitive" } }, { fullName: { contains: options.search, mode: "insensitive" } }, { email: { contains: options.search, mode: "insensitive" } }] } : {}) } });
   },
 
   // GET STAFF BY ID

@@ -9,6 +9,7 @@ export type ReturnKind = "PURCHASE" | "SALE";
 export type ReturnState = "DRAFT" | "PENDING" | "APPROVED" | "POSTED" | "CANCELLED";
 
 export const returnDetailInclude = {
+  inspection: { include: { inspectedBy: { select: { id: true, fullName: true } } } },
   warehouse: { select: { id: true, code: true, name: true } },
   createdBy: { select: { id: true, fullName: true, email: true } },
   approvedBy: { select: { id: true, fullName: true } },
@@ -19,6 +20,7 @@ export const returnDetailInclude = {
       product: { select: { id: true, sku: true, name: true, trackBatch: true } },
       location: { select: { id: true, warehouseId: true, code: true, locationType: true, isActive: true } },
       batch: { select: { id: true, productId: true, warehouseId: true, batchNumber: true, status: true, expiryDate: true } },
+      inspection: { include: { inspectedBy: { select: { fullName: true } } } },
     },
   },
 } as const;
