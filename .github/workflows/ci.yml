@@ -34,6 +34,8 @@ jobs:
       FRONTEND_URL: http://localhost:3000
       NODE_ENV: test
       RUN_INTEGRATION_TESTS: "true"
+      # Used only to create the disposable CI fixture database.
+      ADMIN_PASSWORD: ci-only-password-for-disposable-database
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -44,6 +46,8 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - run: npx prisma migrate deploy
+      # The integration rollback test requires at least one persisted user.
+      - run: npm run seed
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
