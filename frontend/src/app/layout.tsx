@@ -7,7 +7,6 @@ import AuthShell from "@/components/auth/AuthShell";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { GlobalAlertProvider } from "@/components/ui/GlobalAlert";
 import GlobalActionLoading from "@/components/ui/GlobalActionLoading";
-import GlobalMutationStatus from "@/components/ui/GlobalMutationStatus";
 
 import "./globals.css";
 
@@ -54,7 +53,6 @@ export default function RootLayout({
         <ThemeProvider>
         <GlobalAlertProvider>
         <GlobalActionLoading>
-        <GlobalMutationStatus />
         <AuthProvider>
           {/* ================================
               AUTHENTICATION SHELL

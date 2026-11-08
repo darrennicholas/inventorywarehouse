@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { apiRequest } from "@/lib/api";
+import { hasActionIntent } from "@/lib/action-intent";
 
 type PageResult<T> = { data: T[]; meta: { total: number } };
 export function usePagedMaster<T>(endpoint: string, page: number, pageSize: number, search: string, status: string, saving: boolean, setPage: Dispatch<SetStateAction<number>>) {
@@ -16,6 +17,6 @@ export function usePagedMaster<T>(endpoint: string, page: number, pageSize: numb
     } catch (reason) { if (!signal?.aborted) setError(reason instanceof Error ? reason.message : "Data tidak dapat dimuat."); }
     finally { if (!signal?.aborted) setLoading(false); }
   }, [endpoint, page, pageSize, search, status, setPage]);
-  useEffect(() => { if (saving) return; const controller = new AbortController(); const timer = window.setTimeout(() => void reload(controller.signal), 250); return () => { window.clearTimeout(timer); controller.abort(); }; }, [reload, saving]);
+  useEffect(() => { if (saving) return; const controller = new AbortController(); const timer = window.setTimeout(() => void reload(controller.signal), hasActionIntent() ? 0 : 250); return () => { window.clearTimeout(timer); controller.abort(); }; }, [reload, saving]);
   return { rows, total, loading, error, reload };
 }

@@ -3,6 +3,12 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+@theme inline {
+  --font-sans: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-serif: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+}
+
 /* Edge adds its own password reveal button; the form has an accessible toggle. */
 #login-password::-ms-reveal,
 #login-password::-ms-clear {
@@ -103,10 +109,7 @@ body {
   background: var(--background);
   color: var(--foreground);
 
-  font-family:
-    Arial,
-    Helvetica,
-    sans-serif;
+  font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
 
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -239,6 +242,20 @@ html.dark aside p {
 
 button:not(:disabled) {
   cursor: pointer;
+  transition: filter 180ms ease, box-shadow 180ms ease, background-color 180ms ease, border-color 180ms ease;
+}
+
+@media (hover: hover) {
+  button:not(:disabled):hover {
+    filter: brightness(1.06);
+    box-shadow: 0 5px 16px rgb(37 99 235 / 16%);
+  }
+  html.dark button:not(:disabled):hover { box-shadow: 0 5px 18px rgb(59 130 246 / 24%); }
+}
+button:not(:disabled):active { filter: brightness(.96); }
+button:focus-visible { outline: 2px solid #60a5fa; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  button:not(:disabled) { transition-duration: 0.01ms; }
 }
 
 button:disabled {
@@ -255,7 +272,9 @@ button[data-sf-action-loading="true"] {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
+  z-index: 2147483647;
+  background: rgb(15 23 42 / 38%);
+  backdrop-filter: blur(3px);
   cursor: wait;
 }
 
@@ -274,7 +293,6 @@ button[data-sf-action-loading="true"] {
   border-radius: 18px;
   box-shadow: 0 22px 60px rgba(15, 23, 42, 0.2);
   opacity: 0;
-  pointer-events: none;
   animation: sf-loading-in 150ms ease-out forwards;
 }
 
@@ -282,7 +300,7 @@ button[data-sf-action-loading="true"] {
 .sf-action-loading p { margin: 0; font-size: 1rem; font-weight: 700; line-height: 1.35; letter-spacing: -0.01em; }
 .sf-action-loading > div:nth-child(2) > span { display: block; margin-top: 5px; color: #64748b; font-size: 0.8125rem; }
 .sf-action-loading-progress { grid-column: 1 / -1; height: 6px; overflow: hidden; border-radius: 9999px; background: #e8eef8; }
-.sf-action-loading-progress-bar { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #3867f6, #20a4ef); animation: sf-loading-progress 1000ms linear forwards; }
+.sf-action-loading-progress-bar { display: block; width: 45%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #3867f6, #20a4ef); animation: sf-loading-progress 1.2s ease-in-out infinite; }
 .dark .sf-action-loading { color: #eef4ff; background: rgba(20, 33, 55, 0.98); border-color: #344661; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.36); }
 .dark .sf-action-loading > div:nth-child(2) > span { color: #a9b9d2; }
 .dark .sf-action-loading-spinner { border-color: #36517a; border-top-color: #60a5fa; }
@@ -290,7 +308,12 @@ button[data-sf-action-loading="true"] {
 
 @keyframes sf-action-spin { to { transform: rotate(360deg); } }
 @keyframes sf-loading-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
-@keyframes sf-loading-progress { to { width: 100%; } }
+@keyframes sf-loading-progress { from { transform: translateX(-110%); } to { transform: translateX(330%); } }
+@media (prefers-reduced-motion: reduce) {
+  .sf-action-loading { animation-duration: 0.01ms; }
+  .sf-action-loading-spinner { animation-duration: 2s; }
+  .sf-action-loading-progress-bar { animation: none; width: 100%; }
+}
 
 input,
 select,

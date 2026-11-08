@@ -2,6 +2,7 @@
 "use client";
 
 import GlobalLoading from "@/components/ui/GlobalLoading";
+import { clearActionIntent } from "@/lib/action-intent";
 import { useEffect, useState } from "react";
 
 import {
@@ -449,6 +450,7 @@ export default function Home() {
   // ====================================
 
   function navigate(page: Page) {
+    clearActionIntent();
     setActivePage(page);
     setMobileMenuOpen(false);
 
@@ -487,6 +489,7 @@ export default function Home() {
   // ====================================
 
   function openAddModal() {
+    clearActionIntent();
     setActivePage("products");
     setProductMenuOpen(true);
     setMobileMenuOpen(false);
@@ -549,6 +552,7 @@ export default function Home() {
 
         <button
           type="button"
+          data-sf-action-navigation
           aria-label="Close sidebar"
           onClick={() =>
             setMobileMenuOpen(false)
@@ -563,7 +567,7 @@ export default function Home() {
       {/* SIDEBAR NAVIGATION */}
       {/* ================================= */}
 
-      <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-5">
+      <nav data-sf-action-navigation className="min-h-0 flex-1 overflow-y-auto px-3 py-5">
         <p
           className={`mb-2 whitespace-nowrap px-3 font-bold uppercase text-slate-400 ${
             sidebarCollapsed
@@ -834,6 +838,7 @@ export default function Home() {
       {mobileMenuOpen && (
         <button
           type="button"
+          data-sf-action-navigation
           aria-label="Close navigation"
           onClick={() =>
             setMobileMenuOpen(false)
@@ -852,6 +857,7 @@ export default function Home() {
             {/* MOBILE MENU BUTTON */}
             <button
               type="button"
+              data-sf-action-navigation
               aria-label="Open sidebar"
               onClick={() =>
                 setMobileMenuOpen(true)

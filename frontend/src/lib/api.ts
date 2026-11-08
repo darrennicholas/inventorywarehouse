@@ -1,3 +1,5 @@
+import { hasActionIntent, markActionIntent } from "@/lib/action-intent";
+
 
 function normalizeApiUrl(value: string): string {
   return value
@@ -17,13 +19,11 @@ function apiUrl(endpoint: string): string {
 }
 
 export async function downloadApiFile(endpoint: string, filename: string) {
-  const response = await fetch(apiUrl(endpoint), { credentials: "include", headers: { Accept: "text/csv" } });
-  if (!response.ok) throw new Error(`Download gagal (${response.status}). Pastikan Anda memiliki akses laporan dan stok.`);
-  const blob = await response.blob();
+  const blob = await apiDownload(endpoint);
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url; anchor.download = filename; anchor.click();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 let csrfToken: string | null = null;
@@ -81,11 +81,13 @@ export function apiRequest<T>(endpoint: string, options: RequestInit = {}): Prom
   const existing = key ? pendingMutations.get(key)?.get(bodyKey) : undefined;
   if (existing) return existing as Promise<T>;
   const id = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+  const userInitiated = hasActionIntent();
   const emit = (phase: "start" | "end") => {
-    if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("stockflow:action-request", { detail: { id, phase, method, endpoint } }));
+    if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("stockflow:action-request", { detail: { id, phase, method, endpoint, userInitiated } }));
   };
   emit("start");
   const request = performApiRequest<T>(endpoint, options).finally(() => {
+    if (userInitiated && !/^\/api\/auth\/me(?:[/?]|$)/.test(endpoint) && !(method === "GET" && /^\/api\/notifications(?:[/?]|$)/.test(endpoint))) markActionIntent();
     emit("end");
     if (key) {
       const group = pendingMutations.get(key);
@@ -192,6 +194,14 @@ async function performApiRequest<T>(
 }
 
 export async function apiDownload(endpoint: string): Promise<Blob> {
+  const id = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+  const userInitiated = hasActionIntent();
+  const emit = (phase: "start" | "end") => { if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("stockflow:action-request", { detail: { id, phase, method: "GET", endpoint, userInitiated } })); };
+  emit("start");
+  try { return await performApiDownload(endpoint); } finally { if (userInitiated) markActionIntent(); emit("end"); }
+}
+
+async function performApiDownload(endpoint: string): Promise<Blob> {
   let response: Response;
   try {
     response = await fetch(apiUrl(endpoint), {

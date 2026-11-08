@@ -16,6 +16,7 @@ import { AlertCircle, Barcode, Package, Plus, RefreshCw, Search } from "lucide-r
 
 import { productService } from "@/services/product.service";
 import { apiRequest } from "@/lib/api";
+import { hasActionIntent } from "@/lib/action-intent";
 
 import type {
   Product,
@@ -84,7 +85,7 @@ export default function ProductsView({
     } catch (failure) { if (!signal?.aborted) setError(failure instanceof Error ? failure.message : "Produk tidak dapat dimuat."); }
     finally { if (!signal?.aborted) setLoading(false); }
   }, [page, pageSize, search]);
-  useEffect(() => { const controller = new AbortController(); const timer = window.setTimeout(() => void fetchProducts(controller.signal), 250); return () => { window.clearTimeout(timer); controller.abort(); }; }, [fetchProducts, revision]);
+  useEffect(() => { const controller = new AbortController(); const timer = window.setTimeout(() => void fetchProducts(controller.signal), hasActionIntent() ? 0 : 250); return () => { window.clearTimeout(timer); controller.abort(); }; }, [fetchProducts, revision]);
 
   // Modal
   const [modalOpen, setModalOpen] = useState(false);

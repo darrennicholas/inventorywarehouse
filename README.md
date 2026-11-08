@@ -124,7 +124,7 @@ Buka [http://localhost:3000](http://localhost:3000). Masuk menggunakan `ADMIN_EM
 
 1. Buat branch kerja dari `main` dan ubah source/migration yang relevan.
 2. Untuk perubahan Prisma, edit `backend/prisma/schema.prisma`, buat migration bernama dengan `npx prisma migrate dev --name <nama-singkat>` hanya pada database development, lalu commit folder migration dan schema. Pada server/CI gunakan `npx prisma migrate deploy`, bukan `migrate dev`.
-3. Jalankan `npm run typecheck`, `npm test`, dan `npm run build` di `backend`; jalankan `npx tsc --noEmit`, `npm run lint`, dan `npm run build` di `frontend`.
+3. Jalankan `npm run typecheck`, `npm test`, dan `npm run build` di `backend`; jalankan `npx tsc --noEmit`, `npm run lint`, `npm test`, dan `npm run build` di `frontend`.
 4. Push branch dan buat Pull Request. GitHub Actions menjalankan pemeriksaan frontend dan backend dengan PostgreSQL sementara, migration, dan integration tests.
 5. Merge setelah CI lulus. Deploy source dan environment production, ambil backup, terapkan migration, generate Prisma client/build sesuai platform, lalu smoke-test login, izin role, operasi stok, lampiran, dan health check.
 
@@ -151,7 +151,7 @@ Commit source, migration SQL, lockfile, dokumentasi, `.env.example`, dan workflo
 - Server-side pagination dan pencarian tersedia pada master data, transaksi, return, fulfillment, audit log, notifikasi, attachment, stock report, batch, dan expiry report. Antrean Dashboard, karantina, sumber purchase, dan target kredit juga memiliki halaman dan pencarian.
 - Snapshot penutupan valuasi harian per produk/gudang mulai tercatat sejak migration dipasang; data masa lalu sebelum snapshot pertama tidak direka ulang.
 - Kapasitas lokasi dapat menjadi batas opsional untuk `ITEM_UNITS`: aktifkan di detail lokasi dengan kapasitas positif. Penambahan stok memeriksa kapasitas dalam transaksi. Pallet dan meter kubik masih berupa informasi karena dimensi dan kemasan produk belum tersedia.
-- CI GitHub Actions memvalidasi migration pada PostgreSQL disposable, backend typecheck/tests/build, serta frontend typecheck/lint/build.
+- CI GitHub Actions memvalidasi migration pada PostgreSQL disposable, backend typecheck/tests/build, serta frontend typecheck/lint/tests/build.
 
 ## Revisi transaksi & costing — 30 Oktober 2026
 
@@ -247,6 +247,7 @@ Mapping tersebut berasal dari `ROLE_PRESETS` di `backend/src/rbac/permissions.ts
 | `frontend` | `npm run dev` | Menjalankan UI Next.js |
 | `frontend` | `npm run build` | Build production frontend |
 | `frontend` | `npm run lint` | Lint frontend |
+| `frontend` | `npm test` | Uji event action dan lifecycle loading |
 
 ## Upgrade Next.js berbasis security
 
@@ -382,7 +383,7 @@ Bagian workflow ini menggunakan tabel yang sudah tersedia. Revisi costing/settle
 
 ### Penyimpanan, laporan, dan notifikasi
 
-- Tombol Add/Edit/Delete tetap menggunakan transisi loading satu detik. Saat perubahan dikirim ke API, indikator penyimpanan muncul sampai request selesai; permintaan perubahan identik yang masih berlangsung digabung untuk mengurangi pengiriman ganda. Form dan upload tetap harus menonaktifkan tombol masing-masing saat diproses; ini bukan pengganti validasi atau idempotensi backend.
+- Action menampilkan modal loading global singkat dan tetap terbuka selama request yang dipicu action masih berlangsung. Perpindahan menu tidak menampilkan modal. Permintaan perubahan identik yang masih berlangsung digabung untuk mengurangi pengiriman ganda; validasi dan idempotensi backend tetap diperlukan.
 - Stock Report dan Payment Report menyediakan reset filter dan ekspor CSV untuk seluruh data yang cocok dengan filter, bukan hanya halaman yang terlihat. Stock Report menunjukkan saldo terkini per gudang; Payment Report memakai rentang tanggal transaksi dalam WIB. Audit Log memiliki filter server-side dan ekspor CSV dengan kriteria yang diterapkan.
 - Notifikasi low stock, approval, dan transaksi yang didukung dapat membuka dokumen terkait sesuai permission serta cakupan gudang saat ini. Notifikasi master data yang belum memiliki tautan langsung tetap ditampilkan sebagai informasi. Filter belum dibaca dan opsi pengelompokan tersedia; pengelompokan berlaku pada halaman notifikasi yang sedang ditampilkan dan disimpan per akun di browser.
 - Event identik untuk dokumen dan pesan yang sama dicegah agar tidak tercatat berulang dalam interval lima menit; histori yang sudah ada tidak dihapus. Tidak diperlukan migration baru untuk perubahan ini.
