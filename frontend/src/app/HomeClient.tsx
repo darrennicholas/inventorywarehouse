@@ -764,22 +764,6 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* SIDEBAR FOOTER */}
-      <div className="border-t border-slate-100 p-4">
-        <div className="flex items-center gap-2 text-xs text-slate-400">
-          <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
-
-          <span
-            className={
-              sidebarCollapsed
-                ? "lg:hidden"
-                : ""
-            }
-          >
-            Development Preview
-          </span>
-        </div>
-      </div>
     </aside>
   );
 
