@@ -379,9 +379,10 @@ npm run seed:access
 - **Partial receiving:** purchase berstatus `APPROVED` dapat diterima sebagian melalui `POST /api/operations/purchases/:id/receive`; sistem memperbarui `receivedQuantity`, `PARTIALLY_RECEIVED`/`RECEIVED`, dan `StockMovement` dalam satu transaction.
 - **Notification center:** `/api/notifications` membuat alert low stock dan approval berdasarkan permission pengguna. Alert tidak mengubah histori `StockMovement`.
 - **Attachments:** file PDF, CSV, PNG, JPG, atau WEBP maksimal 10 MB dapat ditautkan ke purchase, sale, adjustment, transfer, expense, payment, atau stock opname melalui `/api/attachments`.
-- **Role dashboard:** angka dashboard mengikuti role dan warehouse scope; akun `WAREHOUSE_STAFF` hanya melihat warehouse pada Staff record-nya.
+- **Role dashboard:** angka dashboard mengikuti role dan warehouse scope; akun `WAREHOUSE_STAFF` dan role khusus apa pun yang terhubung ke profil Staff dibatasi ke gudang assignment-nya. `ADMIN`, `WAREHOUSE_MANAGER`, `PROCUREMENT`, dan `AUDITOR` tetap memakai cakupan lintas gudang.
 - **Reports/export:** stock report memiliki CSV export dan barcode lookup; endpoint audit tetap mendukung pagination dan filter.
-- **Multi-warehouse scope:** Warehouse Staff dipaksa menggunakan warehouse assignment pada read, create, approval, transfer source, stock opname, dashboard, report, dan operations.
+- **Multi-warehouse scope:** Warehouse Staff dan role khusus yang terhubung ke profil Staff dipaksa menggunakan warehouse assignment pada read, create, approval, transfer source, stock opname, dashboard, report, dan operations. Perubahan master kategori, merek, satuan, customer, dan staff mencatat actor, request, serta data sebelum/sesudah dalam transaksi yang sama.
+- **Stock opname recovery:** approval ditolak jika stok sistem berubah sejak sesi dimulai; layar menampilkan produk terdampak dan menyediakan jalan pintas untuk membuat sesi hitung ulang. Refund/kredit adalah pencatatan internal dan tidak menjalankan atau memverifikasi transfer bank; cocokkan bukti dana secara terpisah.
 
 Migration workflow disimpan di `backend/prisma/migrations/20261015090000_add_workflow_features/migration.sql`. Jalankan `npx prisma migrate deploy` setelah PostgreSQL aktif sebelum menggunakan notification atau attachment API.
 

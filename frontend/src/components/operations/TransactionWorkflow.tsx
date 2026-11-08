@@ -28,7 +28,7 @@ const stages: Record<Kind, { label: string; statuses: string[]; next: string }[]
   opnames: [{ label: "Menghitung", statuses: ["DRAFT", "COUNTING"], next: "Petugas menghitung stok fisik dan mengirim hasilnya." }, { label: "Persetujuan", statuses: ["SUBMITTED"], next: "Approver opname memeriksa selisih stok." }, { label: "Selesai", statuses: ["APPROVED"], next: "Opname disetujui dan selisih diproses." }],
 };
 
-export default function TransactionWorkflow({ kind, id, status, returnType, creatorId, onChanged }: { kind: Kind; id: string; status: string; returnType?: "PURCHASE" | "SALE"; creatorId?: string | null; onChanged?: () => void }) {
+export default function TransactionWorkflow({ kind, id, status, returnType, creatorId, onChanged, onError }: { kind: Kind; id: string; status: string; returnType?: "PURCHASE" | "SALE"; creatorId?: string | null; onChanged?: () => void; onError?: (message: string) => void }) {
   const { can, user } = useAuth();
   const [events, setEvents] = useState<Event[]>([]);
   const [reservation, setReservation] = useState<{ createdAt: string | null; expiresAt: string | null; quantity: number } | null>(null);
@@ -61,7 +61,7 @@ export default function TransactionWorkflow({ kind, id, status, returnType, crea
     if (!await confirmAction("Setujui opname dan terapkan selisih ke stok?", { title: "Setujui opname", confirmLabel: "Ya, setujui", tone: "warning" })) return;
     setSaving(true); setError("");
     try { await apiRequest(`/api/stock-opnames/${id}/approve`, { method: "POST" }); onChanged?.(); }
-    catch (failure) { setError(failure instanceof Error ? failure.message : "Persetujuan gagal."); }
+    catch (failure) { const message = failure instanceof Error ? failure.message : "Persetujuan gagal."; setError(message); onError?.(message); }
     finally { setSaving(false); }
   }
 

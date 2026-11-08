@@ -7,7 +7,17 @@ import type { AuthContext } from "../middlewares/auth.middleware.ts";
  * supervisory, procurement and audit roles can work across warehouses.
  */
 export function warehouseScope(auth: AuthContext): string[] | undefined {
-  if (auth.roleCode !== "WAREHOUSE_STAFF") return undefined;
+  // These built-in roles are explicitly allowed to work across warehouses.
+  // Any staff-linked custom role inherits the warehouse boundary of its staff
+  // assignment, even if its custom role code is different.
+  const crossWarehouseRoles = new Set([
+    "ADMIN",
+    "WAREHOUSE_MANAGER",
+    "PROCUREMENT",
+    "AUDITOR",
+  ]);
+  if (crossWarehouseRoles.has(auth.roleCode)) return undefined;
+  if (auth.roleCode !== "WAREHOUSE_STAFF" && !auth.staffId) return undefined;
   if (!auth.warehouseId) {
     throw new AppError(403, "This staff account is not assigned to a warehouse");
   }

@@ -38,10 +38,10 @@ export async function writeAuditLog(
   });
 }
 
-export function requestAuditContext(req: { headers: Record<string, string | string[] | undefined>; ip?: string }) {
+export function requestAuditContext(req: { headers: Record<string, string | string[] | undefined>; ip?: string }, responseRequestId?: string) {
   const rawAgent = req.headers["user-agent"];
   return {
-    requestId: typeof req.headers["x-request-id"] === "string" ? req.headers["x-request-id"] : null,
+    requestId: responseRequestId ?? (typeof req.headers["x-request-id"] === "string" ? req.headers["x-request-id"] : null),
     ipAddress: req.ip ?? null,
     userAgent: Array.isArray(rawAgent) ? rawAgent[0] ?? null : rawAgent ?? null,
   };

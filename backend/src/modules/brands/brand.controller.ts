@@ -1,11 +1,14 @@
 
 import { asyncHandler } from "../../utils/asyncHandler.ts";
+import { AppError } from "../../utils/AppError.ts";
 import { requireUuid } from "../../utils/requireUuid.ts";
 
 import { brandService } from "./brand.service.ts";
 import { notifyByPermission } from "../notifications/notification.service.ts";
 import { masterListOptions, pageMeta, paginateArray } from "../../utils/pagination.ts";
 import { prisma } from "../../lib/prisma.ts";
+import { authOf } from "../../middlewares/auth.middleware.ts";
+import { requestAuditContext, writeAuditLog } from "../audit/audit.service.ts";
 
 import type {
   CreateBrandInput,
@@ -44,9 +47,13 @@ export const getBrandById = asyncHandler(
 
 export const createBrand = asyncHandler(
   async (req, res) => {
-    const data = await brandService.create(
-      req.body as CreateBrandInput
-    );
+    const input = req.body as CreateBrandInput;
+    const auditContext = requestAuditContext(req, res.locals.requestId as string | undefined);
+    const data = await prisma.$transaction(async (tx) => {
+      const created = await tx.brand.create({ data: input });
+      await writeAuditLog({ userId: authOf(req).userId, action: "CREATE", entity: "Brand", entityId: created.id, afterData: created, ...auditContext }, tx as never);
+      return created;
+    });
     await notifyByPermission({ permission: "brands.read", type: "BRAND_CREATED", title: "Brand created", message: `${data.name} was added to product master data.`, entity: "Brand", entityId: data.id });
 
     res.status(201).json({
@@ -61,10 +68,16 @@ export const updateBrand = asyncHandler(
   async (req, res) => {
     const id = requireUuid(req.params.id, "Brand ID");
 
-    const data = await brandService.update(
-      id,
-      req.body as UpdateBrandInput
-    );
+    const input = req.body as UpdateBrandInput;
+    const auditContext = requestAuditContext(req, res.locals.requestId as string | undefined);
+    const data = await prisma.$transaction(async (tx) => {
+      const before = await tx.brand.findUnique({ where: { id } });
+      if (!before) throw new AppError(404, "Brand not found");
+      if (before.isActive && input.isActive === false && await tx.product.count({ where: { brandId: id, isActive: true } })) throw new AppError(409, "Cannot deactivate Brand while active products use it");
+      const updated = await tx.brand.update({ where: { id }, data: input });
+      await writeAuditLog({ userId: authOf(req).userId, action: "UPDATE", entity: "Brand", entityId: id, beforeData: before, afterData: updated, ...auditContext }, tx as never);
+      return updated;
+    });
     await notifyByPermission({ permission: "brands.read", type: "BRAND_UPDATED", title: "Brand updated", message: `${data.name} was updated.`, entity: "Brand", entityId: data.id });
 
     res.status(200).json({
@@ -78,7 +91,16 @@ export const updateBrand = asyncHandler(
 export const deactivateBrand = asyncHandler(
   async (req, res) => {
     const id = requireUuid(req.params.id, "Brand ID");
-    const data = await brandService.deactivate(id);
+    const auditContext = requestAuditContext(req, res.locals.requestId as string | undefined);
+    const data = await prisma.$transaction(async (tx) => {
+      const before = await tx.brand.findUnique({ where: { id } });
+      if (!before) throw new AppError(404, "Brand not found");
+      const used = await tx.product.count({ where: { brandId: id, isActive: true } });
+      if (used) throw new AppError(409, `Cannot deactivate Brand used by ${used} active product(s)`);
+      const updated = await tx.brand.update({ where: { id }, data: { isActive: false } });
+      await writeAuditLog({ userId: authOf(req).userId, action: "DEACTIVATE", entity: "Brand", entityId: id, beforeData: before, afterData: updated, ...auditContext }, tx as never);
+      return updated;
+    });
     await notifyByPermission({ permission: "brands.read", type: "BRAND_DEACTIVATED", title: "Brand deactivated", message: `${data.name} was deactivated.`, entity: "Brand", entityId: data.id });
 
     res.status(200).json({

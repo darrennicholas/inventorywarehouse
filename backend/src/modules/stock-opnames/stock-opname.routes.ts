@@ -125,8 +125,13 @@ router.post("/:id/approve", requirePermission("stock-opnames.approve"), asyncHan
     if (session.status !== "SUBMITTED") throw new AppError(409, "Only submitted sessions can be approved");
     for (const line of [...session.lines].sort((a, b) => a.productId.localeCompare(b.productId))) {
       await tx.$queryRaw`SELECT "id" FROM "InventoryBalance" WHERE "productId" = ${line.productId}::uuid AND "warehouseId" = ${session.warehouseId}::uuid FOR UPDATE`;
-      const current = await tx.inventoryBalance.findUnique({ where: { productId_warehouseId: { productId: line.productId, warehouseId: session.warehouseId } }, select: { quantityOnHand: true } });
-      if ((current?.quantityOnHand ?? 0) !== line.systemQuantity) throw new AppError(409, `Stock changed since counting began for product ${line.productId}; start a new count before approval`);
+      const [current, product] = await Promise.all([
+        tx.inventoryBalance.findUnique({ where: { productId_warehouseId: { productId: line.productId, warehouseId: session.warehouseId } }, select: { quantityOnHand: true } }),
+        tx.product.findUnique({ where: { id: line.productId }, select: { sku: true, name: true } }),
+      ]);
+      if ((current?.quantityOnHand ?? 0) !== line.systemQuantity) {
+        throw new AppError(409, `Stok ${product?.sku ?? line.productId} - ${product?.name ?? "produk"} berubah setelah penghitungan dimulai. Sesi ini tidak dapat disetujui. Tutup sesi ini, buat sesi stock opname baru, lalu hitung ulang stok.`);
+      }
     }
     let varianceValue = 0;
     for (const line of session.lines) {

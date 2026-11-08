@@ -11,6 +11,8 @@ import { reconstructStockBalances } from "../src/modules/operations/inventory-hi
 import { csvCell, csvDocument } from "../src/utils/csv.ts";
 import { notificationEventKey } from "../src/modules/notifications/notification-key.ts";
 import { assertUsableBatch } from "../src/modules/operations/batch-safety.ts";
+import { warehouseScope, assertWarehouseAccess } from "../src/rbac/warehouse-scope.ts";
+import { writeAuditLog } from "../src/modules/audit/audit.service.ts";
 
 const integrationEnabled = Boolean(
   process.env.DATABASE_URL && process.env.RUN_INTEGRATION_TESTS === "true"
@@ -22,6 +24,25 @@ test("permission helper enforces the role permission matrix", () => {
   assert.equal(hasPermission(ROLE_PRESETS.PROCUREMENT, ["purchases.approve"]), true);
   assert.equal(hasPermission(ROLE_PRESETS.WAREHOUSE_STAFF, ["purchases.approve"]), false);
   assert.equal(hasPermission(ROLE_PRESETS.AUDITOR, ["products.write"]), false);
+});
+
+test("warehouse scope follows staff assignment for custom roles", () => {
+  const customStaff = { userId: "u1", sessionId: "s1", roleCode: "CUSTOM_COUNTER", staffId: "st1", warehouseId: "wh-a", permissions: [], csrfToken: "" };
+  assert.deepEqual(warehouseScope(customStaff), ["wh-a"]);
+  assert.throws(() => assertWarehouseAccess(customStaff, "wh-b"), /another warehouse/i);
+  assert.throws(() => warehouseScope({ ...customStaff, warehouseId: null }), /not assigned/i);
+  assert.equal(warehouseScope({ ...customStaff, roleCode: "ADMIN", warehouseId: null }), undefined);
+  assert.equal(warehouseScope({ ...customStaff, roleCode: "CUSTOM_NO_STAFF", staffId: null, warehouseId: null }), undefined);
+});
+
+test("audit writes preserve actor and before/after snapshots on the supplied transaction client", async () => {
+  let written: Record<string, unknown> | undefined;
+  const transactionClient = { auditLog: { create: async ({ data }: { data: Record<string, unknown> }) => { written = data; return data; } } };
+  await writeAuditLog({ userId: "actor-1", action: "UPDATE", entity: "Category", entityId: "category-1", beforeData: { name: "Old" }, afterData: { name: "New" }, requestId: "request-1" }, transactionClient as never);
+  assert.equal(written?.userId, "actor-1");
+  assert.deepEqual(written?.beforeData, { name: "Old" });
+  assert.deepEqual(written?.afterData, { name: "New" });
+  assert.equal(written?.requestId, "request-1");
 });
 
 test("approval always requires a different creator even when an old policy allows self approval", async () => {

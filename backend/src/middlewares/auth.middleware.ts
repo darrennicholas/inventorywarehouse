@@ -37,6 +37,7 @@ export type AuthContext = {
   userId: string;
   sessionId: string;
   roleCode: string;
+  staffId: string | null;
   warehouseId: string | null;
   permissions: string[];
   csrfToken: string;
@@ -115,6 +116,7 @@ export const requireAuth: RequestHandler = async (
           include: {
             staff: {
               select: {
+                id: true,
                 isActive: true,
                 warehouseId: true,
               },
@@ -157,6 +159,7 @@ export const requireAuth: RequestHandler = async (
       userId: session.userId,
       sessionId: session.id,
       roleCode: session.user.role.code,
+      staffId: session.user.staff?.id ?? null,
       warehouseId: session.user.staff?.warehouseId ?? null,
       csrfToken: createCsrfToken(session.id),
       permissions: session.user.role.permissions.map(

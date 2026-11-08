@@ -7,6 +7,8 @@ import { categoryService } from "./category.service.ts";
 import { notifyByPermission } from "../notifications/notification.service.ts";
 import { masterListOptions, pageMeta, paginateArray } from "../../utils/pagination.ts";
 import { prisma } from "../../lib/prisma.ts";
+import { authOf } from "../../middlewares/auth.middleware.ts";
+import { requestAuditContext, writeAuditLog } from "../audit/audit.service.ts";
 
 import type {
   CreateCategoryInput,
@@ -57,7 +59,12 @@ export const createCategory = asyncHandler(
   async (req, res) => {
     const data = req.body as CreateCategoryInput;
 
-    const category = await categoryService.create(data);
+    const auditContext = requestAuditContext(req, res.locals.requestId as string | undefined);
+    const category = await prisma.$transaction(async (tx) => {
+      const created = await tx.category.create({ data });
+      await writeAuditLog({ userId: authOf(req).userId, action: "CREATE", entity: "Category", entityId: created.id, afterData: created, ...auditContext }, tx as never);
+      return created;
+    });
     await notifyByPermission({ permission: "categories.read", type: "CATEGORY_CREATED", title: "Category created", message: `${category.name} was added to product master data.`, entity: "Category", entityId: category.id });
 
     res.status(201).json({
@@ -73,7 +80,14 @@ export const updateCategory = asyncHandler(
     const id = getCategoryId(req.params.id);
     const data = req.body as UpdateCategoryInput;
 
-    const category = await categoryService.update(id, data);
+    const auditContext = requestAuditContext(req, res.locals.requestId as string | undefined);
+    const category = await prisma.$transaction(async (tx) => {
+      const before = await tx.category.findUnique({ where: { id } });
+      if (!before) throw new AppError(404, "Category not found");
+      const updated = await tx.category.update({ where: { id }, data });
+      await writeAuditLog({ userId: authOf(req).userId, action: "UPDATE", entity: "Category", entityId: id, beforeData: before, afterData: updated, ...auditContext }, tx as never);
+      return updated;
+    });
     await notifyByPermission({ permission: "categories.read", type: "CATEGORY_UPDATED", title: "Category updated", message: `${category.name} was updated.`, entity: "Category", entityId: category.id });
 
     res.status(200).json({
@@ -86,7 +100,14 @@ export const updateCategory = asyncHandler(
 
 export const deleteCategory = asyncHandler(async (req, res) => {
   const id = getCategoryId(req.params.id);
-  const category = await categoryService.deactivate(id);
+  const auditContext = requestAuditContext(req, res.locals.requestId as string | undefined);
+  const category = await prisma.$transaction(async (tx) => {
+    const before = await tx.category.findUnique({ where: { id } });
+    if (!before) throw new AppError(404, "Category not found");
+    const updated = await tx.category.update({ where: { id }, data: { isActive: false } });
+    await writeAuditLog({ userId: authOf(req).userId, action: "DEACTIVATE", entity: "Category", entityId: id, beforeData: before, afterData: updated, ...auditContext }, tx as never);
+    return updated;
+  });
   await notifyByPermission({ permission: "categories.read", type: "CATEGORY_DEACTIVATED", title: "Category deactivated", message: `${category.name} was deactivated.`, entity: "Category", entityId: category.id });
 
   res.status(200).json({
