@@ -5,6 +5,17 @@ import { clearActionIntent, markActionIntent } from "@/lib/action-intent";
 
 export const ACTION_REQUEST_EVENT = "stockflow:action-request";
 export type ActionRequestEvent = { id: string; phase: "start" | "end"; method: string; endpoint: string; userInitiated: boolean };
+const MINIMUM_FEEDBACK_MS = 1000;
+
+function isDismissControl(control: HTMLElement) {
+  if (control.hasAttribute("data-sf-action-loading-ignore")) return true;
+  const label = [control.getAttribute("aria-label"), control.getAttribute("title"), control.textContent]
+    .filter(Boolean)
+    .join(" ")
+    .trim()
+    .toLocaleLowerCase();
+  return /^(?:cancel|close|batal|tutup)(?:\s|$)/i.test(label);
+}
 
 /** Display a modal only for requests started by an explicit user action. */
 export default function GlobalActionLoading({ children }: { children: React.ReactNode }) {
@@ -21,17 +32,22 @@ export default function GlobalActionLoading({ children }: { children: React.Reac
       const id = `ui:${++feedbackCounter}`;
       pending.add(id);
       setCount(pending.size);
-      const timer = setTimeout(() => { timers.delete(timer); pending.delete(id); setCount(pending.size); }, 250);
+      const timer = setTimeout(() => { timers.delete(timer); pending.delete(id); setCount(pending.size); }, MINIMUM_FEEDBACK_MS);
       timers.add(timer);
     }
     function captureAction(event: Event) {
       const target = event.target;
       if (!(target instanceof Element)) return;
       if (target.closest("[data-sf-action-navigation], .sf-action-loading-backdrop")) { clearActionIntent(); return; }
-      if (event.type === "submit") { markActionIntent(); showActionFeedback(); return; }
+      if (event.type === "submit") {
+        const submitter = (event as SubmitEvent).submitter;
+        if (submitter instanceof HTMLElement && isDismissControl(submitter)) { clearActionIntent(); return; }
+        markActionIntent(); showActionFeedback(); return;
+      }
       if (event.type === "change" && target instanceof HTMLInputElement && target.type === "file") { markActionIntent(true); showActionFeedback(); return; }
       const control = target.closest<HTMLElement>("button, [role='button'], input[type='submit']");
       if (!control || (control instanceof HTMLButtonElement && control.disabled)) return;
+      if (isDismissControl(control)) { clearActionIntent(); return; }
       markActionIntent();
       showActionFeedback();
     }
