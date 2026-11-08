@@ -28,6 +28,19 @@ export default function GlobalActionLoading({ children }: { children: React.Reac
     const pending = active.current;
     const timers = new Set<ReturnType<typeof setTimeout>>();
     let feedbackCounter = 0;
+    function disableUnconfiguredBrowserSuggestions(root: ParentNode) {
+      if (root instanceof HTMLInputElement && root.type !== "password" && !root.hasAttribute("autocomplete")) root.setAttribute("autocomplete", "off");
+      if (root instanceof HTMLTextAreaElement && !root.hasAttribute("autocomplete")) root.setAttribute("autocomplete", "off");
+      root.querySelectorAll<HTMLInputElement>("input:not([type='password']):not([autocomplete])").forEach((input) => input.setAttribute("autocomplete", "off"));
+      root.querySelectorAll<HTMLTextAreaElement>("textarea:not([autocomplete])").forEach((textarea) => textarea.setAttribute("autocomplete", "off"));
+    }
+    disableUnconfiguredBrowserSuggestions(document);
+    const inputObserver = new MutationObserver((records) => {
+      for (const record of records) for (const node of record.addedNodes) {
+        if (node instanceof HTMLElement) disableUnconfiguredBrowserSuggestions(node);
+      }
+    });
+    inputObserver.observe(document.documentElement, { childList: true, subtree: true });
     function showActionFeedback() {
       const id = `ui:${++feedbackCounter}`;
       pending.add(id);
@@ -72,6 +85,7 @@ export default function GlobalActionLoading({ children }: { children: React.Reac
     window.addEventListener(ACTION_REQUEST_EVENT, requestChanged);
     window.addEventListener("stockflow:action-navigation", clearNavigationFeedback);
     return () => {
+      inputObserver.disconnect();
       document.removeEventListener("click", captureAction, true);
       document.removeEventListener("submit", captureAction, true);
       document.removeEventListener("change", captureAction, true);
