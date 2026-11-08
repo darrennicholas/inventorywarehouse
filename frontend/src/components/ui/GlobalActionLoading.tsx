@@ -17,6 +17,17 @@ function isDismissControl(control: HTMLElement) {
   return /^(?:cancel|close|batal|tutup)(?:\s|$)/i.test(label);
 }
 
+function isActionColumnControl(control: HTMLElement) {
+  if (control.closest("[data-sf-action-column]")) return true;
+  const cell = control.closest<HTMLTableCellElement>("td");
+  const table = cell?.closest("table");
+  if (!cell || !table) return false;
+  const actionHeaders = Array.from(table.querySelectorAll<HTMLTableCellElement>("thead th, thead td"));
+  return actionHeaders.some((header) =>
+    header.cellIndex === cell.cellIndex && /^(?:actions?|aksi|tindakan)$/i.test(header.textContent?.trim() ?? "")
+  );
+}
+
 /** Display a modal only for requests started by an explicit user action. */
 export default function GlobalActionLoading({ children }: { children: React.ReactNode }) {
   const [count, setCount] = useState(0);
@@ -54,13 +65,17 @@ export default function GlobalActionLoading({ children }: { children: React.Reac
       if (target.closest("[data-sf-action-navigation], .sf-action-loading-backdrop")) { clearActionIntent(); return; }
       if (event.type === "submit") {
         const submitter = (event as SubmitEvent).submitter;
-        if (submitter instanceof HTMLElement && isDismissControl(submitter)) { clearActionIntent(); return; }
+        if (!(submitter instanceof HTMLElement) || isDismissControl(submitter) || !isActionColumnControl(submitter)) { clearActionIntent(); return; }
         markActionIntent(); showActionFeedback(); return;
       }
-      if (event.type === "change" && target instanceof HTMLInputElement && target.type === "file") { markActionIntent(true); showActionFeedback(); return; }
+      if (event.type === "change" && target instanceof HTMLInputElement && target.type === "file") {
+        const cellAction = isActionColumnControl(target);
+        if (cellAction) { markActionIntent(true); showActionFeedback(); } else clearActionIntent();
+        return;
+      }
       const control = target.closest<HTMLElement>("button, [role='button'], input[type='submit']");
       if (!control || (control instanceof HTMLButtonElement && control.disabled)) return;
-      if (isDismissControl(control)) { clearActionIntent(); return; }
+      if (isDismissControl(control) || !isActionColumnControl(control)) { clearActionIntent(); return; }
       markActionIntent();
       showActionFeedback();
     }
