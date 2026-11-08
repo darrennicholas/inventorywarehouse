@@ -273,8 +273,7 @@ button[data-sf-action-loading="true"] {
   align-items: center;
   justify-content: center;
   z-index: 2147483647;
-  background: rgb(15 23 42 / 38%);
-  backdrop-filter: blur(3px);
+  background: #f1f5f9;
   cursor: wait;
 }
 
@@ -302,6 +301,7 @@ button[data-sf-action-loading="true"] {
 .sf-action-loading-progress { grid-column: 1 / -1; height: 6px; overflow: hidden; border-radius: 9999px; background: #e8eef8; }
 .sf-action-loading-progress-bar { display: block; width: 45%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #3867f6, #20a4ef); animation: sf-loading-progress 1.2s ease-in-out infinite; }
 .dark .sf-action-loading { color: #eef4ff; background: rgba(20, 33, 55, 0.98); border-color: #344661; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.36); }
+.dark .sf-action-loading-backdrop { background: #0f172a; }
 .dark .sf-action-loading > div:nth-child(2) > span { color: #a9b9d2; }
 .dark .sf-action-loading-spinner { border-color: #36517a; border-top-color: #60a5fa; }
 .dark .sf-action-loading-progress { background: #263852; }
