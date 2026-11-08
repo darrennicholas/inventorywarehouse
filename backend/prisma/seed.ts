@@ -52,6 +52,17 @@ async function seedAccess(adminEmail: string, adminPassword: string, demoPasswor
 
   const roles = await prisma.role.findMany({ where: { code: { in: [...ROLE_CODES] } } });
   const roleMap = new Map(roles.map((role) => [role.code as RoleCode, role.id]));
+  if (await prisma.approvalPolicy.count() === 0) {
+    const policy = (subject: "PURCHASE" | "ADJUSTMENT" | "RETURN" | "STOCK_OPNAME", minimumAmount: number, maximumAmount: number | null, approverCode: RoleCode) => ({
+      subject, minimumAmount, maximumAmount, approverRoleId: roleMap.get(approverCode)!, requiresDifferentCreator: true, isActive: true,
+    });
+    await prisma.approvalPolicy.createMany({ data: [
+      policy("PURCHASE", 0, 9_999_999, "PROCUREMENT"), policy("PURCHASE", 10_000_000, 49_999_999, "WAREHOUSE_MANAGER"), policy("PURCHASE", 50_000_000, null, "ADMIN"),
+      policy("ADJUSTMENT", 0, 4_999_999, "WAREHOUSE_MANAGER"), policy("ADJUSTMENT", 5_000_000, null, "ADMIN"),
+      policy("RETURN", 0, 4_999_999, "WAREHOUSE_MANAGER"), policy("RETURN", 5_000_000, null, "ADMIN"),
+      policy("STOCK_OPNAME", 0, 4_999_999, "WAREHOUSE_MANAGER"), policy("STOCK_OPNAME", 5_000_000, null, "ADMIN"),
+    ] });
+  }
 
   const staffData = [
     { staffCode: "STF-ADM-001", fullName: "System Administrator", email: adminEmail, phone: "0812-0000-0001", position: "System Administrator", warehouseCode: "WH-JKT" },
@@ -59,6 +70,11 @@ async function seedAccess(adminEmail: string, adminPassword: string, demoPasswor
     { staffCode: "STF-WHS-001", fullName: "Siti Rahma", email: process.env.WAREHOUSE_STAFF_EMAIL?.trim().toLowerCase() ?? "warehouse.staff@stockflow.local", phone: "0812-0000-0003", position: "Warehouse Staff", warehouseCode: "WH-BDG" },
     { staffCode: "STF-PRC-001", fullName: "Dimas Saputra", email: process.env.PROCUREMENT_EMAIL?.trim().toLowerCase() ?? "procurement@stockflow.local", phone: "0812-0000-0004", position: "Procurement Officer", warehouseCode: "WH-JKT" },
     { staffCode: "STF-AUD-001", fullName: "Nadia Putri", email: process.env.AUDITOR_EMAIL?.trim().toLowerCase() ?? "auditor@stockflow.local", phone: "0812-0000-0005", position: "Inventory Auditor", warehouseCode: "WH-SBY" },
+    { staffCode: "STF-ADM-002", fullName: "Alya Administrator", email: "admin.demo2@stockflow.local", phone: "0812-0000-0011", position: "System Administrator", warehouseCode: "WH-JKT" },
+    { staffCode: "STF-WHM-002", fullName: "Bima Prakoso", email: "warehouse.manager.demo2@stockflow.local", phone: "0812-0000-0012", position: "Warehouse Manager", warehouseCode: "WH-BDG" },
+    { staffCode: "STF-WHS-002", fullName: "Citra Lestari", email: "warehouse.staff.demo2@stockflow.local", phone: "0812-0000-0013", position: "Warehouse Staff", warehouseCode: "WH-SBY" },
+    { staffCode: "STF-PRC-002", fullName: "Dedi Kurniawan", email: "procurement.demo2@stockflow.local", phone: "0812-0000-0014", position: "Procurement Officer", warehouseCode: "WH-JKT" },
+    { staffCode: "STF-AUD-002", fullName: "Eka Wulandari", email: "auditor.demo2@stockflow.local", phone: "0812-0000-0015", position: "Inventory Auditor", warehouseCode: "WH-BDG" },
   ];
 
   const warehouses = await prisma.warehouse.findMany({ select: { id: true, code: true } });
@@ -81,9 +97,16 @@ async function seedAccess(adminEmail: string, adminPassword: string, demoPasswor
     { email: process.env.WAREHOUSE_STAFF_EMAIL?.trim().toLowerCase() ?? "warehouse.staff@stockflow.local", fullName: "Siti Rahma", roleCode: "WAREHOUSE_STAFF" },
     { email: process.env.PROCUREMENT_EMAIL?.trim().toLowerCase() ?? "procurement@stockflow.local", fullName: "Dimas Saputra", roleCode: "PROCUREMENT" },
     { email: process.env.AUDITOR_EMAIL?.trim().toLowerCase() ?? "auditor@stockflow.local", fullName: "Nadia Putri", roleCode: "AUDITOR" },
+    { email: "admin.demo2@stockflow.local", fullName: "Alya Administrator", roleCode: "ADMIN" },
+    { email: "warehouse.manager.demo2@stockflow.local", fullName: "Bima Prakoso", roleCode: "WAREHOUSE_MANAGER" },
+    { email: "warehouse.staff.demo2@stockflow.local", fullName: "Citra Lestari", roleCode: "WAREHOUSE_STAFF" },
+    { email: "procurement.demo2@stockflow.local", fullName: "Dedi Kurniawan", roleCode: "PROCUREMENT" },
+    { email: "auditor.demo2@stockflow.local", fullName: "Eka Wulandari", roleCode: "AUDITOR" },
   ];
+  if (new Set(users.map((user) => user.email)).size !== users.length) throw new Error("Email akun demo harus unik; periksa nilai *_EMAIL di backend/.env.");
 
   const userMap = new Map<string, string>();
+  const roleUserMap = new Map<RoleCode, string>();
   for (const user of users) {
     const roleId = roleMap.get(user.roleCode);
     const staffId = staffMap.get(user.email);
@@ -99,8 +122,9 @@ async function seedAccess(adminEmail: string, adminPassword: string, demoPasswor
       create: { email: user.email, fullName: user.fullName, roleId, staffId, passwordHash: rolePasswordHash, isActive: true },
     });
     userMap.set(user.email, record.id);
+    if (!roleUserMap.has(user.roleCode)) roleUserMap.set(user.roleCode, record.id);
   }
-  return { userMap };
+  return { userMap, roleUserMap };
 }
 
 async function main() {
@@ -119,16 +143,29 @@ async function main() {
     ["Accessories", "Aksesori komputer dan jaringan"],
     ["Office Supplies", "Kebutuhan operasional kantor"],
     ["Safety Equipment", "Perlengkapan keselamatan gudang"],
+    ["Networking", "Perangkat jaringan dan konektivitas"],
+    ["Storage", "Media penyimpanan dan arsip digital"],
+    ["Packaging", "Perlengkapan kemasan dan pengiriman"],
+    ["Tools", "Peralatan pemeliharaan dan perbaikan"],
+    ["Cleaning", "Kebutuhan kebersihan area kerja"],
+    ["Furniture", "Perabot dan perlengkapan ruang kerja"],
   ] as const;
   for (const [name, description] of categoryData) await prisma.category.upsert({ where: { name }, update: { description, isActive: true }, create: { name, description } });
-  for (const name of ["Lenovo", "Logitech", "Epson", "Ugreen"])
+  for (const name of ["Lenovo", "Logitech", "Epson", "Ugreen", "TP-Link", "Samsung", "Canon", "Brother", "Cisco", "Adata"])
     await prisma.brand.upsert({ where: { name }, update: { isActive: true }, create: { name } });
-  for (const [code, name] of [["PCS", "Pieces"], ["BOX", "Box"], ["ROLL", "Roll"], ["SET", "Set"]] as const)
+  for (const [code, name] of [["PCS", "Pieces"], ["BOX", "Box"], ["ROLL", "Roll"], ["SET", "Set"], ["UNIT", "Unit"], ["PACK", "Pack"], ["KG", "Kilogram"], ["M", "Meter"], ["LTR", "Liter"], ["PAIR", "Pair"]] as const)
     await prisma.unit.upsert({ where: { code }, update: { name, isActive: true }, create: { code, name } });
   for (const warehouse of [
     { code: "WH-JKT", name: "Gudang Jakarta Pusat", address: "Jl. Gatot Subroto No. 18, Jakarta Selatan" },
     { code: "WH-BDG", name: "Gudang Bandung", address: "Jl. Asia Afrika No. 45, Bandung" },
     { code: "WH-SBY", name: "Gudang Surabaya", address: "Jl. Basuki Rahmat No. 90, Surabaya" },
+    { code: "WH-DPS", name: "Gudang Denpasar", address: "Jl. Gatot Subroto, Denpasar" },
+    { code: "WH-MDN", name: "Gudang Medan", address: "Jl. Sisingamangaraja, Medan" },
+    { code: "WH-MKS", name: "Gudang Makassar", address: "Jl. Perintis Kemerdekaan, Makassar" },
+    { code: "WH-SMG", name: "Gudang Semarang", address: "Jl. Kaligawe, Semarang" },
+    { code: "WH-MLG", name: "Gudang Malang", address: "Jl. Letjen Sutoyo, Malang" },
+    { code: "WH-YGY", name: "Gudang Yogyakarta", address: "Jl. Ring Road Utara, Yogyakarta" },
+    { code: "WH-BKS", name: "Gudang Bekasi", address: "Jl. Ahmad Yani, Bekasi" },
   ]) await prisma.warehouse.upsert({ where: { code: warehouse.code }, update: { ...warehouse, isActive: true }, create: warehouse });
   for (const supplier of [
     { code: "SUP-001", name: "PT Teknologi Nusantara", email: "sales@teknologinusantara.test", phone: "021-555-1001", address: "Jakarta" },
@@ -136,6 +173,11 @@ async function main() {
     { code: "SUP-003", name: "PT Sumber Jaringan", email: "halo@sumberjaringan.test", phone: "031-555-1003", address: "Surabaya" },
     { code: "SUP-004", name: "UD Aman Sejahtera", email: "admin@amansejahtera.test", phone: "021-555-1004", address: "Tangerang" },
     { code: "SUP-005", name: "PT Solusi Perkantoran", email: "info@solusikantor.test", phone: "021-555-1005", address: "Bekasi" },
+    { code: "SUP-006", name: "CV Jaringan Prima", email: "sales@jaringanprima.test", phone: "0361-555-1006", address: "Denpasar" },
+    { code: "SUP-007", name: "PT Data Nusantara", email: "order@datanusantara.test", phone: "061-555-1007", address: "Medan" },
+    { code: "SUP-008", name: "UD Teknik Mandiri", email: "info@teknikmandiri.test", phone: "0411-555-1008", address: "Makassar" },
+    { code: "SUP-009", name: "PT Kemas Aman", email: "sales@kemasaman.test", phone: "024-555-1009", address: "Semarang" },
+    { code: "SUP-010", name: "CV Furnitur Kerja", email: "order@furniturkerja.test", phone: "0341-555-1010", address: "Malang" },
   ]) await prisma.supplier.upsert({ where: { code: supplier.code }, update: { ...supplier, isActive: true }, create: supplier });
   for (const customer of [
     { code: "CUS-001", name: "PT Cipta Digital", email: "purchasing@ciptadigital.test", phone: "021-444-2001", address: "Jakarta" },
@@ -143,6 +185,11 @@ async function main() {
     { code: "CUS-003", name: "Toko Komputer Jaya", email: "order@komputerjaya.test", phone: "031-444-2003", address: "Surabaya" },
     { code: "CUS-004", name: "PT Arunika Media", email: "finance@arunikamedia.test", phone: "021-444-2004", address: "Jakarta" },
     { code: "CUS-005", name: "Klinik Sehat Sentosa", email: "procurement@sehat.test", phone: "021-444-2005", address: "Depok" },
+    { code: "CUS-006", name: "PT Bali Digital", email: "purchasing@balidigital.test", phone: "0361-444-2006", address: "Denpasar" },
+    { code: "CUS-007", name: "CV Sumatera Komputer", email: "order@sumaterakomputer.test", phone: "061-444-2007", address: "Medan" },
+    { code: "CUS-008", name: "Toko Makassar Elektronik", email: "admin@makassarelektronik.test", phone: "0411-444-2008", address: "Makassar" },
+    { code: "CUS-009", name: "PT Semarang Logistik", email: "finance@smglogistik.test", phone: "024-444-2009", address: "Semarang" },
+    { code: "CUS-010", name: "CV Malang Sejahtera", email: "purchasing@malangsejahtera.test", phone: "0341-444-2010", address: "Malang" },
   ]) await prisma.customer.upsert({ where: { code: customer.code }, update: { ...customer, isActive: true }, create: customer });
 
   const categories = new Map((await prisma.category.findMany()).map((item) => [item.name, item.id]));
@@ -171,19 +218,28 @@ async function main() {
   const warehouseList = await prisma.warehouse.findMany({ select: { id: true, code: true } });
   const warehouseMap = new Map(warehouseList.map((item) => [item.code, item.id]));
   const locationByCode = new Map<string, string>();
-  for (const location of [
+  for (const location of ([
     { warehouseCode: "WH-JKT", code: "JKT-A01", name: "Jakarta Aisle 01", zone: "A", rack: "01", shelf: "01", bin: "01" },
     { warehouseCode: "WH-JKT", code: "JKT-B01", name: "Jakarta Aisle 02", zone: "B", rack: "01", shelf: "01", bin: "01" },
     { warehouseCode: "WH-BDG", code: "BDG-A01", name: "Bandung Aisle 01", zone: "A", rack: "01", shelf: "01", bin: "01" },
     { warehouseCode: "WH-SBY", code: "SBY-A01", name: "Surabaya Aisle 01", zone: "A", rack: "01", shelf: "01", bin: "01" },
-  ]) {
+    { warehouseCode: "WH-DPS", code: "DPS-A01", name: "Denpasar Aisle 01", zone: "A", rack: "01", shelf: "01", bin: "01" },
+    { warehouseCode: "WH-MDN", code: "MDN-A01", name: "Medan Aisle 01", zone: "A", rack: "01", shelf: "01", bin: "01" },
+    { warehouseCode: "WH-MKS", code: "MKS-A01", name: "Makassar Aisle 01", zone: "A", rack: "01", shelf: "01", bin: "01" },
+    { warehouseCode: "WH-SMG", code: "SMG-A01", name: "Semarang Aisle 01", zone: "A", rack: "01", shelf: "01", bin: "01" },
+    { warehouseCode: "WH-MLG", code: "MLG-A01", name: "Malang Aisle 01", zone: "A", rack: "01", shelf: "01", bin: "01" },
+    { warehouseCode: "WH-YGY", code: "YGY-A01", name: "Yogyakarta Aisle 01", zone: "A", rack: "01", shelf: "01", bin: "01" },
+    { warehouseCode: "WH-BKS", code: "BKS-A01", name: "Bekasi Aisle 01", zone: "A", rack: "01", shelf: "01", bin: "01" },
+    { warehouseCode: "WH-JKT", code: "JKT-Q01", name: "Jakarta Quarantine Area", zone: "Q", rack: "01", shelf: "01", bin: "01", locationType: "QUARANTINE" },
+  ] as const)) {
     const warehouseId = warehouseMap.get(location.warehouseCode);
     if (!warehouseId) throw new Error(`Warehouse ${location.warehouseCode} belum tersedia`);
-    const record = await prisma.warehouseLocation.upsert({ where: { warehouseId_code: { warehouseId, code: location.code } }, update: { ...location, warehouseCode: undefined, warehouseId, isActive: true }, create: { ...location, warehouseCode: undefined, warehouseId } });
+    const { warehouseCode: _warehouseCode, ...locationData } = location;
+    const record = await prisma.warehouseLocation.upsert({ where: { warehouseId_code: { warehouseId, code: location.code } }, update: { ...locationData, warehouseId, isActive: true }, create: { ...locationData, warehouseId } });
     locationByCode.set(location.code, record.id);
   }
   await prisma.product.update({ where: { sku: "CB-UGR-USBC" }, data: { trackBatch: true } });
-  const { userMap } = await seedAccess(adminEmail, adminPassword, demoPassword);
+  const { userMap, roleUserMap } = await seedAccess(adminEmail, adminPassword, demoPassword);
   const products = await prisma.product.findMany({ select: { id: true, sku: true, trackBatch: true } });
   const productMap = new Map(products.map((item) => [item.sku, item.id]));
   const supplierMap = new Map((await prisma.supplier.findMany({ select: { id: true, code: true } })).map((item) => [item.code, item.id]));
@@ -194,8 +250,25 @@ async function main() {
     return value;
   };
   const jkt = id(warehouseMap, "WH-JKT"), bdg = id(warehouseMap, "WH-BDG"), sby = id(warehouseMap, "WH-SBY");
-  const procurement = id(userMap, "procurement@stockflow.local"), manager = id(userMap, "warehouse.manager@stockflow.local"), staff = id(userMap, "warehouse.staff@stockflow.local"), admin = id(userMap, adminEmail);
+  const procurement = id(roleUserMap, "PROCUREMENT"), manager = id(roleUserMap, "WAREHOUSE_MANAGER"), staff = id(roleUserMap, "WAREHOUSE_STAFF"), admin = id(roleUserMap, "ADMIN");
 
+  const seededReturns = await prisma.returnOrder.findMany({ where: { number: { startsWith: "SEED-" } }, select: { id: true } });
+  const seededReturnIds = seededReturns.map((item) => item.id);
+  const seededSettlements = seededReturnIds.length ? await prisma.returnSettlement.findMany({ where: { returnOrderId: { in: seededReturnIds } }, select: { id: true } }) : [];
+  const seededSettlementIds = seededSettlements.map((item) => item.id);
+  if (seededSettlementIds.length) await prisma.creditApplication.deleteMany({ where: { settlementId: { in: seededSettlementIds } } });
+  if (seededReturnIds.length) {
+    await prisma.quarantineDecision.deleteMany({ where: { returnOrderId: { in: seededReturnIds } } });
+    await prisma.returnSettlement.deleteMany({ where: { returnOrderId: { in: seededReturnIds } } });
+    await prisma.returnOrder.deleteMany({ where: { id: { in: seededReturnIds } } });
+  }
+  await prisma.quarantineDecision.deleteMany({ where: { reason: { startsWith: "Seed:" } } });
+  await prisma.saleShipment.deleteMany({ where: { number: { startsWith: "SEED-" } } });
+  await prisma.stockReservation.deleteMany({ where: { sale: { number: { startsWith: "SEED-" } } } });
+  await prisma.stockTakeSession.deleteMany({ where: { number: { startsWith: "SEED-" } } });
+  await prisma.stockRelocation.deleteMany({ where: { number: { startsWith: "SEED-" } } });
+  await prisma.auditLog.deleteMany({ where: { action: { startsWith: "SEED:" } } });
+  await prisma.notification.deleteMany({ where: { fingerprint: { startsWith: "SEED:" } } });
   await prisma.payment.deleteMany({ where: { number: { startsWith: "SEED-" } } });
   await prisma.goodsReceipt.deleteMany({ where: { number: { startsWith: "SEED-" } } });
   await prisma.stockMovement.deleteMany({ where: { note: { startsWith: "Seed:" } } });
@@ -257,14 +330,15 @@ async function main() {
     prisma.expense.create({ data: { number: "SEED-EXP-202610-003", category: "Utilities", description: "Listrik area penyimpanan", amount: 2100000, warehouseId: sby, createdById: admin, expenseDate: date(10), isPaid: false } }),
   ]);
 
-  const quantities: Record<string, number> = { "LP-LNV-T14:WH-JKT": 13, "LP-LNV-T14:WH-BDG": 4, "KB-LOG-K380:WH-JKT": 32, "KB-LOG-K380:WH-BDG": 10, "MS-LOG-M185:WH-JKT": 65, "PR-EPS-L3210:WH-JKT": 14, "CB-UGR-USBC:WH-JKT": 100 };
+  const quantities: Record<string, number> = { "LP-LNV-T14:WH-JKT": 13, "LP-LNV-T14:WH-BDG": 4, "KB-LOG-K380:WH-JKT": 32, "KB-LOG-K380:WH-BDG": 10, "MS-LOG-M185:WH-JKT": 65, "PR-EPS-L3210:WH-JKT": 14, "CB-UGR-USBC:WH-JKT": 100, "GLV-SAFE-01:WH-JKT": 10 };
   const balanceMap = new Map<string, string>();
   for (const product of products) for (const warehouse of warehouseList) {
     const key = `${product.sku}:${warehouse.code}`;
+    const defaultLocationId = locationByCode.get(`${warehouse.code.slice(3)}-A01`) ?? locationByCode.get("SBY-A01")!;
     const balance = await prisma.inventoryBalance.upsert({
       where: { productId_warehouseId: { productId: product.id, warehouseId: warehouse.id } },
-      update: { quantityOnHand: quantities[key] ?? 0, reservedQuantity: 0, locationId: warehouse.code === "WH-JKT" ? locationByCode.get("JKT-A01") : warehouse.code === "WH-BDG" ? locationByCode.get("BDG-A01") : locationByCode.get("SBY-A01") },
-      create: { productId: product.id, warehouseId: warehouse.id, quantityOnHand: quantities[key] ?? 0, locationId: warehouse.code === "WH-JKT" ? locationByCode.get("JKT-A01") : warehouse.code === "WH-BDG" ? locationByCode.get("BDG-A01") : locationByCode.get("SBY-A01") },
+      update: { quantityOnHand: quantities[key] ?? 0, reservedQuantity: 0, locationId: defaultLocationId },
+      create: { productId: product.id, warehouseId: warehouse.id, quantityOnHand: quantities[key] ?? 0, locationId: defaultLocationId },
     });
     balanceMap.set(key, balance.id);
   }
@@ -275,12 +349,12 @@ async function main() {
   const seededCableBatch = await prisma.productBatch.findUnique({ where: { productId_warehouseId_batchNumber: { productId: id(productMap, "CB-UGR-USBC"), warehouseId: jkt, batchNumber: "LOT-CB-2610-A" } } });
   await prisma.goodsReceipt.create({ data: { number: "SEED-GR-202610-001", purchaseOrderId: poReceived.id, warehouseId: jkt, receivedById: procurement, receivedAt: date(5), notes: "Seed goods receipt", items: { create: receivedPurchaseItems.map((item) => ({ purchaseOrderItemId: item.id, productId: item.productId, locationId: locationByCode.get("JKT-A01")!, batchId: item.productId === id(productMap, "CB-UGR-USBC") ? seededCableBatch?.id ?? null : null, quantity: item.quantity, damagedQuantity: 0 })) } } });
   for (const product of products) for (const warehouse of warehouseList) {
-    const fallbackLocationId = warehouse.code === "WH-JKT" ? locationByCode.get("JKT-A01")! : warehouse.code === "WH-BDG" ? locationByCode.get("BDG-A01")! : locationByCode.get("SBY-A01")!;
+    const fallbackLocationId = locationByCode.get(`${warehouse.code.slice(3)}-A01`) ?? locationByCode.get("SBY-A01")!;
     const batches = product.trackBatch ? await prisma.productBatch.findMany({ where: { productId: product.id, warehouseId: warehouse.id } }) : [];
     if (product.trackBatch && !batches.length && (quantities[`${product.sku}:${warehouse.code}`] ?? 0) !== 0) throw new Error(`Seed stock for ${product.sku} in ${warehouse.code} requires batch data`);
     const rows = batches.length
       ? batches.map((batch) => ({ locationId: batch.locationId ?? fallbackLocationId, batchId: batch.id, quantityOnHand: batch.quantityOnHand, reservedQuantity: batch.reservedQuantity }))
-      : product.trackBatch ? [] : [{ locationId: fallbackLocationId, batchId: null, quantityOnHand: quantities[`${product.sku}:${warehouse.code}`] ?? 0, reservedQuantity: 0 }];
+      : product.trackBatch ? [] : [{ locationId: product.sku === "GLV-SAFE-01" && warehouse.code === "WH-JKT" ? locationByCode.get("JKT-Q01")! : fallbackLocationId, batchId: null, quantityOnHand: quantities[`${product.sku}:${warehouse.code}`] ?? 0, reservedQuantity: 0 }];
     for (const row of rows) {
       const existing = await prisma.inventoryLocationBalance.findFirst({ where: { productId: product.id, warehouseId: warehouse.id, locationId: row.locationId, batchId: row.batchId } });
       if (existing) await prisma.inventoryLocationBalance.update({ where: { id: existing.id }, data: { quantityOnHand: row.quantityOnHand, reservedQuantity: row.reservedQuantity } });
@@ -308,6 +382,244 @@ async function main() {
     { number: "SEED-PAY-202610-003", type: "EXPENSE", expenseId: expenses[0].id, paidById: procurement, amount: 1250000, method: "CASH", status: "PAID", paymentDate: date(5), referenceNo: "CASH-EXP-001", notes: "Pembayaran biaya pengiriman" },
     { number: "SEED-PAY-202610-004", type: "PURCHASE", purchaseOrderId: poPending.id, paidById: procurement, amount: 0, method: "BANK_TRANSFER", status: "PENDING", paymentDate: date(10), referenceNo: "PENDING-PO-002", notes: "Menunggu approval" },
   ] });
+
+  // Extended sample rows: ten records per operational list and every workflow status.
+  const purchaseStatuses = ["DRAFT", "APPROVED", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELLED", "DRAFT", "APPROVED", "RECEIVED"] as const;
+  const supplierIds = Array.from(supplierMap.values());
+  const customerIds = Array.from(customerMap.values());
+  const warehouseIds = [jkt, bdg, sby];
+  const productIds = [id(productMap, "LP-LNV-T14"), id(productMap, "KB-LOG-K380"), id(productMap, "MS-LOG-M185"), id(productMap, "PR-EPS-L3210"), id(productMap, "GLV-SAFE-01")];
+  for (let index = 0; index < purchaseStatuses.length; index++) {
+    const status = purchaseStatuses[index];
+    const quantity = 10 + index;
+    const receivedQuantity = status === "RECEIVED" ? quantity : status === "PARTIALLY_RECEIVED" ? Math.floor(quantity / 2) : 0;
+    const approved = ["APPROVED", "PARTIALLY_RECEIVED", "RECEIVED"].includes(status);
+    const unitPrice = 100000 + index * 25000;
+    await prisma.purchaseOrder.create({ data: {
+      number: `SEED-PO-202611-${String(index + 3).padStart(3, "0")}`,
+      supplierId: supplierIds[index % supplierIds.length]!, warehouseId: warehouseIds[index % warehouseIds.length]!,
+      createdById: procurement, approvedById: approved ? manager : null, approvedAt: approved ? date(13 + index) : null,
+      status, orderDate: date(13 + index), expectedDate: date(20 + index), notes: `Seed: skenario purchase ${status.toLowerCase()}`,
+      subtotal: unitPrice * quantity, tax: Math.round(unitPrice * quantity * 0.11), total: Math.round(unitPrice * quantity * 1.11),
+      items: { create: [{ productId: productIds[index % productIds.length]!, quantity, receivedQuantity, unitPrice, total: unitPrice * quantity }] },
+    } });
+  }
+
+  const saleStatuses = ["RESERVED", "PICKING", "PACKED", "PARTIALLY_SHIPPED", "SHIPPED", "CANCELLED", "DRAFT", "COMPLETED"] as const;
+  for (let index = 0; index < saleStatuses.length; index++) {
+    const status = saleStatuses[index];
+    const warehouseId = index % 2 === 0 ? jkt : bdg;
+    const lineItems = [id(productMap, "LP-LNV-T14"), productIds[(index + 1) % productIds.length]!];
+    const unitPrice = 175000 + index * 10000;
+    await prisma.sale.create({ data: {
+      number: `SEED-SALE-202611-${String(index + 3).padStart(3, "0")}`,
+      customerId: customerIds[index % customerIds.length]!, warehouseId, createdById: staff, status,
+      saleDate: date(13 + index), notes: `Seed: skenario sales ${status.toLowerCase()}`,
+      subtotal: unitPrice * 10, discount: 0, tax: Math.round(unitPrice * 10 * 0.11), total: Math.round(unitPrice * 10 * 1.11),
+      items: { create: lineItems.map((productId) => ({ productId, quantity: 5, unitPrice, total: unitPrice * 5 })) },
+    } });
+  }
+
+  const saleRows = await prisma.sale.findMany({ where: { number: { startsWith: "SEED-SALE-" } }, include: { items: true }, orderBy: { number: "asc" } });
+  const reservationStatusForSale: Record<string, "ACTIVE" | "RELEASED" | "CONSUMED" | "CANCELLED"> = {
+    COMPLETED: "CONSUMED", DRAFT: "CANCELLED", RESERVED: "ACTIVE", PICKING: "ACTIVE", PACKED: "ACTIVE",
+    PARTIALLY_SHIPPED: "ACTIVE", SHIPPED: "CONSUMED", CANCELLED: "RELEASED",
+  };
+  for (const sale of saleRows) {
+    const item = sale.items.find((line) => line.productId === id(productMap, "LP-LNV-T14")) ?? sale.items[0];
+    if (!item) continue;
+    const status = reservationStatusForSale[sale.status];
+    await prisma.stockReservation.create({ data: {
+      saleId: sale.id, saleItemId: item.id, productId: item.productId, warehouseId: sale.warehouseId,
+      quantity: 1, status, reservedById: staff,
+      releasedAt: status === "RELEASED" || status === "CANCELLED" ? date(18) : null,
+      consumedAt: status === "CONSUMED" ? date(18) : null,
+      releaseReason: status === "RELEASED" ? "Seed: pesanan dibatalkan" : status === "CANCELLED" ? "Seed: reservasi tidak dilanjutkan" : null,
+    } });
+    if (status === "ACTIVE" && item.productId === id(productMap, "LP-LNV-T14")) {
+      await prisma.inventoryBalance.update({ where: { productId_warehouseId: { productId: item.productId, warehouseId: sale.warehouseId } }, data: { reservedQuantity: { increment: 1 } } });
+      const locationCode = sale.warehouseId === bdg ? "BDG-A01" : "JKT-A01";
+      const locationBalance = await prisma.inventoryLocationBalance.findFirst({ where: { productId: item.productId, warehouseId: sale.warehouseId, locationId: id(locationByCode, locationCode), batchId: null } });
+      if (locationBalance) await prisma.inventoryLocationBalance.update({ where: { id: locationBalance.id }, data: { reservedQuantity: { increment: 1 } } });
+    }
+  }
+
+  const shipmentPlans = [
+    [0, "COMPLETED"], [3, "PICKING"], [3, "PICKING"], [4, "PACKED"], [4, "PACKED"],
+    [5, "SHIPPED"], [5, "PICKING"], [6, "SHIPPED"], [7, "CANCELLED"], [9, "COMPLETED"],
+  ] as const;
+  for (let index = 0; index < shipmentPlans.length; index++) {
+    const [saleIndex, status] = shipmentPlans[index]!;
+    const sale = saleRows[saleIndex];
+    if (!sale) continue;
+    const picked = ["PACKED", "SHIPPED", "COMPLETED"].includes(status);
+    const packed = ["PACKED", "SHIPPED", "COMPLETED"].includes(status);
+    await prisma.saleShipment.create({ data: {
+      number: `SEED-SHP-202611-${String(index + 1).padStart(3, "0")}`, saleId: sale.id,
+      warehouseId: sale.warehouseId, createdById: staff, status,
+      courier: status === "SHIPPED" || status === "COMPLETED" ? "JNE Demo" : null,
+      trackingNumber: status === "SHIPPED" || status === "COMPLETED" ? `SF-DEMO-${index + 1}` : null,
+      pickedAt: picked ? date(18) : null, packedAt: packed ? date(18) : null,
+      shippedAt: status === "SHIPPED" || status === "COMPLETED" ? date(19) : null,
+      completedAt: status === "COMPLETED" ? date(20) : null,
+      items: { create: sale.items.map((item) => ({ saleItemId: item.id, productId: item.productId, quantity: 1, pickedQuantity: picked ? 1 : 0, packedQuantity: packed ? 1 : 0, pickedById: picked ? staff : null, packedById: packed ? manager : null, pickedAt: picked ? date(18) : null, packedAt: packed ? date(18) : null })) },
+    } });
+  }
+
+  const adjustmentStatuses = ["DRAFT", "REVISION", "POSTED", "CANCELLED", "DRAFT", "REVISION", "POSTED", "CANCELLED"] as const;
+  for (let index = 0; index < adjustmentStatuses.length; index++) {
+    const status = adjustmentStatuses[index]!;
+    const approved = status === "POSTED";
+    await prisma.stockAdjustment.create({ data: {
+      number: `SEED-ADJ-202611-${String(index + 3).padStart(3, "0")}`, warehouseId: warehouseIds[index % warehouseIds.length]!,
+      createdById: staff, approvedById: approved ? manager : null, approvedAt: approved ? date(15 + index) : null,
+      type: index % 2 ? "DECREASE" : "INCREASE", status, reason: `Seed: simulasi adjustment ${status.toLowerCase()}`,
+      adjustmentDate: date(14 + index), items: { create: [{ productId: productIds[index % productIds.length]!, quantity: 1, notes: "Contoh data demo" }] },
+    } });
+  }
+
+  const transferStatuses = ["DRAFT", "REVISION", "IN_TRANSIT", "COMPLETED", "CANCELLED", "DRAFT", "REVISION", "COMPLETED"] as const;
+  for (let index = 0; index < transferStatuses.length; index++) {
+    const status = transferStatuses[index]!;
+    const approved = status === "IN_TRANSIT" || status === "COMPLETED";
+    const fromWarehouseId = warehouseIds[index % warehouseIds.length]!;
+    const toWarehouseId = warehouseIds[(index + 1) % warehouseIds.length]!;
+    await prisma.stockTransfer.create({ data: {
+      number: `SEED-TRF-202611-${String(index + 3).padStart(3, "0")}`, fromWarehouseId, toWarehouseId, createdById: staff,
+      approvedById: approved ? manager : null, approvedAt: approved ? date(15 + index) : null,
+      status, transferDate: date(14 + index), notes: `Seed: simulasi transfer ${status.toLowerCase()}`,
+      items: { create: [{ productId: productIds[index % productIds.length]!, quantity: 1 }] },
+    } });
+  }
+
+  const expenseCategories = ["Freight", "Maintenance", "Utilities", "Packaging", "Fuel", "Safety", "Cleaning"];
+  for (let index = 0; index < expenseCategories.length; index++) {
+    await prisma.expense.create({ data: {
+      number: `SEED-EXP-202611-${String(index + 4).padStart(3, "0")}`, category: expenseCategories[index]!,
+      description: `Biaya demo ${expenseCategories[index]}`, amount: 250000 + index * 125000,
+      warehouseId: warehouseIds[index % warehouseIds.length]!, createdById: index % 2 ? manager : procurement,
+      expenseDate: date(14 + index), isPaid: index % 2 === 0,
+    } });
+  }
+
+  const seedPurchase = await prisma.purchaseOrder.findUniqueOrThrow({ where: { id: poReceived.id }, include: { items: true } });
+  const seedSale = await prisma.sale.findUniqueOrThrow({ where: { id: saleCompleted.id }, include: { items: true } });
+  const returnStatuses = ["DRAFT", "PENDING", "APPROVED", "POSTED", "CANCELLED", "DRAFT", "PENDING", "APPROVED", "POSTED", "CANCELLED", "DRAFT", "PENDING", "APPROVED", "POSTED", "CANCELLED", "DRAFT", "PENDING", "APPROVED", "POSTED", "CANCELLED"] as const;
+  for (let index = 0; index < returnStatuses.length; index++) {
+    const status = returnStatuses[index]!;
+    const type = index < 10 ? "PURCHASE" : "SALE";
+    const sampleIndex = index % 10;
+    const sourceItem = type === "PURCHASE" ? seedPurchase.items[index % seedPurchase.items.length]! : seedSale.items[index % seedSale.items.length]!;
+    const condition = index % 3 === 0 ? "GOOD" : index % 3 === 1 ? "DAMAGED" : "DEFECTIVE";
+    const disposition = condition === "GOOD" ? "RESTOCK" : index % 2 ? "QUARANTINE" : "SCRAP";
+    const inspectionStatus = status === "POSTED" ? "COMPLETED" : sampleIndex % 3 === 0 ? "PENDING" : sampleIndex % 3 === 1 ? "COMPLETED" : "FOLLOW_UP";
+    await prisma.returnOrder.create({ data: {
+      number: `SEED-RET-202611-${String(index + 1).padStart(3, "0")}`, type,
+      purchaseOrderId: type === "PURCHASE" ? seedPurchase.id : null, saleId: type === "SALE" ? seedSale.id : null,
+      warehouseId: type === "PURCHASE" ? seedPurchase.warehouseId : seedSale.warehouseId,
+      createdById: type === "PURCHASE" ? procurement : staff,
+      approvedById: status === "APPROVED" || status === "POSTED" ? manager : null,
+      approvedAt: status === "APPROVED" || status === "POSTED" ? date(20 + sampleIndex) : null,
+      postedAt: status === "POSTED" ? date(21 + sampleIndex) : null,
+      status, reason: `Seed: contoh retur ${type.toLowerCase()} ${status.toLowerCase()}`, notes: "Skenario data development",
+      inspection: { create: { status: inspectionStatus, notes: `Seed: status inspeksi ${inspectionStatus.toLowerCase()}`, inspectedById: staff, inspectedAt: date(20 + sampleIndex) } },
+      items: { create: [{
+        productId: sourceItem.productId, purchaseOrderItemId: type === "PURCHASE" ? sourceItem.id : null,
+        saleItemId: type === "SALE" ? sourceItem.id : null, quantity: 1, condition, disposition,
+        notes: "Contoh pemeriksaan barang", inspection: { create: { condition, recommendedDisposition: disposition, notes: "Pemeriksaan contoh untuk database development.", inspectedById: staff, inspectedAt: date(20 + sampleIndex) } },
+      }] },
+    } });
+  }
+
+  const receiptItems = await prisma.purchaseOrderItem.findMany({ where: { purchaseOrderId: poReceived.id } });
+  const receiptStatuses = ["POSTED", "CANCELLED", "POSTED", "CANCELLED", "POSTED", "CANCELLED", "POSTED", "CANCELLED", "POSTED"] as const;
+  for (let index = 0; index < receiptStatuses.length; index++) {
+    const item = receiptItems[index % receiptItems.length]!;
+    await prisma.goodsReceipt.create({ data: {
+      number: `SEED-GR-202611-${String(index + 2).padStart(3, "0")}`, purchaseOrderId: poReceived.id,
+      warehouseId: jkt, receivedById: procurement, receivedAt: date(14 + index), status: receiptStatuses[index]!, notes: "Seed: contoh penerimaan barang",
+      items: { create: [{ purchaseOrderItemId: item.id, productId: item.productId, locationId: id(locationByCode, "JKT-A01"), quantity: 1, damagedQuantity: 0 }] },
+    } });
+  }
+
+  const stockTakeStatuses = ["DRAFT", "COUNTING", "SUBMITTED", "APPROVED", "CANCELLED", "DRAFT", "COUNTING", "SUBMITTED", "APPROVED", "CANCELLED"] as const;
+  for (let index = 0; index < stockTakeStatuses.length; index++) {
+    const status = stockTakeStatuses[index]!;
+    const counted = status === "SUBMITTED" || status === "APPROVED";
+    await prisma.stockTakeSession.create({ data: {
+      number: `SEED-OPN-202611-${String(index + 1).padStart(3, "0")}`, warehouseId: warehouseIds[index % warehouseIds.length]!,
+      createdById: staff, approvedById: status === "APPROVED" ? manager : null,
+      startedAt: date(14 + index), submittedAt: counted ? date(18 + index) : null, approvedAt: status === "APPROVED" ? date(20 + index) : null,
+      status, notes: `Seed: stock opname ${status.toLowerCase()}`,
+      lines: { create: [{ productId: productIds[index % productIds.length]!, systemQuantity: 10, physicalQuantity: counted ? 9 + index % 3 : null, variance: counted ? -1 + index % 3 : 0, countedAt: counted ? date(18 + index) : null, notes: "Skenario demo" }] },
+    } });
+  }
+
+  const quarantineLocationId = id(locationByCode, "JKT-Q01");
+  const quarantineBalance = await prisma.inventoryLocationBalance.findFirst({ where: { productId: id(productMap, "GLV-SAFE-01"), warehouseId: jkt, locationId: quarantineLocationId, batchId: null } });
+  if (!quarantineBalance) throw new Error("Seed saldo area karantina tidak ditemukan.");
+  const storageLocationId = id(locationByCode, "JKT-A01");
+  const quarantineStatuses = ["PENDING", "APPROVED", "REJECTED", "PENDING", "APPROVED", "REJECTED", "PENDING", "APPROVED", "REJECTED", "PENDING"] as const;
+  for (let index = 0; index < quarantineStatuses.length; index++) {
+    const status = quarantineStatuses[index]!;
+    await prisma.quarantineDecision.create({ data: {
+      locationBalanceId: quarantineBalance.id, quantity: 1,
+      action: index % 3 === 0 ? "RELEASE" : index % 3 === 1 ? "SCRAP" : "RETURN_SUPPLIER",
+      status, reason: `Seed: contoh keputusan karantina ${index + 1}`,
+      reviewNotes: status === "PENDING" ? null : `Seed: review ${status.toLowerCase()}`,
+      createdById: staff, approvedById: status === "PENDING" ? null : manager,
+      reviewedAt: status === "PENDING" ? null : date(22 + index),
+      purchaseOrderItemId: index % 3 === 2 ? seedPurchase.items[0]!.id : null,
+      destinationLocationId: index % 3 === 0 ? storageLocationId : null,
+    } });
+  }
+
+  for (let index = 0; index < 10; index++) {
+    const fromLocationCode = index % 2 === 0 ? "JKT-A01" : "JKT-B01";
+    const toLocationCode = index % 2 === 0 ? "JKT-B01" : "JKT-A01";
+    await prisma.stockRelocation.create({ data: {
+      number: `SEED-REL-202611-${String(index + 1).padStart(3, "0")}`, warehouseId: jkt,
+      fromLocationId: id(locationByCode, fromLocationCode), toLocationId: id(locationByCode, toLocationCode),
+      createdById: staff, status: index % 2 === 0 ? "COMPLETED" : "CANCELLED", reason: `Seed: pemindahan internal ${index + 1}`,
+      items: { create: [{ productId: id(productMap, "LP-LNV-T14"), quantity: 1 }] },
+    } });
+  }
+
+  for (let index = 0; index < 10; index++) {
+    const status = index % 4 === 0 ? "EXPIRED" : index % 4 === 1 ? "QUARANTINED" : index % 4 === 2 ? "DEPLETED" : "ACTIVE";
+    const batchNumber = `SEED-BATCH-202611-${String(index + 1).padStart(3, "0")}`;
+    const expiryDate = status === "EXPIRED" ? date(1) : new Date("2027-01-15T00:00:00.000Z");
+    await prisma.productBatch.upsert({
+      where: { productId_warehouseId_batchNumber: { productId: id(productMap, "CB-UGR-USBC"), warehouseId: jkt, batchNumber } },
+      update: { status, quantityOnHand: 0, reservedQuantity: 0, expiryDate, locationId: status === "QUARANTINED" ? quarantineLocationId : storageLocationId },
+      create: { productId: id(productMap, "CB-UGR-USBC"), warehouseId: jkt, batchNumber, status, quantityOnHand: 0, expiryDate, locationId: status === "QUARANTINED" ? quarantineLocationId : storageLocationId },
+    });
+  }
+
+  const paymentStatuses = ["PENDING", "PAID", "VOID", "PAID", "PENDING", "VOID"] as const;
+  for (let index = 0; index < paymentStatuses.length; index++) {
+    const status = paymentStatuses[index]!;
+    await prisma.payment.create({ data: {
+      number: `SEED-PAY-202611-${String(index + 5).padStart(3, "0")}`, type: index % 2 === 0 ? "PURCHASE" : "SALE",
+      purchaseOrderId: index % 2 === 0 ? poReceived.id : null, saleId: index % 2 === 1 ? saleCompleted.id : null,
+      paidById: index % 2 === 0 ? procurement : staff, amount: 250000 + index * 50000,
+      method: index % 2 === 0 ? "BANK_TRANSFER" : "CASH", status, paymentDate: date(16 + index),
+      referenceNo: `SEED-REF-${index + 1}`, notes: `Seed: pembayaran ${status.toLowerCase()}`,
+    } });
+  }
+
+  await prisma.auditLog.createMany({ data: Array.from({ length: 10 }, (_, index) => ({
+    userId: [admin, manager, staff, procurement][index % 4]!, action: "SEED:VIEW", entity: "DemoRecord",
+    entityId: `DEMO-${String(index + 1).padStart(3, "0")}`, afterData: { sample: true, number: index + 1 }, createdAt: date(15 + index),
+  })) });
+  const userIds = Array.from(userMap.values());
+  await prisma.notification.createMany({ data: Array.from({ length: 10 }, (_, index) => ({
+    fingerprint: `SEED:DEMO:${index + 1}`, userId: userIds[index % userIds.length]!, type: index % 2 ? "APPROVAL" : "LOW_STOCK",
+    title: index % 2 ? "Contoh menunggu persetujuan" : "Contoh stok rendah",
+    message: "Notifikasi contoh untuk membantu melihat tampilan menu pada database development.",
+    entity: index % 2 ? "PurchaseOrder" : "Product", entityId: index % 2 ? poPending.id : id(productMap, "LP-LNV-T14"),
+    readAt: index % 3 === 0 ? date(20 + index) : null,
+  })) });
 
   const [roleCount, userCount, productCount, balanceCount, movementCount] = await Promise.all([
     prisma.role.count(), prisma.user.count(), prisma.product.count(), prisma.inventoryBalance.count(), prisma.stockMovement.count(),

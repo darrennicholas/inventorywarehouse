@@ -88,9 +88,33 @@ npx prisma migrate deploy
 npm run seed:access
 ```
 
-`migrate deploy` membuat atau memperbarui tabel berdasarkan migration yang tersedia; periksa `DATABASE_URL` sebelum menjalankannya. `seed:access` membuat role, permission, dan akun yang belum ada dari konfigurasi `.env`; akun yang sudah ada tidak diubah. Akun Warehouse Staff baru perlu dihubungkan ke staff/gudang sebelum akses yang dibatasi gudang dapat digunakan.
+`migrate deploy` membuat atau memperbarui tabel berdasarkan migration yang tersedia; periksa `DATABASE_URL` sebelum menjalankannya. `seed:access` membuat role, permission, dan lima akun akses awal (satu per role) dari konfigurasi `.env`; akun yang sudah ada tidak diubah. Akun Warehouse Staff baru perlu dihubungkan ke staff/gudang sebelum akses yang dibatasi gudang dapat digunakan.
 
-Jika ingin data contoh produk dan transaksi, pada **database development kosong yang boleh diisi ulang** Anda dapat memakai `npm run seed` sebagai pengganti `npm run seed:access`. Seeder demo dapat mengubah data contoh dan akun; jangan jalankan pada database operasional.
+Untuk mencoba tampilan lengkap, pada **database development yang boleh diisi ulang** jalankan `npm run seed`. Seeder lengkap menyiapkan sedikitnya 10 contoh untuk setiap daftar demo utama: kategori, merek, satuan, produk, gudang/lokasi, supplier, customer, staff, akun, purchase, sale, fulfillment, adjustment, transfer, expense, pembayaran, penerimaan barang, retur, stock opname, karantina, relokasi, audit, dan notifikasi. Data transaksi memakai seluruh status yang tersedia, termasuk tahap draft, menunggu persetujuan, revisi, selesai, dan batal sesuai modulnya. Laporan/dashboard mengambil data dari transaksi dan stok demo tersebut.
+
+Status demo yang dicakup:
+
+| Menu | Status contoh |
+| --- | --- |
+| Purchase | `DRAFT`, `PENDING`, `APPROVED`, `PARTIALLY_RECEIVED`, `RECEIVED`, `CANCELLED` |
+| Sale | `DRAFT`, `RESERVED`, `PICKING`, `PACKED`, `PARTIALLY_SHIPPED`, `SHIPPED`, `COMPLETED`, `CANCELLED` |
+| Fulfillment | `PICKING`, `PACKED`, `SHIPPED`, `COMPLETED`, `CANCELLED` |
+| Adjustment | `DRAFT`, `REVISION`, `POSTED`, `CANCELLED` |
+| Transfer | `DRAFT`, `REVISION`, `IN_TRANSIT`, `COMPLETED`, `CANCELLED` |
+| Payment | `PENDING`, `PAID`, `VOID` |
+| Penerimaan barang | `POSTED`, `CANCELLED` |
+| Purchase/Sales Return | `DRAFT`, `PENDING`, `APPROVED`, `POSTED`, `CANCELLED` |
+| Inspeksi retur | `PENDING`, `COMPLETED`, `FOLLOW_UP` |
+| Stock Opname | `DRAFT`, `COUNTING`, `SUBMITTED`, `APPROVED`, `CANCELLED` |
+| Karantina | `PENDING`, `APPROVED`, `REJECTED` |
+| Batch | `ACTIVE`, `EXPIRED`, `QUARANTINED`, `DEPLETED` |
+| Relokasi lokasi | `COMPLETED`, `CANCELLED` |
+
+Jika belum ada kebijakan approval, full seed membuat matriks default 9 rentang approval; kebijakan yang sudah ada dibiarkan. Data demo tidak membuat attachment atau file palsu.
+
+Full seed membuat 10 akun: dua akun untuk masing-masing dari lima role sistem. Akun kedua memakai email `admin.demo2@stockflow.local`, `warehouse.manager.demo2@stockflow.local`, `warehouse.staff.demo2@stockflow.local`, `procurement.demo2@stockflow.local`, dan `auditor.demo2@stockflow.local`. Password mengikuti konfigurasi password role yang sama pada `backend/.env` (`ADMIN_PASSWORD`, `WAREHOUSE_MANAGER_PASSWORD`, `WAREHOUSE_STAFF_PASSWORD`, `PROCUREMENT_PASSWORD`, atau `AUDITOR_PASSWORD`; role non-admin memakai `DEMO_PASSWORD` sebagai fallback). Gunakan password development yang kuat dan jangan membagikan file `.env`.
+
+> `npm run seed` menghapus lalu membuat ulang catatan demo dengan prefix `SEED-`, dan mengatur ulang saldo contoh pada produk/gudang demo. Jalankan hanya di database development yang memang boleh diisi ulang; jangan jalankan di database operasional atau database yang berisi contoh buatan sendiri dengan prefix tersebut. Seed tidak membuat file attachment palsu.
 
 ### 6. Jalankan aplikasi
 
@@ -239,7 +263,7 @@ Mapping tersebut berasal dari `ROLE_PRESETS` di `backend/src/rbac/permissions.ts
 | `backend` | `npm run dev` | Menjalankan API dalam mode development |
 | `backend` | `npm run build` | Build TypeScript backend |
 | `backend` | `npm run typecheck` | Validasi tipe TypeScript |
-| `backend` | `npm run seed` | Seed lengkap seluruh aplikasi dan lima role demo |
+| `backend` | `npm run seed` | Seed 10 akun (2 per role), data contoh per menu, dan seluruh status transaksi pada database development |
 | `backend` | `npm run seed:access` | Seed permission, role, dan akun akses saja |
 | `backend` | `npm test` | Unit test permission; integration test dilewati secara default |
 | `backend` | `npm run test:integration` | Test concurrency dan rollback PostgreSQL |
