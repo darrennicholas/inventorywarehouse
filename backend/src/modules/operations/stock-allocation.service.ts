@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { Prisma } from "../../generated/prisma/client.ts";
 import { AppError } from "../../utils/AppError.ts";
+import { assertInventoryInvariant } from "./inventory-invariant.service.ts";
 import { assertUsableBatch } from "./batch-safety.ts";
 import { lockCostBalance, receiveCost } from "./costing.service.ts";
 
@@ -109,6 +110,7 @@ export async function postStockIn(tx: InventoryTx, input: StockLocationInput & {
   if (detail.length !== 1) throw new AppError(409, "Unable to update location stock");
   await updateWarehouseBalance(tx, input.productId, input.warehouseId, input.quantity, balance.locationId);
   if (batch) await tx.productBatch.update({ where: { id: batch.id }, data: { quantityOnHand: { increment: input.quantity }, ...(input.reactivateBatch === false ? {} : { status: "ACTIVE" as const }) } });
+  await assertInventoryInvariant(tx, input.productId, input.warehouseId);
   return { locationBalanceId: balance.id, locationId: balance.locationId, batchId: balance.batchId, quantity: input.quantity, unitCost } satisfies StockAllocation;
 }
 
@@ -181,6 +183,7 @@ export async function postStockOut(tx: InventoryTx, productId: string, warehouse
     }
     await updateWarehouseBalance(tx, productId, warehouseId, -allocation.quantity, allocation.locationId);
   }
+  await assertInventoryInvariant(tx, productId, warehouseId);
   return allocations.map((allocation) => ({ ...allocation, unitCost: cost.averageUnitCost }));
 }
 

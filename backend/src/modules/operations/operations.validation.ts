@@ -104,7 +104,6 @@ export const expenseSchema = z.object({
   amount: money,
   warehouseId: uuid.nullable().optional(),
   expenseDate: z.coerce.date().optional(),
-  isPaid: z.boolean().optional(),
 }).strict();
 
 export const paymentSchema = z.object({

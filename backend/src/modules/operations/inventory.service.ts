@@ -6,6 +6,7 @@ import { notifyByPermission } from "../notifications/notification.service.ts";
 import type { InventoryTx, StockAllocation } from "./stock-allocation.service.ts";
 import { allocateAvailableStock, changeLocationReservation, consumeLocationReservation } from "./stock-allocation.service.ts";
 import { lockCostBalance } from "./costing.service.ts";
+import { assertInventoryInvariant } from "./inventory-invariant.service.ts";
 
 const reservationTtlMinutes = Math.max(5, Number(process.env.STOCKFLOW_RESERVATION_TTL_MINUTES ?? 60));
 
@@ -65,11 +66,13 @@ export async function reserveSaleStock(tx: InventoryTx, saleId: string, warehous
       }
       await tx.stockReservation.create({ data: { saleId, saleItemId: item.id, productId: item.productId, warehouseId, batchId: allocation.batchId, locationBalanceId: allocation.locationBalanceId, quantity: allocation.quantity, reservedById: userId, expiresAt: reservationExpiry() } });
     }
+    await assertInventoryInvariant(tx, item.productId, warehouseId);
   }
 }
 
 export async function releaseSaleReservations(tx: InventoryTx, saleId: string, status: "RELEASED" | "CANCELLED" = "RELEASED", releaseReason = "Reservation released") {
   const reservations = await tx.stockReservation.findMany({ where: { saleId, status: "ACTIVE" }, orderBy: { id: "asc" } });
+  const touched = new Set<string>();
   for (const reservation of reservations) {
     if (reservation.batchId) {
       const updated = await tx.productBatch.updateMany({ where: { id: reservation.batchId, reservedQuantity: { gte: reservation.quantity } }, data: { reservedQuantity: { decrement: reservation.quantity } } });
@@ -79,6 +82,11 @@ export async function releaseSaleReservations(tx: InventoryTx, saleId: string, s
     const aggregate = await tx.inventoryBalance.updateMany({ where: { productId: reservation.productId, warehouseId: reservation.warehouseId, reservedQuantity: { gte: reservation.quantity } }, data: { reservedQuantity: { decrement: reservation.quantity } } });
     if (aggregate.count !== 1) throw new AppError(409, "Warehouse reservation release failed");
     await tx.stockReservation.update({ where: { id: reservation.id }, data: { status, releasedAt: new Date(), releaseReason } });
+    touched.add(`${reservation.productId}:${reservation.warehouseId}`);
+  }
+  for (const key of [...touched].sort()) {
+    const [productId, warehouseId] = key.split(":");
+    await assertInventoryInvariant(tx, productId!, warehouseId!);
   }
 }
 
@@ -150,6 +158,7 @@ export async function consumeSaleReservationsForItems(
       remaining -= take;
     }
     if (remaining > 0) throw new AppError(409, `Reserved stock is insufficient for sale item ${item.saleItemId}`);
+    await assertInventoryInvariant(tx, saleItem.productId, sale.warehouseId);
   }
   return allocations;
 }

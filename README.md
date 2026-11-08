@@ -177,6 +177,15 @@ Commit source, migration SQL, lockfile, dokumentasi, `.env.example`, dan workflo
 - Kapasitas lokasi dapat menjadi batas opsional untuk `ITEM_UNITS`: aktifkan di detail lokasi dengan kapasitas positif. Penambahan stok memeriksa kapasitas dalam transaksi. Pallet dan meter kubik masih berupa informasi karena dimensi dan kemasan produk belum tersedia.
 - CI GitHub Actions memvalidasi migration pada PostgreSQL disposable, backend typecheck/tests/build, serta frontend typecheck/lint/tests/build.
 
+### Kontrol integritas operasional
+
+- Semua endpoint aksi memeriksa permission pada backend. Akun Warehouse Staff dibatasi pada gudang penugasannya; endpoint gudang juga menolak perubahan gudang di luar scope walaupun permission tambahan diberikan.
+- Posting stok, reservasi, pelepasan reservasi, dan pengiriman berjalan di dalam transaksi database dengan row lock dan pembaruan saldo bersyarat. Saldo gudang, saldo per lokasi, saldo batch, dan catatan reservasi harus cocok sebelum transaksi selesai. Jika ditemukan saldo legacy yang tidak memiliki rincian lokasi, posting akan ditolak agar selisih tidak makin besar. Jalankan backfill lokasi dalam mode dry-run terlebih dahulu (`cd backend; npx tsx scripts/backfill-inventory-locations.ts`); terapkan hanya saat maintenance setelah membaca runbook script dan memastikan backup.
+- Perubahan pengeluaran, pembayaran, status pembayaran, gudang, dan transaksi utama dicatat pada Audit Log dengan pelaku serta before/after data. Riwayat pembayaran membuat pengeluaran tidak dapat dihapus.
+- Status pengeluaran baru/perubahan melalui API **Lunas** berasal dari total pembayaran berstatus `PAID` yang mencapai nilai pengeluaran. Membuat/mengubah pengeluaran tidak dapat menandainya lunas secara manual. Pembayaran `PENDING` dan `VOID` tidak dihitung sebagai pelunasan; kekurangan pembayaran tetap terlihat sebagai belum lunas. Status demo dari seeder dipertahankan sesuai skenario data development.
+- Gunakan aksi workflow untuk persetujuan, penerimaan, reservasi, fulfillment, opname, retur, dan pembatalan. Jangan mengubah status yang telah memposting stok melalui edit biasa; transaksi yang telah memiliki riwayat finansial/stock hanya dapat dibatalkan melalui aksi khusus yang tersedia.
+- Seeder development yang ada tetap digunakan tanpa perubahan pada task ini. Jalankan full seed hanya terhadap database development yang boleh di-reset sesuai langkah setup di atas.
+
 ## Revisi transaksi & costing — 30 Oktober 2026
 
 1. **COGS saat shipment:** `SALE_ISSUE.unitCost` menyimpan snapshot moving weighted average (WAC) per produk/gudang, bukan harga jual. `costMethod=WAC` membedakan snapshot baru dari data lama yang belum terverifikasi.

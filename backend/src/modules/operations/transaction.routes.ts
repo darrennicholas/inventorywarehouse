@@ -368,6 +368,7 @@ router.post("/purchases", requirePermission("purchases.write"), asyncHandler(asy
       },
       include: purchaseInclude,
     });
+    await writeAuditLog({ userId, action: "CREATE", entity: "PurchaseOrder", entityId: purchase.id, afterData: purchase, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") }, tx as never);
     if (purchase.status === "PENDING") await writeAuditLog({ userId, action: "SUBMIT", entity: "PurchaseOrder", entityId: purchase.id, afterData: { status: purchase.status } }, tx as never);
 
     return purchase;
@@ -402,6 +403,7 @@ router.patch("/purchases/:id", requirePermission("purchases.write"), asyncHandle
     }
     const updated = await tx.purchaseOrder.update({ where: { id }, data: { status: nextStatus as never, notes: input.notes, expectedDate: input.expectedDate }, include: purchaseInclude });
     if (current.status !== "PENDING" && nextStatus === "PENDING") await writeAuditLog({ userId, action: "SUBMIT", entity: "PurchaseOrder", entityId: id, beforeData: { status: current.status }, afterData: { status: updated.status } }, tx as never);
+    if (input.status !== undefined || input.notes !== undefined || input.expectedDate !== undefined) await writeAuditLog({ userId, action: "UPDATE", entity: "PurchaseOrder", entityId: id, beforeData: current, afterData: updated, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") }, tx as never);
     return updated;
   });
   await notifyByPermission({ permission: "purchases.read", type: "PURCHASE_STATUS", title: "Purchase status updated", message: `${data.number} is now ${data.status.toLowerCase().replaceAll("_", " ")}.`, entity: "PurchaseOrder", entityId: data.id, warehouseId: data.warehouseId });
@@ -472,6 +474,7 @@ router.post("/sales", requirePermission("sales.write"), asyncHandler(async (req,
     if (input.status === "RESERVED") {
       await reserveSaleStock(tx, sale.id, input.warehouseId, userId, sale.items.map((item) => ({ id: item.id, productId: item.productId, quantity: item.quantity })));
     }
+    await writeAuditLog({ userId, action: "CREATE", entity: "Sale", entityId: sale.id, afterData: sale, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") }, tx as never);
     return sale;
   });
 
@@ -541,7 +544,9 @@ router.patch("/sales/:id", requirePermission("sales.write"), asyncHandler(async 
       await reserveSaleStock(tx, id, current.warehouseId, userId, current.items.map((item) => ({ id: item.id, productId: item.productId, quantity: item.quantity })));
     }
     if (nextStatus === "CANCELLED" && (await tx.payment.count({ where: { saleId: id, status: { not: "VOID" } } }) || await tx.creditApplication.count({ where: { saleId: id } }))) throw new AppError(409, "This sale has financial entries and cannot be cancelled");
-    return tx.sale.update({ where: { id }, data: { status: nextStatus as never, notes: input.notes }, include: saleInclude });
+    const updated = await tx.sale.update({ where: { id }, data: { status: nextStatus as never, notes: input.notes }, include: saleInclude });
+    if (input.status !== undefined || input.notes !== undefined) await writeAuditLog({ userId, action: "UPDATE", entity: "Sale", entityId: id, beforeData: current, afterData: updated, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") }, tx as never);
+    return updated;
   });
   await notifyByPermission({ permission: "sales.read", type: "SALE_STATUS", title: "Sale status updated", message: `${data.number} is now ${data.status.toLowerCase()}.`, entity: "Sale", entityId: data.id, warehouseId: data.warehouseId });
   res.json({ success: true, message: "Sale updated successfully", data });
@@ -595,6 +600,7 @@ router.post("/adjustments", requirePermission("adjustments.write"), asyncHandler
     await ensureScopedWarehouse(tx, input.warehouseId, authOf(req));
     await ensureProducts(tx, input.items.map((item) => item.productId));
     const adjustment = await tx.stockAdjustment.create({ data: { number: input.number, warehouseId: input.warehouseId, createdById: userId, type: input.type, status: input.status ?? "DRAFT", reason: input.reason, items: { create: input.items } }, include: { warehouse: true, items: true } });
+    await writeAuditLog({ userId, action: "CREATE", entity: "StockAdjustment", entityId: adjustment.id, afterData: adjustment, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") }, tx as never);
     return adjustment;
   });
   await notifyByPermission({ permission: "adjustments.read", type: "ADJUSTMENT_CREATED", title: "New stock adjustment", message: `${data.number} was created for ${data.warehouse.name}.`, entity: "StockAdjustment", entityId: data.id, warehouseId: data.warehouseId });
@@ -640,7 +646,9 @@ router.patch("/adjustments/:id", requirePermission("adjustments.write"), asyncHa
     await tx.$queryRaw`SELECT "id" FROM "StockAdjustment" WHERE "id" = ${id}::uuid FOR UPDATE`;
     const latest = await tx.stockAdjustment.findUniqueOrThrow({ where: { id }, select: { status: true } });
     if (latest.status !== current.status) throw new AppError(409, "Adjustment changed; reload and try again");
-    return tx.stockAdjustment.update({ where: { id }, data: { status: nextStatus as never }, include: { warehouse: true, items: true } });
+    const updated = await tx.stockAdjustment.update({ where: { id }, data: { status: nextStatus as never }, include: { warehouse: true, items: true } });
+    if (input.status !== undefined) await writeAuditLog({ userId, action: "UPDATE", entity: "StockAdjustment", entityId: id, beforeData: current, afterData: updated, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") }, tx as never);
+    return updated;
   });
   await notifyByPermission({ permission: "adjustments.read", type: "ADJUSTMENT_STATUS", title: "Adjustment status updated", message: `${data.number} is now ${data.status.toLowerCase()}.`, entity: "StockAdjustment", entityId: data.id, warehouseId: data.warehouseId });
   res.json({ success: true, message: "Adjustment updated successfully", data });
@@ -690,6 +698,7 @@ router.post("/transfers", requirePermission("transfers.write"), asyncHandler(asy
     await ensureWarehouse(tx, input.toWarehouseId);
     await ensureProducts(tx, input.items.map((item) => item.productId));
     const transfer = await tx.stockTransfer.create({ data: { number: input.number, fromWarehouseId: input.fromWarehouseId, toWarehouseId: input.toWarehouseId, createdById: userId, status: input.status ?? "DRAFT", notes: input.notes ?? null, items: { create: input.items } }, include: { items: true } });
+    await writeAuditLog({ userId, action: "CREATE", entity: "StockTransfer", entityId: transfer.id, afterData: transfer, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") }, tx as never);
     return transfer;
   });
   await notifyByPermission({ permission: "transfers.read", type: "TRANSFER_CREATED", title: "New stock transfer", message: `${data.number} was created.`, entity: "StockTransfer", entityId: data.id, warehouseId: data.fromWarehouseId });
@@ -745,7 +754,9 @@ router.patch("/transfers/:id", requirePermission("transfers.write"), asyncHandle
         await linkMovementAllocations(tx, inbound.id, moved.destinationAllocations, 1);
       }
     }
-    return tx.stockTransfer.update({ where: { id }, data: { status: nextStatus as never, notes: input.notes }, include: { fromWarehouse: true, toWarehouse: true, items: true } });
+    const updated = await tx.stockTransfer.update({ where: { id }, data: { status: nextStatus as never, notes: input.notes }, include: { fromWarehouse: true, toWarehouse: true, items: true } });
+    if (input.status !== undefined || input.notes !== undefined) await writeAuditLog({ userId, action: "UPDATE", entity: "StockTransfer", entityId: id, beforeData: current, afterData: updated, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") }, tx as never);
+    return updated;
   });
   await notifyByPermission({ permission: "transfers.read", type: "TRANSFER_STATUS", title: "Transfer status updated", message: `${data.number} is now ${data.status.toLowerCase()}.`, entity: "StockTransfer", entityId: data.id, warehouseId: data.fromWarehouseId });
   res.json({ success: true, message: "Transfer updated successfully", data });
