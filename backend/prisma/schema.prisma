@@ -319,6 +319,7 @@ model WarehouseLocation {
   bin          String?
   capacity     Int?
   capacityUnit WarehouseCapacityUnit @default(ITEM_UNITS)
+  enforceCapacity Boolean @default(false)
   isActive     Boolean               @default(true)
 
   warehouse                 Warehouse                  @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
@@ -921,6 +922,7 @@ enum AdjustmentType {
 
 enum AdjustmentStatus {
   DRAFT
+  REVISION
   POSTED
   CANCELLED
 }
@@ -971,6 +973,7 @@ model StockAdjustmentItem {
 
 enum TransferStatus {
   DRAFT
+  REVISION
   IN_TRANSIT
   COMPLETED
   CANCELLED

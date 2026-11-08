@@ -78,6 +78,8 @@ router.post("/workflow/:kind/:id/reject", asyncHandler(async (req, res) => {
   const { reason } = z.object({ reason: z.string().trim().min(5).max(500) }).strict().parse(req.body);
   const auth = authOf(req);
   const result = await prisma.$transaction(async (tx) => {
+    if (kind === "adjustments") await tx.$queryRaw`SELECT "id" FROM "StockAdjustment" WHERE "id" = ${id}::uuid FOR UPDATE`;
+    if (kind === "transfers") await tx.$queryRaw`SELECT "id" FROM "StockTransfer" WHERE "id" = ${id}::uuid FOR UPDATE`;
     const doc = await documentFor(tx, kind, id);
     assertWarehouseAccess(auth, doc.warehouseId);
     if (!auth.permissions.includes(`${doc.permission}.approve`)) throw new AppError(403, "You cannot reject this document");
@@ -87,8 +89,8 @@ router.post("/workflow/:kind/:id/reject", asyncHandler(async (req, res) => {
     let changed: { count: number }; let status: string;
     if (kind === "purchases") { status = "DRAFT"; changed = await tx.purchaseOrder.updateMany({ where: { id, status: "PENDING" }, data: { status: "DRAFT", approvedById: null, approvedAt: null } }); }
     else if (kind === "returns") { status = "DRAFT"; changed = await tx.returnOrder.updateMany({ where: { id, status: "PENDING" }, data: { status: "DRAFT", approvedById: null, approvedAt: null } }); }
-    else if (kind === "adjustments") { status = "CANCELLED"; changed = await tx.stockAdjustment.updateMany({ where: { id, status: "DRAFT" }, data: { status: "CANCELLED" } }); }
-    else if (kind === "transfers") { status = "CANCELLED"; changed = await tx.stockTransfer.updateMany({ where: { id, status: "DRAFT" }, data: { status: "CANCELLED" } }); }
+    else if (kind === "adjustments") { status = "REVISION"; changed = await tx.stockAdjustment.updateMany({ where: { id, status: "DRAFT" }, data: { status: "REVISION", approvedById: null, approvedAt: null } }); }
+    else if (kind === "transfers") { status = "REVISION"; changed = await tx.stockTransfer.updateMany({ where: { id, status: "DRAFT" }, data: { status: "REVISION", approvedById: null, approvedAt: null } }); }
     else { status = "COUNTING"; changed = await tx.stockTakeSession.updateMany({ where: { id, status: "SUBMITTED" }, data: { status: "COUNTING", submittedAt: null } }); }
     if (changed.count !== 1) throw new AppError(409, "Document is no longer awaiting review");
     await writeAuditLog({ userId: auth.userId, action: "REJECT", entity: doc.entity, entityId: id, beforeData: { status: doc.status }, afterData: { status, reason } }, tx as never);

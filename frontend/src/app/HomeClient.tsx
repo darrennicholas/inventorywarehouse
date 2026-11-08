@@ -353,7 +353,7 @@ export default function Home() {
   // PRODUCT DATA
   // ====================================
 
-  const productsStore = useProducts(can("products.read"));
+  const productsStore = useProducts(can("products.read") && activePage === "dashboard");
 
   const {
     products,
@@ -385,19 +385,19 @@ export default function Home() {
           await Promise.all([
             can("categories.read")
               ? apiRequest<{ data?: DashboardMasterRow[] }>(
-                  "/api/categories",
+                  "/api/categories?page=1&pageSize=1",
                   { signal: controller.signal }
                 )
               : Promise.resolve(null),
             can("brands.read")
               ? apiRequest<{ data?: DashboardMasterRow[] }>(
-                  "/api/brands",
+                  "/api/brands?page=1&pageSize=1",
                   { signal: controller.signal }
                 )
               : Promise.resolve(null),
             can("units.read")
               ? apiRequest<{ data?: DashboardMasterRow[] }>(
-                  "/api/units",
+                  "/api/units?page=1&pageSize=1",
                   { signal: controller.signal }
                 )
               : Promise.resolve(null),

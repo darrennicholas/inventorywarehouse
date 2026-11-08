@@ -9,7 +9,7 @@ import type {
   UpdateCustomerInput,
 } from "@/types/customer";
 
-export function useCustomers() {
+export function useCustomers(enabled = true) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -36,12 +36,13 @@ export function useCustomers() {
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     const controller = new AbortController();
     void Promise.resolve().then(() =>
       fetchCustomers(controller.signal)
     );
     return () => controller.abort();
-  }, [fetchCustomers]);
+  }, [fetchCustomers, enabled]);
 
   const createCustomer = useCallback(
     async (data: CreateCustomerInput) => {

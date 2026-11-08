@@ -64,9 +64,10 @@ export const productRepository = {
   // =====================================
   // GET ALL PRODUCTS
   // =====================================
-  async findAll() {
+  async findAll(options?: { skip: number; take: number; search: string; isActive?: boolean }) {
     const products = await prisma.product.findMany({
       include: withRelations,
+      ...(options ? { skip: options.skip, take: options.take, where: { ...(options.isActive !== undefined ? { isActive: options.isActive } : {}), ...(options.search ? { OR: [{ sku: { contains: options.search, mode: "insensitive" as const } }, { name: { contains: options.search, mode: "insensitive" as const } }, { code: { contains: options.search, mode: "insensitive" as const } }, { barcode: { contains: options.search, mode: "insensitive" as const } }, { category: { name: { contains: options.search, mode: "insensitive" as const } } }, { brand: { name: { contains: options.search, mode: "insensitive" as const } } }] } : {}) } } : {}),
 
       orderBy: {
         createdAt: "desc",
@@ -74,6 +75,10 @@ export const productRepository = {
     });
 
     return products.map(serializeProduct);
+  },
+
+  count(options: { search: string; isActive?: boolean }) {
+    return prisma.product.count({ where: { ...(options.isActive !== undefined ? { isActive: options.isActive } : {}), ...(options.search ? { OR: [{ sku: { contains: options.search, mode: "insensitive" } }, { name: { contains: options.search, mode: "insensitive" } }, { code: { contains: options.search, mode: "insensitive" } }, { barcode: { contains: options.search, mode: "insensitive" } }, { category: { name: { contains: options.search, mode: "insensitive" } } }, { brand: { name: { contains: options.search, mode: "insensitive" } } }] } : {}) } });
   },
 
   // =====================================

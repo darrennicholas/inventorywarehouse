@@ -15,7 +15,7 @@ import type {
   UpdateSupplierInput,
 } from "@/types/supplier";
 
-export function useSuppliers() {
+export function useSuppliers(enabled = true) {
   const [suppliers, setSuppliers] =
     useState<Supplier[]>([]);
 
@@ -57,6 +57,7 @@ export function useSuppliers() {
   );
 
   useEffect(() => {
+    if (!enabled) return;
     const controller = new AbortController();
 
     void Promise.resolve().then(() =>
@@ -64,7 +65,7 @@ export function useSuppliers() {
     );
 
     return () => controller.abort();
-  }, [refresh]);
+  }, [refresh, enabled]);
 
   const create = useCallback(
     async (input: SupplierInput) => {

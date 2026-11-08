@@ -4,7 +4,8 @@ import { requireUuid } from "../../utils/requireUuid.ts";
 
 import { brandService } from "./brand.service.ts";
 import { notifyByPermission } from "../notifications/notification.service.ts";
-import { paginateArray } from "../../utils/pagination.ts";
+import { masterListOptions, pageMeta, paginateArray } from "../../utils/pagination.ts";
+import { prisma } from "../../lib/prisma.ts";
 
 import type {
   CreateBrandInput,
@@ -13,6 +14,12 @@ import type {
 
 export const getBrands = asyncHandler(
   async (req, res) => {
+    const options = masterListOptions(req.query as Record<string, unknown>);
+    if (options) {
+      const where = { ...(options.isActive !== undefined ? { isActive: options.isActive } : {}), ...(options.search ? { OR: [{ name: { contains: options.search, mode: "insensitive" as const } }] } : {}) };
+      const [data, total] = await Promise.all([prisma.brand.findMany({ where, skip: options.skip, take: options.take, orderBy: [{ name: "asc" }, { id: "asc" }] }), prisma.brand.count({ where })]);
+      res.status(200).json({ success: true, data, meta: pageMeta(options.page, options.pageSize, total) }); return;
+    }
     const data = await brandService.list();
     const result = paginateArray(data, req.query as Record<string, unknown>);
 

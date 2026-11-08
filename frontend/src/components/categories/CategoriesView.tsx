@@ -8,13 +8,13 @@ import { Eye, Pencil, Trash2 } from "@/components/ui/ActionIcons";
 import { LoaderCircle } from "@/components/ui/GlobalLoading";
 import {
   useEffect,
-  useMemo,
   useState,
   type FormEvent,
 } from "react";
 
 import { AlertCircle, CheckCircle2, Plus, RefreshCw, Search, Tags, X } from "lucide-react";
 
+import { usePagedMaster } from "@/hooks/usePagedMaster";
 import { useCategories } from "@/hooks/useCategories";
 import { useAuth } from "@/components/auth/AuthProvider";
 import type { Category } from "@/types/category";
@@ -44,20 +44,17 @@ export default function CategoriesView() {
   const canDelete = can("categories.delete");
 
   const {
-    categories,
-    loading,
     saving,
-    error,
-    fetchCategories,
     createCategory,
     updateCategory,
     deactivateCategory,
-  } = useCategories();
+  } = useCategories(false);
 
   // TABLE STATE
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
+  const { rows: categories, total, loading, error, reload: fetchCategories } = usePagedMaster<Category>("/api/categories", currentPage, pageSize, search, "all", saving, setCurrentPage);
 
   // MODAL STATE
   const [modalOpen, setModalOpen] = useState(false);
@@ -78,43 +75,13 @@ export default function CategoriesView() {
   // FILTER CATEGORIES
   // =========================================
 
-  const filteredCategories = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-
-    if (!keyword) {
-      return categories;
-    }
-
-    return categories.filter(
-      (category) =>
-        category.name.toLowerCase().includes(keyword) ||
-        (category.description ?? "")
-          .toLowerCase()
-          .includes(keyword)
-    );
-  }, [categories, search]);
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredCategories.length / pageSize)
-  );
-
+  const filteredCategories = categories;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(currentPage, totalPages);
-
   const startIndex = (safePage - 1) * pageSize;
-
-  const paginatedCategories = filteredCategories.slice(
-    startIndex,
-    startIndex + pageSize
-  );
-
-  const showingFrom =
-    filteredCategories.length > 0 ? startIndex + 1 : 0;
-
-  const showingTo = Math.min(
-    startIndex + pageSize,
-    filteredCategories.length
-  );
+  const paginatedCategories = categories;
+  const showingFrom = total > 0 ? startIndex + 1 : 0;
+  const showingTo = Math.min(startIndex + pageSize, total);
 
   // =========================================
   // MODAL FUNCTIONS
@@ -287,7 +254,7 @@ export default function CategoriesView() {
       )}
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-4 dark:border-blue-900 dark:from-blue-950/60 dark:to-slate-900"><p className="text-[10px] font-bold uppercase tracking-widest text-blue-500">Taxonomy size</p><p className="mt-2 text-2xl font-bold text-slate-900">{categories.length}</p><p className="mt-1 text-xs text-slate-500">Product groups available</p></div>
+        <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-4 dark:border-blue-900 dark:from-blue-950/60 dark:to-slate-900"><p className="text-[10px] font-bold uppercase tracking-widest text-blue-500">Taxonomy size</p><p className="mt-2 text-2xl font-bold text-slate-900">{total}</p><p className="mt-1 text-xs text-slate-500">Product groups matching the search</p></div>
         <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-4 dark:border-emerald-900 dark:from-emerald-950/50 dark:to-slate-900"><p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Active groups</p><p className="mt-2 text-2xl font-bold text-slate-900">{categories.filter((category) => category.isActive).length}</p><p className="mt-1 text-xs text-slate-500">Ready for product assignment</p></div>
         <div className="rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50 to-white p-4 dark:border-violet-900 dark:from-violet-950/50 dark:to-slate-900"><p className="text-[10px] font-bold uppercase tracking-widest text-violet-600">Documented</p><p className="mt-2 text-2xl font-bold text-slate-900">{categories.filter((category) => Boolean(category.description)).length}</p><p className="mt-1 text-xs text-slate-500">Categories with descriptions</p></div>
       </div>
@@ -525,7 +492,7 @@ export default function CategoriesView() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-5 sm:px-7">
           <p className="text-xs text-slate-500">
             Showing {showingFrom} to {showingTo} of{" "}
-            {filteredCategories.length} entries
+            {total} entries
           </p>
 
           <div className="flex items-center gap-2">

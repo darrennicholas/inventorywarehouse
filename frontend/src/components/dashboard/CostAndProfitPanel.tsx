@@ -6,10 +6,10 @@ import { apiRequest, downloadApiFile } from "@/lib/api";
 import { confirmAction } from "@/components/ui/GlobalAlert";
 
 type Valuation = {
-  inventoryValue: string;
+  inventoryValue: string | null;
   unknownUnits: number;
-  inventoryValuationAsOf?: string;
-  inventoryValuationSource?: "DAILY_CLOSING_SNAPSHOT" | "CURRENT_BALANCE";
+  inventoryValuationAsOf?: string | null;
+  inventoryValuationSource?: "DAILY_CLOSING_SNAPSHOT" | "CURRENT_BALANCE" | "UNAVAILABLE";
   historicalSnapshotAvailable?: boolean;
   revenue: string | null;
   cogs: string | null;
@@ -45,7 +45,7 @@ export default function CostAndProfitPanel({ from, to, warehouseId }: { from?: s
   if (!readable) return null;
   const stockLabel = data?.inventoryValuationSource === "DAILY_CLOSING_SNAPSHOT"
     ? `Nilai stok · snapshot ${data.inventoryValuationAsOf ? new Date(data.inventoryValuationAsOf).toLocaleDateString("id-ID") : ""}`
-    : "Nilai stok saat ini";
+    : data?.inventoryValuationSource === "UNAVAILABLE" ? "Nilai stok pada tanggal tersebut" : "Nilai stok saat ini";
 
   return <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
     <div className="flex flex-wrap items-start justify-between gap-3"><div>
@@ -59,8 +59,8 @@ export default function CostAndProfitPanel({ from, to, warehouseId }: { from?: s
     }} className="rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-50">{exporting ? "Menyiapkan…" : "Unduh daftar modal belum diketahui"}</button>}</div>
     {error ? <p role="alert" className="text-sm text-red-600 dark:text-red-300">{error}</p> : !data ? <p className="text-sm text-slate-500">Menghitung modal dan profit…</p> : <>
       <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[[stockLabel, money(data.inventoryValue)], ["Penjualan neto · periode", can("sales.read") ? money(data.revenue) : "Akses terbatas"], ["COGS · periode", can("sales.read") ? money(data.cogs) : "Akses terbatas"], ["Gross profit · periode", can("sales.read") ? money(data.grossProfit) : "Akses terbatas"]].map(([label, value]) => <div key={label} className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800"><dt className="text-xs text-slate-500">{label}</dt><dd className="mt-2 text-lg font-bold">{value}</dd></div>)}</dl>
-      <p className="text-xs text-slate-500">{data.unknownUnits} unit stok pada tanggal valuasi belum memiliki modal. {data.unknownCostUnits ?? "—"} unit pergerakan memiliki modal historis belum lengkap. Margin: {data.grossMargin == null ? "—" : `${Number(data.grossMargin).toFixed(2)}%`}.</p>
-      {data.historicalSnapshotAvailable === false && <p role="status" className="text-xs font-medium text-amber-700 dark:text-amber-300">Snapshot historis belum tersedia untuk tanggal tersebut; nilai di atas adalah saldo saat ini.</p>}
+      <p className="text-xs text-slate-500">{data.historicalSnapshotAvailable === false ? "Jumlah unit pada tanggal valuasi tidak tersedia." : `${data.unknownUnits} unit stok pada tanggal valuasi belum memiliki modal.`} {data.unknownCostUnits ?? "—"} unit pergerakan memiliki modal historis belum lengkap. Margin: {data.grossMargin == null ? "—" : `${Number(data.grossMargin).toFixed(2)}%`}.</p>
+      {data.historicalSnapshotAvailable === false && <p role="status" className="text-xs font-medium text-amber-700 dark:text-amber-300">Snapshot historis tidak tersedia untuk tanggal tersebut.</p>}
     </>}
     <p className="text-xs text-slate-500">Modal lama tidak diasumsikan nol. Penjualan neto tidak termasuk pajak dan sudah dikurangi diskon serta return; pajak pembelian tidak dikapitalisasi. Ini bukan laporan laba bersih.</p>
   </section>;

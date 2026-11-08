@@ -8,7 +8,6 @@ import { Eye, Pencil, Trash2 } from "@/components/ui/ActionIcons";
 import { LoaderCircle } from "@/components/ui/GlobalLoading";
 import {
   useEffect,
-  useMemo,
   useState,
   type FormEvent,
 } from "react";
@@ -16,6 +15,7 @@ import {
 import { AlertCircle, CheckCircle2, Plus, RefreshCw, Search, Truck, X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 
+import { usePagedMaster } from "@/hooks/usePagedMaster";
 import { useSuppliers } from "@/hooks/useSuppliers";
 import { supplierService } from "@/services/supplier.service";
 
@@ -65,15 +65,11 @@ export default function SuppliersView() {
   const canWrite = can("suppliers.write");
 
   const {
-    suppliers,
-    loading,
     saving,
-    error,
-    refresh,
     create,
     update,
     deactivate,
-  } = useSuppliers();
+  } = useSuppliers(false);
 
   // =====================================
   // TABLE STATE
@@ -85,6 +81,7 @@ export default function SuppliersView() {
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const { rows: suppliers, total, loading, error, reload: refresh } = usePagedMaster<Supplier>("/api/suppliers", page, pageSize, search, statusFilter, saving, setPage);
 
   // =====================================
   // MODAL STATE
@@ -111,56 +108,13 @@ export default function SuppliersView() {
   // SEARCH & STATUS FILTER
   // =====================================
 
-  const filtered = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-
-    return suppliers.filter((supplier) => {
-      const matchesStatus =
-        statusFilter === "all" ||
-        (statusFilter === "active"
-          ? supplier.isActive
-          : !supplier.isActive);
-
-      const matchesSearch =
-        !keyword ||
-        [
-          supplier.code,
-          supplier.name,
-          supplier.email,
-          supplier.phone,
-          supplier.address,
-        ].some((value) =>
-          (value ?? "").toLowerCase().includes(keyword)
-        );
-
-      return matchesStatus && matchesSearch;
-    });
-  }, [suppliers, search, statusFilter]);
-
-  // =====================================
-  // PAGINATION
-  // =====================================
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filtered.length / pageSize)
-  );
-
+  const filtered = suppliers;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const currentPage = Math.min(page, totalPages);
   const start = (currentPage - 1) * pageSize;
-
-  const visible = filtered.slice(
-    start,
-    start + pageSize
-  );
-
-  const showingFrom =
-    filtered.length === 0 ? 0 : start + 1;
-
-  const showingTo = Math.min(
-    start + pageSize,
-    filtered.length
-  );
+  const visible = suppliers;
+  const showingFrom = total === 0 ? 0 : start + 1;
+  const showingTo = Math.min(start + pageSize, total);
 
   // =====================================
   // FORM HELPERS
@@ -684,7 +638,7 @@ export default function SuppliersView() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-5 text-xs text-slate-500 sm:px-7">
           <span>
             Showing {showingFrom} to{" "}
-            {showingTo} of {filtered.length} entries
+            {showingTo} of {total} entries
           </span>
 
           <div className="flex items-center gap-3">

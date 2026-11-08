@@ -3,12 +3,13 @@ import { z } from "zod";
 import { prisma } from "../../lib/prisma.ts";
 import { Prisma } from "../../generated/prisma/client.ts";
 import { authOf, requirePermission } from "../../middlewares/auth.middleware.ts";
-import { assertWarehouseAccess } from "../../rbac/warehouse-scope.ts";
+import { assertWarehouseAccess, scopedWarehouseFilter } from "../../rbac/warehouse-scope.ts";
 import { AppError } from "../../utils/AppError.ts";
 import { asyncHandler } from "../../utils/asyncHandler.ts";
 import { writeAuditLog } from "../audit/audit.service.ts";
 import { notifyByPermission } from "../notifications/notification.service.ts";
 import { financialSummary, lockFinancialDocument, returnSettlementSummary } from "./settlement.service.ts";
+import { pageMeta, pagination } from "../../utils/pagination.ts";
 
 const router = Router();
 const money = z.string().regex(/^\d{1,12}(\.\d{1,2})?$/).refine((value) => new Prisma.Decimal(value).gt(0), "Amount must be positive with at most two decimals");
@@ -75,11 +76,20 @@ router.get("/credits/:id/targets", requirePermission("payments.read"), asyncHand
   const doc = await authorize(credit.returnOrderId, auth);
   if (!auth.permissions.includes(doc.type === "PURCHASE" ? "purchases.read" : "sales.read")) throw new AppError(403, "Invoice read permission is required");
   const source = doc.type === "PURCHASE" ? await prisma.purchaseOrder.findUniqueOrThrow({ where: { id: doc.purchaseOrderId! } }) : await prisma.sale.findUniqueOrThrow({ where: { id: doc.saleId! } });
-  const candidates = doc.type === "PURCHASE" && "supplierId" in source
-    ? await prisma.purchaseOrder.findMany({ where: { supplierId: source.supplierId, id: { not: source.id }, status: { notIn: ["DRAFT", "CANCELLED"] } }, select: { id: true, number: true, warehouseId: true }, orderBy: { orderDate: "desc" }, take: 100 })
-    : "customerId" in source && source.customerId ? await prisma.sale.findMany({ where: { customerId: source.customerId, id: { not: source.id }, status: { notIn: ["DRAFT", "CANCELLED"] } }, select: { id: true, number: true, warehouseId: true }, orderBy: { saleDate: "desc" }, take: 100 }) : [];
-  const accessible = candidates.filter((row) => { try { assertWarehouseAccess(auth, row.warehouseId); return true; } catch { return false; } });
-  res.json({ success: true, data: accessible, limit: 100 });
+  const { page, pageSize, skip, take } = pagination(req.query as Record<string, unknown>);
+  const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 100) : "";
+  const common = { ...scopedWarehouseFilter(auth), id: { not: source.id }, ...(search ? { number: { contains: search, mode: "insensitive" as const } } : {}) };
+  if (doc.type === "PURCHASE" && "supplierId" in source) {
+    const where = { ...common, supplierId: source.supplierId, status: { notIn: ["DRAFT", "CANCELLED"] as ("DRAFT" | "CANCELLED")[] } };
+    const [data, total] = await Promise.all([prisma.purchaseOrder.findMany({ where, select: { id: true, number: true, warehouseId: true }, orderBy: [{ orderDate: "desc" }, { id: "desc" }], skip, take }), prisma.purchaseOrder.count({ where })]);
+    res.json({ success: true, data, meta: pageMeta(page, pageSize, total) }); return;
+  }
+  if ("customerId" in source && source.customerId) {
+    const where = { ...common, customerId: source.customerId, status: { notIn: ["DRAFT", "CANCELLED"] as ("DRAFT" | "CANCELLED")[] } };
+    const [data, total] = await Promise.all([prisma.sale.findMany({ where, select: { id: true, number: true, warehouseId: true }, orderBy: [{ saleDate: "desc" }, { id: "desc" }], skip, take }), prisma.sale.count({ where })]);
+    res.json({ success: true, data, meta: pageMeta(page, pageSize, total) }); return;
+  }
+  res.json({ success: true, data: [], meta: pageMeta(page, pageSize, 0) });
 }));
 router.post("/credits/:id/apply", requirePermission("payments.write"), asyncHandler(async (req, res) => {
   const id = z.uuid().parse(req.params.id); const input = z.object({ targetId: z.uuid(), amount: money }).strict().parse(req.body); const auth = authOf(req);

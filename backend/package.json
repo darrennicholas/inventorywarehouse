@@ -4,8 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "tsx --test test/hardening.test.ts",
-    "test:integration": "cross-env RUN_INTEGRATION_TESTS=true tsx --test test/hardening.test.ts",
+    "test": "tsx --test test/hardening.test.ts test/workflow.integration.test.ts test/pagination.integration.test.ts",
+    "test:integration": "cross-env RUN_INTEGRATION_TESTS=true tsx --test test/hardening.test.ts test/workflow.integration.test.ts test/pagination.integration.test.ts",
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",

@@ -30,7 +30,7 @@ export const staffRepository = {
   findAll(options?: { skip?: number; take?: number; search?: string; isActive?: boolean }) {
     return prisma.staff.findMany({
       ...(options?.skip !== undefined ? { skip: options.skip, take: options.take } : {}),
-      where: { ...(options?.isActive !== undefined ? { isActive: options.isActive } : {}), ...(options?.search ? { OR: [{ staffCode: { contains: options.search, mode: "insensitive" } }, { fullName: { contains: options.search, mode: "insensitive" } }, { email: { contains: options.search, mode: "insensitive" } }] } : {}) },
+      where: { ...(options?.isActive !== undefined ? { isActive: options.isActive } : {}), ...(options?.search ? { OR: [{ staffCode: { contains: options.search, mode: "insensitive" } }, { fullName: { contains: options.search, mode: "insensitive" } }, { email: { contains: options.search, mode: "insensitive" } }, { phone: { contains: options.search, mode: "insensitive" } }, { position: { contains: options.search, mode: "insensitive" } }, { warehouse: { name: { contains: options.search, mode: "insensitive" } } }, { warehouse: { code: { contains: options.search, mode: "insensitive" } } }] } : {}) },
       include: withWarehouse,
       orderBy: {
         createdAt: "desc",
@@ -39,7 +39,7 @@ export const staffRepository = {
   },
 
   count(options?: { search?: string; isActive?: boolean }) {
-    return prisma.staff.count({ where: { ...(options?.isActive !== undefined ? { isActive: options.isActive } : {}), ...(options?.search ? { OR: [{ staffCode: { contains: options.search, mode: "insensitive" } }, { fullName: { contains: options.search, mode: "insensitive" } }, { email: { contains: options.search, mode: "insensitive" } }] } : {}) } });
+    return prisma.staff.count({ where: { ...(options?.isActive !== undefined ? { isActive: options.isActive } : {}), ...(options?.search ? { OR: [{ staffCode: { contains: options.search, mode: "insensitive" } }, { fullName: { contains: options.search, mode: "insensitive" } }, { email: { contains: options.search, mode: "insensitive" } }, { phone: { contains: options.search, mode: "insensitive" } }, { position: { contains: options.search, mode: "insensitive" } }, { warehouse: { name: { contains: options.search, mode: "insensitive" } } }, { warehouse: { code: { contains: options.search, mode: "insensitive" } } }] } : {}) } });
   },
 
   // GET STAFF BY ID

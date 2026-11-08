@@ -18,7 +18,7 @@ import type {
 // STAFF HOOK
 // ======================================
 
-export function useStaff() {
+export function useStaff(enabled = true) {
   const [staff, setStaff] =
     useState<Staff[]>([]);
 
@@ -69,6 +69,7 @@ export function useStaff() {
   // ====================================
 
   useEffect(() => {
+    if (!enabled) return;
     const controller =
       new AbortController();
 
@@ -77,7 +78,7 @@ export function useStaff() {
     );
 
     return () => controller.abort();
-  }, [refresh]);
+  }, [refresh, enabled]);
 
   // ====================================
   // CREATE STAFF

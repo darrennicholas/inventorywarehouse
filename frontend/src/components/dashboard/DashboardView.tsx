@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Activity, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, CalendarDays, Check, ChevronDown, Package, RefreshCw, Warehouse as WarehouseIcon } from "lucide-react";
 import { apiRequest } from "@/lib/api";
+import { useApiQuery } from "@/hooks/useApiQuery";
 import { useAuth } from "@/components/auth/AuthProvider";
 import NotificationFeed from "@/components/dashboard/NotificationFeed";
 import InventoryIntelligence from "@/components/dashboard/InventoryIntelligence";
@@ -57,8 +58,9 @@ function normalizeSummary(value: Partial<DashboardSummary> | null | undefined): 
   } as DashboardSummary;
 }
 
-export default function DashboardView({ products, categories, brands, units, summary: initialSummary, loading, masterLoading, onNavigate, onOpenAttention }: Props) {
+export default function DashboardView({ products, summary: initialSummary, loading, masterLoading, onNavigate, onOpenAttention }: Props) {
   const { user, can } = useAuth();
+  const { data: catalogSummary } = useApiQuery<{ categories: number | null; brands: number | null; units: number | null; products: number | null; withCategory: number | null; withBrand: number | null; withUnit: number | null; withBarcode: number | null }>("/api/operations/catalog-summary");
   const [remoteSummary, setRemoteSummary] = useState<DashboardSummary | null>(null);
   const summary = remoteSummary ?? normalizeSummary(initialSummary);
   const [from, setFrom] = useState(() => localDate(new Date(Date.now() - 29 * 86_400_000)));
@@ -97,10 +99,10 @@ export default function DashboardView({ products, categories, brands, units, sum
   };
 
   const catalog = [
-    { label: "Categories", value: categories.length, page: "categories" as const },
-    { label: "Brands", value: brands.length, page: "brands" as const },
-    { label: "Units", value: units.length, page: "units" as const },
-    { label: "Products", value: products.length, page: "products" as const },
+    { label: "Categories", value: catalogSummary?.categories ?? "—", page: "categories" as const },
+    { label: "Brands", value: catalogSummary?.brands ?? "—", page: "brands" as const },
+    { label: "Units", value: catalogSummary?.units ?? "—", page: "units" as const },
+    { label: "Products", value: catalogSummary?.products ?? "—", page: "products" as const },
   ];
   const composition = summary?.categoryStock ?? [];
   const totalComposition = composition.reduce((sum, row) => sum + row.quantity, 0);
@@ -161,7 +163,7 @@ export default function DashboardView({ products, categories, brands, units, sum
     </section>
     </div>
 
-    <section className="grid gap-4 xl:grid-cols-[1fr_1.2fr]"><Panel title="Kelengkapan katalog" subtitle="Relasi master data yang dipakai product" icon={<Boxes className="text-indigo-500" size={19} />}><div className="space-y-4">{[["Product → Category", products.filter((p) => Boolean(p.categoryId)).length, products.length], ["Product → Brand", products.filter((p) => Boolean(p.brandId)).length, products.length], ["Product → Unit", products.filter((p) => Boolean(p.unitId)).length, products.length], ["Barcode tersedia", products.filter((p) => Boolean(p.barcode)).length, products.length]].map(([label, value, total]) => <Progress key={String(label)} label={String(label)} value={Number(value)} total={Number(total)} />)}</div></Panel><Panel title="Pembaruan terbaru di katalog" subtitle="SKU, kategori, merek, dan saldo tersedia" icon={<Package className="text-blue-500" size={19} />}><div className="divide-y divide-slate-100 dark:divide-slate-800">{products.slice(0, 5).map((product) => <div key={product.id} className="flex items-center gap-3 py-3"><span className="rounded-xl bg-blue-50 p-2 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300"><Package size={17} /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{product.name}</p><p className="truncate text-xs text-slate-500">{product.sku} · {product.category?.name ?? "Tanpa kategori"} · {product.brand?.name ?? "Tanpa brand"}</p></div><strong className="text-sm text-slate-800 dark:text-white">{product.totalStock ?? "—"}</strong></div>)}{!products.length && <Empty />}</div><button type="button" onClick={() => onNavigate("products")} className="mt-3 text-sm font-semibold text-blue-600 hover:text-blue-700">Buka katalog →</button></Panel></section>
+    <section className="grid gap-4 xl:grid-cols-[1fr_1.2fr]"><Panel title="Kelengkapan katalog" subtitle="Relasi master data yang dipakai product" icon={<Boxes className="text-indigo-500" size={19} />}><div className="space-y-4">{[["Product → Category", catalogSummary?.withCategory ?? 0, catalogSummary?.products ?? 0], ["Product → Brand", catalogSummary?.withBrand ?? 0, catalogSummary?.products ?? 0], ["Product → Unit", catalogSummary?.withUnit ?? 0, catalogSummary?.products ?? 0], ["Barcode tersedia", catalogSummary?.withBarcode ?? 0, catalogSummary?.products ?? 0]].map(([label, value, total]) => <Progress key={String(label)} label={String(label)} value={Number(value)} total={Number(total)} />)}</div></Panel><Panel title="Pembaruan terbaru di katalog" subtitle="SKU, kategori, merek, dan saldo tersedia" icon={<Package className="text-blue-500" size={19} />}><div className="divide-y divide-slate-100 dark:divide-slate-800">{products.slice(0, 5).map((product) => <div key={product.id} className="flex items-center gap-3 py-3"><span className="rounded-xl bg-blue-50 p-2 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300"><Package size={17} /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{product.name}</p><p className="truncate text-xs text-slate-500">{product.sku} · {product.category?.name ?? "Tanpa kategori"} · {product.brand?.name ?? "Tanpa brand"}</p></div><strong className="text-sm text-slate-800 dark:text-white">{product.totalStock ?? "—"}</strong></div>)}{!products.length && <Empty />}</div><button type="button" onClick={() => onNavigate("products")} className="mt-3 text-sm font-semibold text-blue-600 hover:text-blue-700">Buka katalog →</button></Panel></section>
 
     <div className="flex items-center justify-end">{refreshing && <GlobalLoading compact label="Memuat analitik…" />}</div>
     <CostAndProfitPanel key={`${appliedFrom}:${appliedTo}:${warehouseId}`} from={appliedFrom} to={appliedTo} warehouseId={warehouseId || undefined} />

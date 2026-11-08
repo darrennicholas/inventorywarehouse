@@ -7,7 +7,6 @@ import { Eye, Pencil, Trash2 } from "@/components/ui/ActionIcons";
 import GlobalLoading, { LoaderCircle } from "@/components/ui/GlobalLoading";
 import {
   useEffect,
-  useMemo,
   useState,
   type FormEvent,
 } from "react";
@@ -15,6 +14,7 @@ import {
 import { AlertCircle, Boxes, CheckCircle2, LayoutGrid, List, Plus, RefreshCw, Ruler, Search, X } from "lucide-react";
 
 import { brandService, unitService } from "@/services/master.service";
+import { usePagedMaster } from "@/hooks/usePagedMaster";
 import { useMasterData } from "@/hooks/useMasterData";
 import { useAuth } from "@/components/auth/AuthProvider";
 
@@ -51,15 +51,11 @@ export default function MasterDataView({ kind }: Props) {
   const api = isUnit ? unitService : brandService;
 
   const {
-    rows,
-    loading,
     saving,
-    error,
-    refresh,
     create,
     update,
     deactivate,
-  } = useMasterData(api);
+  } = useMasterData(api, false);
 
   const title = isUnit ? "Units" : "Brands";
   const ItemIcon = isUnit ? Ruler : Boxes;
@@ -68,6 +64,7 @@ export default function MasterDataView({ kind }: Props) {
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
+  const { rows, total, loading, error, reload: refresh } = usePagedMaster<MasterRecord>(`/api/${moduleName}`, page, pageSize, search, "all", saving, setPage);
   const [viewMode, setViewMode] = useState<"table" | "cards">(isUnit ? "cards" : "table");
 
   // Modal
@@ -89,41 +86,13 @@ export default function MasterDataView({ kind }: Props) {
   // FILTER
   // =====================================
 
-  const filtered = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-
-    if (!keyword) return rows;
-
-    return rows.filter(item =>
-      item.name.toLowerCase().includes(keyword) ||
-      (item.code ?? "").toLowerCase().includes(keyword)
-    );
-  }, [rows, search]);
-
-  // =====================================
-  // PAGINATION
-  // =====================================
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filtered.length / pageSize)
-  );
-
+  const filtered = rows;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, totalPages);
   const startIndex = (safePage - 1) * pageSize;
-
-  const visible = filtered.slice(
-    startIndex,
-    startIndex + pageSize
-  );
-
-  const showingFrom =
-    filtered.length === 0 ? 0 : startIndex + 1;
-
-  const showingTo = Math.min(
-    startIndex + pageSize,
-    filtered.length
-  );
+  const visible = rows;
+  const showingFrom = total === 0 ? 0 : startIndex + 1;
+  const showingTo = Math.min(startIndex + pageSize, total);
 
   // =====================================
   // MODAL FUNCTIONS
@@ -554,7 +523,7 @@ export default function MasterDataView({ kind }: Props) {
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-5 text-xs text-slate-500 sm:px-7">
           <span>
             Showing {showingFrom} to {showingTo}
-            {" "}of {filtered.length} entries
+            {" "}of {total} entries
           </span>
 
           <div className="flex items-center gap-3">

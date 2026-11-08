@@ -8,7 +8,6 @@ import { Eye, Pencil, Trash2 } from "@/components/ui/ActionIcons";
 import { LoaderCircle } from "@/components/ui/GlobalLoading";
 import {
   useEffect,
-  useMemo,
   useState,
   type FormEvent,
 } from "react";
@@ -16,6 +15,7 @@ import {
 import { AlertCircle, CheckCircle2, Plus, RefreshCw, Search, UserRound, X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 
+import { usePagedMaster } from "@/hooks/usePagedMaster";
 import { useStaff } from "@/hooks/useStaff";
 import { staffService } from "@/services/staff.service";
 
@@ -77,15 +77,11 @@ export default function StaffView() {
   const canWrite = can("staff.write");
 
   const {
-    staff,
-    loading,
     saving,
-    error,
-    refresh,
     create,
     update,
     deactivate,
-  } = useStaff();
+  } = useStaff(false);
 
   // ====================================
   // WAREHOUSE OPTIONS
@@ -117,6 +113,7 @@ export default function StaffView() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] =
     useState(10);
+  const { rows: staff, total, loading, error, reload: refresh } = usePagedMaster<Staff>("/api/staff", page, pageSize, search, statusFilter, saving, setPage);
 
   // ====================================
   // ADD / EDIT MODAL
@@ -191,66 +188,13 @@ export default function StaffView() {
   // SEARCH & FILTER
   // ====================================
 
-  const filtered = useMemo(() => {
-    const keyword =
-      search.trim().toLowerCase();
-
-    return staff.filter((person) => {
-      const matchesStatus =
-        statusFilter === "all" ||
-        (statusFilter === "active"
-          ? person.isActive
-          : !person.isActive);
-
-      const matchesText =
-        !keyword ||
-        [
-          person.staffCode,
-          person.fullName,
-          person.email ?? "",
-          person.phone ?? "",
-          person.position ?? "",
-          person.warehouse?.name ?? "",
-          person.warehouse?.code ?? "",
-        ].some((value) =>
-          value.toLowerCase().includes(keyword)
-        );
-
-      return matchesStatus && matchesText;
-    });
-  }, [staff, search, statusFilter]);
-
-  // ====================================
-  // PAGINATION
-  // ====================================
-
-  const pageCount = Math.max(
-    1,
-    Math.ceil(filtered.length / pageSize)
-  );
-
-  const currentPage = Math.min(
-    page,
-    pageCount
-  );
-
-  const startIndex =
-    (currentPage - 1) * pageSize;
-
-  const rows = filtered.slice(
-    startIndex,
-    startIndex + pageSize
-  );
-
-  const from =
-    filtered.length === 0
-      ? 0
-      : startIndex + 1;
-
-  const to = Math.min(
-    startIndex + pageSize,
-    filtered.length
-  );
+  const filtered = staff;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const startIndex = (currentPage - 1) * pageSize;
+  const rows = staff;
+  const from = total === 0 ? 0 : startIndex + 1;
+  const to = Math.min(startIndex + pageSize, total);
 
   // ====================================
   // UPDATE FORM FIELD
@@ -867,7 +811,7 @@ export default function StaffView() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-5 text-xs text-slate-500 sm:px-7">
           <span>
             Showing {from} to {to} of{" "}
-            {filtered.length} entries
+            {total} entries
           </span>
 
           <div className="flex items-center gap-3">

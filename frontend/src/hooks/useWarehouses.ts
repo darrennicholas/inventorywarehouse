@@ -15,7 +15,7 @@ import type {
   UpdateWarehouseInput,
 } from "@/types/warehouse";
 
-export function useWarehouses() {
+export function useWarehouses(enabled = true) {
   const [warehouses, setWarehouses] =
     useState<Warehouse[]>([]);
 
@@ -62,6 +62,7 @@ export function useWarehouses() {
   // ====================================
 
   useEffect(() => {
+    if (!enabled) return;
     const controller = new AbortController();
 
     void Promise.resolve().then(() =>
@@ -69,7 +70,7 @@ export function useWarehouses() {
     );
 
     return () => controller.abort();
-  }, [fetchWarehouses]);
+  }, [fetchWarehouses, enabled]);
 
   // ====================================
   // CREATE WAREHOUSE

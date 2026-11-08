@@ -8,7 +8,21 @@ import { stockAvailabilitySummary } from "./stock-availability-summary.ts";
 import { attentionItems } from "./attention.service.ts";
 
 const router = Router();
-router.get("/attention", requirePermission("dashboard.read"), asyncHandler(async (req, res) => { res.json({ success: true, data: await attentionItems(authOf(req)) }); }));
+router.get("/catalog-summary", requirePermission("dashboard.read"), asyncHandler(async (req, res) => {
+  const auth = authOf(req);
+  const [categories, brands, units, products, withCategory, withBrand, withUnit, withBarcode] = await Promise.all([
+    auth.permissions.includes("categories.read") ? prisma.category.count() : null,
+    auth.permissions.includes("brands.read") ? prisma.brand.count() : null,
+    auth.permissions.includes("units.read") ? prisma.unit.count() : null,
+    auth.permissions.includes("products.read") ? prisma.product.count() : null,
+    auth.permissions.includes("products.read") ? prisma.product.count({ where: { categoryId: { not: null } } }) : null,
+    auth.permissions.includes("products.read") ? prisma.product.count({ where: { brandId: { not: null } } }) : null,
+    auth.permissions.includes("products.read") ? prisma.product.count({ where: { unitId: { not: null } } }) : null,
+    auth.permissions.includes("products.read") ? prisma.product.count({ where: { barcode: { not: null } } }) : null,
+  ]);
+  res.json({ success: true, data: { categories, brands, units, products, withCategory, withBrand, withUnit, withBarcode } });
+}));
+router.get("/attention", requirePermission("dashboard.read"), asyncHandler(async (req, res) => { const input = z.object({ kind: z.enum(["purchases", "sales", "transfers", "stock-opnames"]).optional(), page: z.coerce.number().int().min(1).max(100000).default(1), search: z.string().trim().max(100).default("") }).parse(req.query); res.json({ success: true, data: await attentionItems(authOf(req), input.kind ? { kind: input.kind, page: input.page, search: input.search } : undefined) }); }));
 const querySchema = z.object({
   from: z.string().optional(),
   to: z.string().optional(),

@@ -99,3 +99,28 @@ test("transaction rollback removes all writes from a failed transaction", { skip
   assert.equal(await prisma.expense.count({ where: { number } }), 0);
   await prisma.$disconnect();
 });
+
+test("enforced location capacity rejects concurrent inbound stock above the limit", { skip: !integrationEnabled }, async () => {
+  const { prisma } = await import("../src/lib/prisma.ts");
+  const { postStockIn } = await import("../src/modules/operations/stock-allocation.service.ts");
+  const suffix = randomUUID().slice(0, 8);
+  const warehouse = await prisma.warehouse.create({ data: { code: `CAP-${suffix}`, name: `Capacity ${suffix}` } });
+  const location = await prisma.warehouseLocation.create({ data: { warehouseId: warehouse.id, code: "CAP", name: "Capacity location", capacity: 5, enforceCapacity: true } });
+  const products = await Promise.all([1, 2].map((n) => prisma.product.create({ data: { sku: `CAP-${suffix}-${n}`, name: `Capacity item ${n}` } })));
+  try {
+    const results = await Promise.allSettled(products.map((product) => prisma.$transaction((tx) => postStockIn(tx, { productId: product.id, warehouseId: warehouse.id, locationId: location.id, quantity: 3, unitCost: 1 }))));
+    assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+    const rejected = results.find((result) => result.status === "rejected");
+    assert.ok(rejected && rejected.status === "rejected");
+    assert.match(String(rejected.reason), /insufficient capacity/i);
+    const total = await prisma.inventoryLocationBalance.aggregate({ where: { locationId: location.id }, _sum: { quantityOnHand: true } });
+    assert.equal(total._sum.quantityOnHand, 3);
+  } finally {
+    await prisma.inventoryLocationBalance.deleteMany({ where: { warehouseId: warehouse.id } });
+    await prisma.inventoryBalance.deleteMany({ where: { warehouseId: warehouse.id } });
+    await prisma.warehouseLocation.delete({ where: { id: location.id } });
+    await prisma.product.deleteMany({ where: { id: { in: products.map((product) => product.id) } } });
+    await prisma.warehouse.delete({ where: { id: warehouse.id } });
+    await prisma.$disconnect();
+  }
+});

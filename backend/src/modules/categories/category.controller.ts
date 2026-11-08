@@ -5,7 +5,8 @@ import { asyncHandler } from "../../utils/asyncHandler.ts";
 import { AppError } from "../../utils/AppError.ts";
 import { categoryService } from "./category.service.ts";
 import { notifyByPermission } from "../notifications/notification.service.ts";
-import { paginateArray } from "../../utils/pagination.ts";
+import { masterListOptions, pageMeta, paginateArray } from "../../utils/pagination.ts";
+import { prisma } from "../../lib/prisma.ts";
 
 import type {
   CreateCategoryInput,
@@ -22,6 +23,12 @@ function getCategoryId(id: unknown): string {
 
 export const getCategories = asyncHandler(
   async (req, res) => {
+    const options = masterListOptions(req.query as Record<string, unknown>);
+    if (options) {
+      const where = { ...(options.isActive !== undefined ? { isActive: options.isActive } : {}), ...(options.search ? { OR: [{ name: { contains: options.search, mode: "insensitive" as const } }, { description: { contains: options.search, mode: "insensitive" as const } }] } : {}) };
+      const [data, total] = await Promise.all([prisma.category.findMany({ where, skip: options.skip, take: options.take, orderBy: [{ name: "asc" }, { id: "asc" }] }), prisma.category.count({ where })]);
+      res.status(200).json({ success: true, data, meta: pageMeta(options.page, options.pageSize, total) }); return;
+    }
     const categories = await categoryService.getAll();
     const result = paginateArray(categories, req.query as Record<string, unknown>);
 

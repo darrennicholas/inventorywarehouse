@@ -8,7 +8,6 @@ import { Eye, Pencil, Trash2 } from "@/components/ui/ActionIcons";
 import { LoaderCircle } from "@/components/ui/GlobalLoading";
 import {
   useEffect,
-  useMemo,
   useState,
   type FormEvent,
 } from "react";
@@ -16,6 +15,7 @@ import {
 import { AlertCircle, CheckCircle2, Download, MapPin, Plus, RefreshCw, Search, Warehouse as WarehouseIcon, X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 
+import { usePagedMaster } from "@/hooks/usePagedMaster";
 import { useWarehouses } from "@/hooks/useWarehouses";
 import { warehouseService } from "@/services/warehouse.service";
 import WarehouseLocationsPanel from "@/components/warehouses/WarehouseLocationsPanel";
@@ -64,20 +64,17 @@ export default function WarehousesView() {
   const canWrite = can("warehouses.write");
 
   const {
-    warehouses,
-    loading,
     saving,
-    error,
-    fetchWarehouses,
     createWarehouse,
     updateWarehouse,
     deactivateWarehouse,
-  } = useWarehouses();
+  } = useWarehouses(false);
 
   // TABLE
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
+  const { rows: warehouses, total, loading, error, reload: fetchWarehouses } = usePagedMaster<Warehouse>("/api/warehouses", page, pageSize, search, "all", saving, setPage);
 
   // ADD / EDIT MODAL
   const [modalOpen, setModalOpen] = useState(false);
@@ -119,47 +116,13 @@ export default function WarehousesView() {
   // SEARCH & FILTER
   // ====================================
 
-  const filtered = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-
-    if (!keyword) {
-      return warehouses;
-    }
-
-    return warehouses.filter(
-      (warehouse) =>
-        warehouse.code.toLowerCase().includes(keyword) ||
-        warehouse.name.toLowerCase().includes(keyword) ||
-        (warehouse.address ?? "")
-          .toLowerCase()
-          .includes(keyword)
-    );
-  }, [warehouses, search]);
-
-  // ====================================
-  // PAGINATION
-  // ====================================
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filtered.length / pageSize)
-  );
-
+  const filtered = warehouses;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, totalPages);
   const startIndex = (safePage - 1) * pageSize;
-
-  const visible = filtered.slice(
-    startIndex,
-    startIndex + pageSize
-  );
-
-  const showingFrom =
-    filtered.length === 0 ? 0 : startIndex + 1;
-
-  const showingTo = Math.min(
-    startIndex + pageSize,
-    filtered.length
-  );
+  const visible = warehouses;
+  const showingFrom = total === 0 ? 0 : startIndex + 1;
+  const showingTo = Math.min(startIndex + pageSize, total);
 
   // ====================================
   // OPEN ADD MODAL
@@ -413,7 +376,7 @@ export default function WarehousesView() {
       )}
 
       <div className="grid gap-3 md:grid-cols-[1.3fr_1fr_1fr]">
-        <div className="relative overflow-hidden rounded-2xl bg-slate-900 p-5 text-white shadow-sm"><div className="absolute -right-8 -top-10 h-28 w-28 rounded-full border-[18px] border-cyan-400/20" /><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300">Storage network</p><p className="mt-2 text-2xl font-bold">{warehouses.length} locations</p><p className="mt-1 text-xs text-slate-400">Download a stock-count PDF from any warehouse row.</p></div>
+        <div className="relative overflow-hidden rounded-2xl bg-slate-900 p-5 text-white shadow-sm"><div className="absolute -right-8 -top-10 h-28 w-28 rounded-full border-[18px] border-cyan-400/20" /><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300">Storage network</p><p className="mt-2 text-2xl font-bold">{total} locations</p><p className="mt-1 text-xs text-slate-400">Download a stock-count PDF from any warehouse row.</p></div>
         <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-5 dark:border-emerald-900 dark:bg-emerald-950/30"><p className="text-xs font-semibold text-emerald-700">Active locations</p><p className="mt-2 text-2xl font-bold text-slate-900">{warehouses.filter((warehouse) => warehouse.isActive).length}</p></div>
         <div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-xs font-semibold text-slate-500">Inactive locations</p><p className="mt-2 text-2xl font-bold text-slate-900">{warehouses.filter((warehouse) => !warehouse.isActive).length}</p></div>
       </div>
@@ -695,7 +658,7 @@ export default function WarehousesView() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-5 text-xs text-slate-500 sm:px-7">
           <p>
             Showing {showingFrom} to {showingTo} of{" "}
-            {filtered.length} entries
+            {total} entries
           </p>
 
           <div className="flex items-center gap-3">

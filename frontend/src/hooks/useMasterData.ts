@@ -14,7 +14,7 @@ import type {
   MasterUpdateInput,
 } from "@/types/master";
 
-export function useMasterData(api: MasterApi) {
+export function useMasterData(api: MasterApi, enabled = true) {
   const [rows, setRows] = useState<MasterRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -50,6 +50,7 @@ export function useMasterData(api: MasterApi) {
   );
 
   useEffect(() => {
+    if (!enabled) return;
     const controller = new AbortController();
 
     void Promise.resolve().then(() =>
@@ -57,7 +58,7 @@ export function useMasterData(api: MasterApi) {
     );
 
     return () => controller.abort();
-  }, [refresh]);
+  }, [refresh, enabled]);
 
   // CREATE
   const create = useCallback(

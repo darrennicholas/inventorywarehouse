@@ -65,6 +65,16 @@ async function ensureScopedWarehouse(tx: any, id: string, auth: ReturnType<typeo
   await ensureWarehouse(tx, id);
 }
 
+async function validateRevisionLocations(tx: typeof prisma | any, warehouseId: string, productId: string, locationId?: string | null, batchId?: string | null) {
+  if (locationId && !await tx.warehouseLocation.findFirst({ where: { id: locationId, warehouseId, isActive: true } })) throw new AppError(400, "Location is invalid or inactive for this warehouse");
+  if (batchId) {
+    const batch = await tx.productBatch.findFirst({ where: { id: batchId, warehouseId, productId } });
+    if (!batch) throw new AppError(400, "Batch does not belong to the selected product and warehouse");
+    if (!(await tx.product.findUniqueOrThrow({ where: { id: productId }, select: { trackBatch: true } })).trackBatch) throw new AppError(400, "Non-batch product cannot use a batch");
+    assertUsableBatch(batch, {});
+  }
+}
+
 async function ensureLocation(tx: any, warehouseId: string, requestedLocationId?: string | null) {
   if (requestedLocationId) {
     const location = await tx.warehouseLocation.findFirst({ where: { id: requestedLocationId, warehouseId, isActive: true } });
@@ -564,7 +574,7 @@ router.get("/adjustments", requirePermission("adjustments.read"), asyncHandler(a
   if (base) clauses.push(base);
   if (search) clauses.push({ OR: [{ number: { contains: search, mode: "insensitive" } }, { reason: { contains: search, mode: "insensitive" } }, { items: { some: { product: { OR: [{ name: { contains: search, mode: "insensitive" } }, { sku: { contains: search, mode: "insensitive" } }] } } } }] });
   const status = typeof req.query.status === "string" ? req.query.status : "";
-  if (["DRAFT", "POSTED", "CANCELLED"].includes(status)) clauses.push({ status });
+  if (["DRAFT", "REVISION", "POSTED", "CANCELLED"].includes(status)) clauses.push({ status });
   const dates = dateRange(req.query as Record<string, unknown>, "adjustmentDate"); if (dates) clauses.push(dates);
   const where = clauses.length ? { AND: clauses } : undefined;
   const [data, total] = await Promise.all([prisma.stockAdjustment.findMany({ where, include: { warehouse: true, createdBy: { select: { id: true, fullName: true } }, approvedBy: { select: { id: true, fullName: true } }, items: { include: { product: { select: { id: true, sku: true, name: true } } } } }, orderBy: { adjustmentDate: "desc" }, skip, take }), prisma.stockAdjustment.count({ where })]);
@@ -591,6 +601,30 @@ router.post("/adjustments", requirePermission("adjustments.write"), asyncHandler
   res.status(201).json({ success: true, message: "Adjustment created successfully", data });
 }));
 
+router.post("/adjustments/:id/revise", requirePermission("adjustments.write"), asyncHandler(async (req, res) => {
+  const id = z.uuid().parse(req.params.id); const input = adjustmentSchema.parse(req.body); const auth = authOf(req);
+  if (input.status && input.status !== "DRAFT") throw new AppError(400, "Revision must be submitted for review");
+  const data = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "StockAdjustment" WHERE "id" = ${id}::uuid FOR UPDATE`;
+    const before = await tx.stockAdjustment.findUnique({ where: { id }, include: { items: true } });
+    if (!before) throw new AppError(404, "Adjustment not found");
+    assertWarehouseAccess(auth, before.warehouseId);
+    if (before.status !== "REVISION") throw new AppError(409, "Adjustment is not awaiting revision");
+    if (before.createdById !== auth.userId) throw new AppError(403, "Only the creator can revise this document");
+    if (before.number !== input.number) throw new AppError(400, "Document number cannot be changed");
+    await ensureScopedWarehouse(tx, input.warehouseId, auth); await ensureProducts(tx, input.items.map((item) => item.productId));
+    for (const item of input.items) {
+      await validateRevisionLocations(tx, input.warehouseId, item.productId, item.locationId, item.batchId);
+      if (input.type === "INCREASE" && !item.batchId && (await tx.product.findUniqueOrThrow({ where: { id: item.productId }, select: { trackBatch: true } })).trackBatch) throw new AppError(400, "Batch is required for a batch-tracked product");
+    }
+    await tx.stockAdjustmentItem.deleteMany({ where: { adjustmentId: id } });
+    const after = await tx.stockAdjustment.update({ where: { id }, data: { warehouseId: input.warehouseId, type: input.type, reason: input.reason, status: "DRAFT", items: { create: input.items } }, include: { items: true } });
+    await writeAuditLog({ userId: auth.userId, action: "RESUBMIT", entity: "StockAdjustment", entityId: id, beforeData: before, afterData: after }, tx as never); return after;
+  });
+  try { await notifyByPermission({ permission: "adjustments.approve", type: "ADJUSTMENT_REVISED", title: "Adjustment resubmitted", message: `${data.number} requires review.`, entity: "StockAdjustment", entityId: id, warehouseId: data.warehouseId }); } catch (error) { console.error("Unable to send revision notification", error); }
+  res.json({ success: true, data });
+}));
+
 router.patch("/adjustments/:id", requirePermission("adjustments.write"), asyncHandler(async (req, res) => {
   const id = z.uuid().parse(req.params.id);
   const input = editStatusSchema.pick({ status: true }).parse(req.body);
@@ -598,6 +632,7 @@ router.patch("/adjustments/:id", requirePermission("adjustments.write"), asyncHa
   const current = await prisma.stockAdjustment.findUnique({ where: { id }, include: { items: true } });
   if (!current) throw new AppError(404, "Adjustment not found");
   await ensureScopedWarehouse(prisma, current.warehouseId, authOf(req));
+  if (current.status === "REVISION") throw new AppError(409, "Use the revision action to resubmit this adjustment");
   const nextStatus = input.status ?? current.status;
   if (input.status && input.status !== current.status) await ensureTransitionAllowed(current.status, input.status, ["DRAFT", "CANCELLED"]);
 
@@ -633,7 +668,7 @@ router.get("/transfers", requirePermission("transfers.read"), asyncHandler(async
   if (scope) clauses.push({ OR: [{ fromWarehouseId: { in: scope } }, { toWarehouseId: { in: scope } }] });
   if (search) clauses.push({ OR: [{ number: { contains: search, mode: "insensitive" } }, { fromWarehouse: { name: { contains: search, mode: "insensitive" } } }, { toWarehouse: { name: { contains: search, mode: "insensitive" } } }, { items: { some: { product: { OR: [{ name: { contains: search, mode: "insensitive" } }, { sku: { contains: search, mode: "insensitive" } }] } } } }] });
   const status = typeof req.query.status === "string" ? req.query.status : "";
-  if (["DRAFT", "IN_TRANSIT", "COMPLETED", "CANCELLED"].includes(status)) clauses.push({ status });
+  if (["DRAFT", "REVISION", "IN_TRANSIT", "COMPLETED", "CANCELLED"].includes(status)) clauses.push({ status });
   const dates = dateRange(req.query as Record<string, unknown>, "transferDate"); if (dates) clauses.push(dates);
   const where = clauses.length ? { AND: clauses } : undefined;
   const [data, total] = await Promise.all([prisma.stockTransfer.findMany({ where, include: { fromWarehouse: true, toWarehouse: true, createdBy: { select: { id: true, fullName: true } }, approvedBy: { select: { id: true, fullName: true } }, items: { include: { product: { select: { id: true, sku: true, name: true } } } } }, orderBy: { transferDate: "desc" }, skip, take }), prisma.stockTransfer.count({ where })]);
@@ -661,6 +696,30 @@ router.post("/transfers", requirePermission("transfers.write"), asyncHandler(asy
   res.status(201).json({ success: true, message: "Transfer created successfully", data });
 }));
 
+router.post("/transfers/:id/revise", requirePermission("transfers.write"), asyncHandler(async (req, res) => {
+  const id = z.uuid().parse(req.params.id); const input = transferSchema.parse(req.body); const auth = authOf(req);
+  if (input.status && input.status !== "DRAFT") throw new AppError(400, "Revision must be submitted for review");
+  const data = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "StockTransfer" WHERE "id" = ${id}::uuid FOR UPDATE`;
+    const before = await tx.stockTransfer.findUnique({ where: { id }, include: { items: true } });
+    if (!before) throw new AppError(404, "Transfer not found");
+    assertWarehouseAccess(auth, before.fromWarehouseId);
+    if (before.status !== "REVISION") throw new AppError(409, "Transfer is not awaiting revision");
+    if (before.createdById !== auth.userId) throw new AppError(403, "Only the creator can revise this document");
+    if (before.number !== input.number) throw new AppError(400, "Document number cannot be changed");
+    await ensureScopedWarehouse(tx, input.fromWarehouseId, auth); await ensureWarehouse(tx, input.toWarehouseId); await ensureProducts(tx, input.items.map((item) => item.productId));
+    for (const item of input.items) {
+      await validateRevisionLocations(tx, input.fromWarehouseId, item.productId, item.sourceLocationId, item.batchId);
+      await validateRevisionLocations(tx, input.toWarehouseId, item.productId, item.destinationLocationId);
+    }
+    await tx.stockTransferItem.deleteMany({ where: { transferId: id } });
+    const after = await tx.stockTransfer.update({ where: { id }, data: { fromWarehouseId: input.fromWarehouseId, toWarehouseId: input.toWarehouseId, notes: input.notes, status: "DRAFT", items: { create: input.items } }, include: { items: true } });
+    await writeAuditLog({ userId: auth.userId, action: "RESUBMIT", entity: "StockTransfer", entityId: id, beforeData: before, afterData: after }, tx as never); return after;
+  });
+  try { await notifyByPermission({ permission: "transfers.approve", type: "TRANSFER_REVISED", title: "Transfer resubmitted", message: `${data.number} requires review.`, entity: "StockTransfer", entityId: id, warehouseId: data.fromWarehouseId }); } catch (error) { console.error("Unable to send revision notification", error); }
+  res.json({ success: true, data });
+}));
+
 router.patch("/transfers/:id", requirePermission("transfers.write"), asyncHandler(async (req, res) => {
   const id = z.uuid().parse(req.params.id);
   const input = editStatusSchema.pick({ status: true, notes: true }).parse(req.body);
@@ -668,6 +727,7 @@ router.patch("/transfers/:id", requirePermission("transfers.write"), asyncHandle
   const current = await prisma.stockTransfer.findUnique({ where: { id }, include: { items: true } });
   if (!current) throw new AppError(404, "Transfer not found");
   await ensureScopedWarehouse(prisma, current.fromWarehouseId, authOf(req));
+  if (current.status === "REVISION") throw new AppError(409, "Use the revision action to resubmit this transfer");
   const nextStatus = input.status ?? current.status;
   if (input.status && input.status !== current.status) await ensureTransitionAllowed(current.status, input.status, ["DRAFT", "COMPLETED", "CANCELLED"]);
   if (nextStatus === "COMPLETED" && current.status !== "IN_TRANSIT") throw new AppError(409, "Transfer must be approved before completion");

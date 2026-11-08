@@ -144,6 +144,7 @@ export default function LoginView() {
 
               <button
                 type="button"
+                aria-pressed={showPassword}
                 onClick={() =>
                   setShowPassword((value) => !value)
                 }

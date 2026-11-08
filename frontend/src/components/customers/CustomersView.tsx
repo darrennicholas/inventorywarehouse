@@ -4,10 +4,11 @@ import GlobalLoading from "@/components/ui/GlobalLoading";
 import { confirmAction } from "@/components/ui/GlobalAlert";
 import { Eye, Pencil, Trash2 } from "@/components/ui/ActionIcons";
 import { LoaderCircle } from "@/components/ui/GlobalLoading";
-import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { AlertCircle, CheckCircle2, Download, Plus, RefreshCw, Search, Upload, UserRound, X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 
+import { usePagedMaster } from "@/hooks/usePagedMaster";
 import { useCustomers } from "@/hooks/useCustomers";
 import { customerService } from "@/services/customer.service";
 import type { CreateCustomerInput } from "@/types/customer";
@@ -46,17 +47,15 @@ export default function CustomersView() {
   const canDelete = can("customers.delete");
 
   const {
-    customers,
-    loading,
     saving,
-    error,
-    fetchCustomers,
     createCustomer,
     updateCustomer,
     deactivateCustomer,
-  } = useCustomers();
+  } = useCustomers(false);
 
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const { rows: customers, total, loading, error, reload: fetchCustomers } = usePagedMaster<import("@/types/customer").Customer>("/api/customers", page, 20, search, "all", saving, setPage);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<import("@/types/customer").Customer | null>(null);
   const [viewing, setViewing] = useState<import("@/types/customer").Customer | null>(null);
@@ -106,16 +105,7 @@ export default function CustomersView() {
     }
   }
 
-  const filteredCustomers = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-    if (!keyword) return customers;
-
-    return customers.filter((customer) =>
-      [customer.code, customer.name, customer.email, customer.phone]
-        .filter(Boolean)
-        .some((value) => value!.toLowerCase().includes(keyword))
-    );
-  }, [customers, search]);
+  const filteredCustomers = customers;
 
   function openModal(customer?: import("@/types/customer").Customer) {
     setEditing(customer ?? null);
@@ -215,7 +205,7 @@ export default function CustomersView() {
         <div className="flex items-center justify-end px-5 py-5 sm:px-7">
           <div className="relative w-full sm:w-72">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search customers..." className="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-xs outline-none focus:border-blue-400" />
+            <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search customers..." className="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-xs outline-none focus:border-blue-400" />
           </div>
         </div>
 
@@ -237,7 +227,7 @@ export default function CustomersView() {
             <tbody className="divide-y divide-slate-100">
               {!loading && filteredCustomers.map((customer, index) => (
                 <tr key={customer.id} className="hover:bg-[#f8faff]">
-                  <td className="px-3 py-4 text-slate-500">{index + 1}</td>
+                  <td className="px-3 py-4 text-slate-500">{(page - 1) * 20 + index + 1}</td>
                   <td className="px-3 py-4 font-semibold text-slate-700">{customer.code}</td>
                   <td className="px-3 py-4">
                     <div className="flex items-center gap-3">
@@ -263,6 +253,7 @@ export default function CustomersView() {
           {loading && <div className="flex items-center justify-center gap-2 py-14 text-sm text-slate-500"><GlobalLoading label="Loading customers..." /></div>}
           {!loading && filteredCustomers.length === 0 && <div className="flex flex-col items-center py-14 text-center"><UserRound size={35} className="text-slate-300" /><h3 className="mt-3 text-sm font-semibold text-slate-700">{search ? "No matching customers" : "No customers found"}</h3><p className="mt-1 text-xs text-slate-400">Add your first customer.</p></div>}
         </div>
+        <div className="flex items-center gap-3 px-7 py-4 text-xs"><span>{total} customers · Page {page}</span><button type="button" disabled={loading || page <= 1} onClick={() => setPage(page - 1)} className="rounded border px-2 py-1 disabled:opacity-40">Previous</button><button type="button" disabled={loading || page * 20 >= total} onClick={() => setPage(page + 1)} className="rounded border px-2 py-1 disabled:opacity-40">Next</button></div>
       </section>
 
       {modalOpen && canWrite && (

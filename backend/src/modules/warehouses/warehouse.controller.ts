@@ -7,7 +7,8 @@ import { createStockCountSheetPdf } from "./warehouse-pdf.ts";
 import { assertWarehouseAccess, warehouseScope } from "../../rbac/warehouse-scope.ts";
 import { authOf } from "../../middlewares/auth.middleware.ts";
 import { notifyByPermission } from "../notifications/notification.service.ts";
-import { paginateArray } from "../../utils/pagination.ts";
+import { masterListOptions, pageMeta, paginateArray } from "../../utils/pagination.ts";
+import { prisma } from "../../lib/prisma.ts";
 
 import type {
   CreateWarehouseInput,
@@ -20,6 +21,12 @@ import type {
 
 export const getWarehouses = asyncHandler(
   async (req, res) => {
+    const options = masterListOptions(req.query as Record<string, unknown>);
+    if (options) {
+      const where = { ...(warehouseScope(authOf(req)) ? { id: { in: warehouseScope(authOf(req))! } } : {}), ...(options.isActive !== undefined ? { isActive: options.isActive } : {}), ...(options.search ? { OR: [{ name: { contains: options.search, mode: "insensitive" as const } }, { code: { contains: options.search, mode: "insensitive" as const } }, { address: { contains: options.search, mode: "insensitive" as const } }] } : {}) };
+      const [data, total] = await Promise.all([prisma.warehouse.findMany({ where, skip: options.skip, take: options.take, orderBy: [{ createdAt: "desc" }, { id: "asc" }] }), prisma.warehouse.count({ where })]);
+      res.status(200).json({ success: true, data, meta: pageMeta(options.page, options.pageSize, total) }); return;
+    }
     const warehouses = await warehouseService.list(warehouseScope(authOf(req)));
     const result = paginateArray(warehouses, req.query as Record<string, unknown>);
 

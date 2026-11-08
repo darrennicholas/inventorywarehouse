@@ -31,13 +31,13 @@ This is a targeted source review, not a penetration test or proof that every end
 - Review operational controls: rotate secrets, restrict origins, TLS, backup and restore of both PostgreSQL and attachment storage, log retention, monitoring, and dependency vulnerabilities.
 - Local backup: `backend/backups/inventorywarehouse-20261030142234.dump` (custom pg_dump archive; listing verified). Migration `20261030120000_costing_settlement_quarantine` deployed successfully after the three inspection/due-date migrations. These archives are ignored by Git and were not uploaded. Do not run migration on another target without a fresh backup and restore plan.
 - New migration `20261104120000_return_settlement_reversals` adds linked compensating settlement records. It is authored but not applied to a database in this change; apply only after a fresh backup and test on a restored disposable copy.
-- Staff, supplier, and unit list endpoints now support database-side `page`, `pageSize`, `search`, and `isActive`. Existing screens retain the backward-compatible unpaged response until their clients are moved to these parameters; the other master-data screens remain locally paginated.
-- Dashboard labels stock valuation as current on-hand value. Historical period-end valuation still requires dated balance snapshots and is not implemented.
-- Warehouse location capacity is explicitly an approximate count of individual item units, not volume-normalized capacity. The UI displays current utilization and over-capacity warnings; receiving is not hard-blocked by this threshold.
+- Master-data list screens use database-side `page`, `pageSize`, `search`, and, where exposed, `isActive`. Unpaged API responses remain available for legacy callers.
+- Historical valuation requires an exact daily snapshot; dates without a snapshot report no historical value. Snapshots only exist when the service runs during the closing window.
+- Location capacity enforcement is opt-in for item-unit capacity and is serialized using a location row lock. Pallet and volume capacity remain informational because product dimensions and packaging are unavailable.
 
 ## Accounting and operational limits
 
 - Valuation uses current physical quantity, not a reconstructed historical closing inventory. Known-cost value excludes unknown-cost units; unknown issue costs prevent complete gross profit. Profit excludes invoice tax, includes proportional sale discount and posted sales returns, and does not represent net income or a full general ledger.
 - Refunds are records of an externally executed transfer, not an instruction to a bank. Reversal entries compensate original settlement records but do not initiate or verify external money movement; evidence must be independently checked. This is not general-ledger integration.
-- Quarantine list is capped at 100 balances/100 decisions; source purchase choices at 200 rows, credit target choices at 100 invoices. These are disclosed UI limits, not an exhaustive export/history interface.
+- Quarantine balances, decisions, source purchase choices and credit targets provide paginated search; Dashboard attention items can be paged by document type.
 - Opening-cost entry initializes only a nullable balance cost. It cannot amend historical stock movements or retroactively correct seeded/legacy COGS. Validate evidence and choose an appropriate operational cut-over date.

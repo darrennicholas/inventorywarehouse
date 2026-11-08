@@ -9,13 +9,13 @@ import { Eye, Pencil, Trash2 } from "@/components/ui/ActionIcons";
 import {
   useCallback,
   useEffect,
-  useMemo,
   useState,
 } from "react";
 
 import { AlertCircle, Barcode, Package, Plus, RefreshCw, Search } from "lucide-react";
 
 import { productService } from "@/services/product.service";
+import { apiRequest } from "@/lib/api";
 
 import type {
   Product,
@@ -50,11 +50,7 @@ export default function ProductsView({
   const canDelete = can("products.delete");
 
   const {
-    products,
-    loading,
     saving,
-    error,
-    fetchProducts,
     createProduct,
     updateProduct,
     deactivateProduct,
@@ -74,6 +70,21 @@ export default function ProductsView({
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [total, setTotal] = useState(0);
+  const [revision, setRevision] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const fetchProducts = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true); setError(null);
+    try {
+      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize), search: search.trim() });
+      const response = await apiRequest<{ data: Product[]; meta: { total: number } }>(`/api/products?${params}`, { signal });
+      if (!signal?.aborted) { setProducts(response.data); setTotal(response.meta.total); const last = Math.max(1, Math.ceil(response.meta.total / pageSize)); if (page > last) setPage(last); }
+    } catch (failure) { if (!signal?.aborted) setError(failure instanceof Error ? failure.message : "Produk tidak dapat dimuat."); }
+    finally { if (!signal?.aborted) setLoading(false); }
+  }, [page, pageSize, search]);
+  useEffect(() => { const controller = new AbortController(); const timer = window.setTimeout(() => void fetchProducts(controller.signal), 250); return () => { window.clearTimeout(timer); controller.abort(); }; }, [fetchProducts, revision]);
 
   // Modal
   const [modalOpen, setModalOpen] = useState(false);
@@ -124,43 +135,11 @@ export default function ProductsView({
   // =====================================
   // SEARCH
   // =====================================
-  const filtered = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-
-    if (!keyword) {
-      return products;
-    }
-
-    return products.filter((product) =>
-      [
-        product.sku,
-        product.name,
-        product.code ?? "",
-        product.barcode ?? "",
-        product.category?.name ?? "",
-        product.brand?.name ?? "",
-      ].some((value) =>
-        value.toLowerCase().includes(keyword)
-      )
-    );
-  }, [products, search]);
-
-  // =====================================
-  // PAGINATION
-  // =====================================
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filtered.length / pageSize)
-  );
-
+  const filtered = products;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, totalPages);
-
   const offset = (safePage - 1) * pageSize;
-
-  const visible = filtered.slice(
-    offset,
-    offset + pageSize
-  );
+  const visible = products;
 
   // =====================================
   // CREATE / UPDATE
@@ -182,6 +161,7 @@ export default function ProductsView({
     setActionError("");
     setPage(1);
     setSearch("");
+    setRevision((value) => value + 1);
   }
 
   // =====================================
@@ -198,6 +178,7 @@ export default function ProductsView({
 
     try {
       await deactivateProduct(product.id);
+      setRevision((value) => value + 1);
 
       setNotice(
         `Product ${product.name} dinonaktifkan.`
@@ -523,12 +504,12 @@ export default function ProductsView({
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-5 text-xs text-slate-500 sm:px-7">
           <span>
             Showing{" "}
-            {filtered.length ? offset + 1 : 0} to{" "}
+            {total ? offset + 1 : 0} to{" "}
             {Math.min(
               offset + pageSize,
-              filtered.length
+              total
             )}{" "}
-            of {filtered.length} entries
+            of {total} entries
           </span>
 
           <div className="flex items-center gap-3">

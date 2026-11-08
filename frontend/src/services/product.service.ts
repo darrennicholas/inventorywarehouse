@@ -31,7 +31,7 @@ export const productService = {
   ): Promise<Product[]> {
     const response = await apiRequest<
       ApiResponse<Product[]>
-    >("/api/products", { signal });
+    >("/api/products?page=1&pageSize=5", { signal });
 
     return unwrap(response);
   },

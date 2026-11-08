@@ -47,6 +47,18 @@ export async function ensureLocationBalance(tx: InventoryTx, input: StockLocatio
   }
 }
 
+export async function assertLocationCapacity(tx: InventoryTx, locationId: string, quantity: number) {
+  await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "WarehouseLocation" WHERE "id" = ${locationId}::uuid FOR UPDATE`);
+  const location = await tx.warehouseLocation.findUniqueOrThrow({ where: { id: locationId }, select: { code: true, enforceCapacity: true, capacity: true, capacityUnit: true } });
+  if (!location.enforceCapacity) return;
+  if (location.capacityUnit !== "ITEM_UNITS" || location.capacity === null) throw new AppError(409, "Location capacity configuration is invalid");
+  // Writing the locked row makes repeatable-read/serializable transactions
+  // conflict instead of using an older occupancy snapshot after waiting.
+  await tx.warehouseLocation.update({ where: { id: locationId }, data: { updatedAt: new Date() } });
+  const occupancy = await tx.inventoryLocationBalance.aggregate({ where: { locationId }, _sum: { quantityOnHand: true } });
+  if ((occupancy._sum.quantityOnHand ?? 0) + quantity > location.capacity) throw new AppError(409, `Location ${location.code} has insufficient capacity`);
+}
+
 async function updateWarehouseBalance(tx: InventoryTx, productId: string, warehouseId: string, delta: number, locationId: string) {
   if (delta > 0) {
     return tx.inventoryBalance.upsert({
@@ -85,7 +97,9 @@ export async function postStockIn(tx: InventoryTx, input: StockLocationInput & {
   if (input.batchId) await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "ProductBatch" WHERE "id" = ${input.batchId}::uuid FOR UPDATE`);
   const batch = await assertBatchScope(tx, input.productId, input.warehouseId, input.batchId ?? null);
   if (batch && input.reactivateBatch !== false) assertUsableBatch(batch, {});
-  const balance = await ensureLocationBalance(tx, input);
+  const location = await resolveLocation(tx, input.warehouseId, input.locationId);
+  await assertLocationCapacity(tx, location.id, input.quantity);
+  const balance = await ensureLocationBalance(tx, { ...input, locationId: location.id });
   const detail = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     UPDATE "InventoryLocationBalance"
     SET "quantityOnHand" = "quantityOnHand" + ${input.quantity}, "updatedAt" = NOW()

@@ -8,6 +8,8 @@ import { authOf } from "../../middlewares/auth.middleware.ts";
 import { assertWarehouseAccess } from "../../rbac/warehouse-scope.ts";
 import { asyncHandler } from "../../utils/asyncHandler.ts";
 import { notifyByPermission } from "../notifications/notification.service.ts";
+import { AppError } from "../../utils/AppError.ts";
+import { writeAuditLog } from "../audit/audit.service.ts";
 
 import {
   createWarehouseSchema,
@@ -34,6 +36,7 @@ const locationSchema = z.object({
   bin: z.string().trim().max(40).nullable().optional(),
   capacity: z.coerce.number().int().positive().nullable().optional(),
   capacityUnit: z.enum(["ITEM_UNITS", "PALLET_POSITIONS", "CUBIC_METERS"]).optional(),
+  enforceCapacity: z.boolean().optional(),
   isActive: z.boolean().optional(),
 }).strict();
 
@@ -48,7 +51,12 @@ router.post("/:warehouseId/locations", asyncHandler(async (req, res) => {
   const warehouseId = z.uuid().parse(req.params.warehouseId);
   assertWarehouseAccess(authOf(req), warehouseId);
   const input = locationSchema.parse(req.body);
-  const data = await prisma.warehouseLocation.create({ data: { warehouseId, code: input.code.toUpperCase(), name: input.name, zone: input.zone ?? null, rack: input.rack ?? null, shelf: input.shelf ?? null, bin: input.bin ?? null, capacity: input.capacity ?? null, capacityUnit: input.capacityUnit ?? "ITEM_UNITS", isActive: input.isActive ?? true } });
+  if (input.enforceCapacity && (!input.capacity || (input.capacityUnit ?? "ITEM_UNITS") !== "ITEM_UNITS")) throw new AppError(400, "Capacity enforcement requires a positive item-unit capacity");
+  const data = await prisma.$transaction(async (tx) => {
+    const created = await tx.warehouseLocation.create({ data: { warehouseId, code: input.code.toUpperCase(), name: input.name, zone: input.zone ?? null, rack: input.rack ?? null, shelf: input.shelf ?? null, bin: input.bin ?? null, capacity: input.capacity ?? null, capacityUnit: input.capacityUnit ?? "ITEM_UNITS", enforceCapacity: input.enforceCapacity ?? false, isActive: input.isActive ?? true } });
+    await writeAuditLog({ userId: authOf(req).userId, action: "CREATE", entity: "WarehouseLocation", entityId: created.id, afterData: created }, tx as never);
+    return created;
+  });
   await notifyByPermission({ permission: "warehouses.read", type: "LOCATION_CREATED", title: "Warehouse location added", message: `${data.code} was added to warehouse storage.`, entity: "WarehouseLocation", entityId: data.id, warehouseId });
   res.status(201).json({ success: true, message: "Warehouse location created successfully", data });
 }));
@@ -58,9 +66,18 @@ router.patch("/:warehouseId/locations/:locationId", asyncHandler(async (req, res
   const id = z.uuid().parse(req.params.locationId);
   assertWarehouseAccess(authOf(req), warehouseId);
   const input = locationSchema.partial().refine((value) => Object.keys(value).length > 0, "At least one field is required").parse(req.body);
-  const current = await prisma.warehouseLocation.findFirst({ where: { id, warehouseId } });
-  if (!current) { res.status(404).json({ success: false, message: "Warehouse location not found" }); return; }
-  const data = await prisma.warehouseLocation.update({ where: { id }, data: { ...input, ...(input.code ? { code: input.code.toUpperCase() } : {}) } });
+  const data = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "WarehouseLocation" WHERE "id" = ${id}::uuid FOR UPDATE`;
+    const current = await tx.warehouseLocation.findFirst({ where: { id, warehouseId } });
+    if (!current) throw new AppError(404, "Warehouse location not found");
+    const enforced = input.enforceCapacity ?? current.enforceCapacity;
+    const capacity = input.capacity === undefined ? current.capacity : input.capacity;
+    const unit = input.capacityUnit ?? current.capacityUnit;
+    if (enforced && (!capacity || unit !== "ITEM_UNITS")) throw new AppError(400, "Capacity enforcement requires a positive item-unit capacity");
+    const updated = await tx.warehouseLocation.update({ where: { id }, data: { ...input, ...(input.code ? { code: input.code.toUpperCase() } : {}) } });
+    await writeAuditLog({ userId: authOf(req).userId, action: "UPDATE", entity: "WarehouseLocation", entityId: id, beforeData: current, afterData: updated }, tx as never);
+    return updated;
+  });
   await notifyByPermission({ permission: "warehouses.read", type: "LOCATION_UPDATED", title: "Warehouse location updated", message: `${data.code} was updated.`, entity: "WarehouseLocation", entityId: data.id, warehouseId });
   res.json({ success: true, message: "Warehouse location updated successfully", data });
 }));

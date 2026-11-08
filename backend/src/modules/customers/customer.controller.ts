@@ -3,7 +3,8 @@ import { AppError } from "../../utils/AppError.ts";
 import { customerService } from "./customer.service.ts";
 import { z } from "zod";
 import { notifyByPermission } from "../notifications/notification.service.ts";
-import { paginateArray } from "../../utils/pagination.ts";
+import { masterListOptions, pageMeta, paginateArray } from "../../utils/pagination.ts";
+import { prisma } from "../../lib/prisma.ts";
 
 import type { CreateCustomerInput, ImportCustomersInput, UpdateCustomerInput } from "./customer.validation.ts";
 
@@ -14,6 +15,12 @@ function customerId(value: unknown) {
 }
 
 export const listCustomers = asyncHandler(async (req, res) => {
+  const options = masterListOptions(req.query as Record<string, unknown>);
+  if (options) {
+    const where = { ...(options.isActive !== undefined ? { isActive: options.isActive } : {}), ...(options.search ? { OR: [{ name: { contains: options.search, mode: "insensitive" as const } }, { code: { contains: options.search, mode: "insensitive" as const } }, { email: { contains: options.search, mode: "insensitive" as const } }, { phone: { contains: options.search, mode: "insensitive" as const } }, { address: { contains: options.search, mode: "insensitive" as const } }] } : {}) };
+    const [data, total] = await Promise.all([prisma.customer.findMany({ where, skip: options.skip, take: options.take, orderBy: [{ createdAt: "desc" }, { id: "asc" }] }), prisma.customer.count({ where })]);
+    res.status(200).json({ success: true, data, meta: pageMeta(options.page, options.pageSize, total) }); return;
+  }
   const customers = await customerService.list();
   const result = paginateArray(customers, req.query as Record<string, unknown>);
 

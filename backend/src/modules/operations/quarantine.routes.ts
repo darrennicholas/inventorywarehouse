@@ -10,18 +10,35 @@ import { writeAuditLog } from "../audit/audit.service.ts";
 import { assertApprovalAuthority } from "../approvals/approval-policy.service.ts";
 import { notifyByPermission } from "../notifications/notification.service.ts";
 import { lockCostBalance } from "./costing.service.ts";
-import { ensureLocationBalance, linkMovementAllocations } from "./stock-allocation.service.ts";
+import { assertLocationCapacity, ensureLocationBalance, linkMovementAllocations } from "./stock-allocation.service.ts";
 import { assertInventoryInvariant } from "./inventory-invariant.service.ts";
+import { pagination, pageMeta } from "../../utils/pagination.ts";
 const router = Router();
 const detail = { source: { include: { product: { select: { name: true, sku: true } }, location: true, warehouse: { select: { name: true } }, batch: true } }, destination: true, createdBy: { select: { fullName: true } }, approvedBy: { select: { fullName: true } } } as const;
 router.get("/quarantine", requirePermission("inventory.read"), asyncHandler(async (req, res) => {
   const auth = authOf(req); const warehouseId = typeof req.query.warehouseId === "string" ? z.uuid().parse(req.query.warehouseId) : undefined;
   const scope = scopedWarehouseFilter(auth, warehouseId);
-  const rows = await prisma.inventoryLocationBalance.findMany({ where: { ...scope, quantityOnHand: { gt: 0 }, location: { locationType: { in: ["QUARANTINE", "DAMAGED"] } } }, include: { product: { select: { sku: true, name: true } }, location: { select: { code: true, name: true } }, warehouse: { select: { name: true } }, batch: { select: { batchNumber: true, expiryDate: true, status: true } } }, orderBy: { updatedAt: "desc" }, take: 100 });
-  const decisions = await prisma.quarantineDecision.findMany({ where: { source: scope }, include: detail, orderBy: { createdAt: "desc" }, take: 100 });
+  const rowPage = pagination({ page: req.query.page, pageSize: 20 });
+  const decisionPage = pagination({ page: req.query.decisionPage, pageSize: 20 });
+  const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 100) : "";
+  const productFilter = search ? { OR: [{ name: { contains: search, mode: "insensitive" as const } }, { sku: { contains: search, mode: "insensitive" as const } }] } : undefined;
+  const rowWhere = { ...scope, quantityOnHand: { gt: 0 }, location: { locationType: { in: ["QUARANTINE", "DAMAGED"] as ("QUARANTINE" | "DAMAGED")[] } }, ...(productFilter ? { product: productFilter } : {}) };
+  const decisionWhere = { source: { ...scope, ...(productFilter ? { product: productFilter } : {}) } };
+  const [rows, decisions, rowCount, decisionCount] = await Promise.all([
+    prisma.inventoryLocationBalance.findMany({ where: rowWhere, include: { product: { select: { sku: true, name: true } }, location: { select: { code: true, name: true } }, warehouse: { select: { name: true } }, batch: { select: { batchNumber: true, expiryDate: true, status: true } } }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], skip: rowPage.skip, take: rowPage.take }),
+    prisma.quarantineDecision.findMany({ where: decisionWhere, include: detail, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: decisionPage.skip, take: decisionPage.take }),
+    prisma.inventoryLocationBalance.count({ where: rowWhere }), prisma.quarantineDecision.count({ where: decisionWhere }),
+  ]);
   const locations = await prisma.warehouseLocation.findMany({ where: { ...scope, isActive: true, locationType: "STORAGE" }, select: { id: true, warehouseId: true, code: true, name: true } });
-  const purchaseSources = auth.permissions.includes("purchases.read") ? await prisma.purchaseOrderItem.findMany({ where: { receivedQuantity: { gt: 0 }, purchaseOrder: scope, productId: { in: [...new Set(rows.map((row) => row.productId))] } }, select: { id: true, productId: true, purchaseOrder: { select: { number: true, warehouseId: true } } }, take: 200, orderBy: { purchaseOrder: { orderDate: "desc" } } }) : [];
-  res.json({ success: true, data: { rows, decisions, locations, purchaseSources, limit: 100 } });
+  res.json({ success: true, data: { rows, decisions, locations, rowMeta: pageMeta(rowPage.page, rowPage.pageSize, rowCount), decisionMeta: pageMeta(decisionPage.page, decisionPage.pageSize, decisionCount) } });
+}));
+router.get("/quarantine/purchase-sources", requirePermission("purchases.read"), requirePermission("inventory.read"), asyncHandler(async (req, res) => {
+  const input = z.object({ productId: z.uuid(), warehouseId: z.uuid(), search: z.string().trim().max(100).default("") }).parse(req.query);
+  assertWarehouseAccess(authOf(req), input.warehouseId);
+  const { page, pageSize, skip, take } = pagination(req.query as Record<string, unknown>);
+  const where = { productId: input.productId, receivedQuantity: { gt: 0 }, purchaseOrder: { warehouseId: input.warehouseId, ...(input.search ? { number: { contains: input.search, mode: "insensitive" as const } } : {}) } };
+  const [data, total] = await Promise.all([prisma.purchaseOrderItem.findMany({ where, select: { id: true, productId: true, purchaseOrder: { select: { number: true, warehouseId: true } } }, orderBy: [{ purchaseOrder: { orderDate: "desc" } }, { id: "desc" }], skip, take }), prisma.purchaseOrderItem.count({ where })]);
+  res.json({ success: true, data, meta: pageMeta(page, pageSize, total) });
 }));
 router.post("/quarantine", requirePermission("inventory.write"), asyncHandler(async (req, res) => {
   const input = z.object({ locationBalanceId: z.uuid(), destinationLocationId: z.uuid().nullable().optional(), purchaseOrderItemId: z.uuid().nullable().optional(), quantity: z.number().int().positive(), action: z.enum(["RELEASE", "SCRAP", "RETURN_SUPPLIER"]), reason: z.string().trim().min(10).max(1000) }).strict().parse(req.body);
@@ -64,6 +81,7 @@ router.post("/quarantine/:id/review", requirePermission("adjustments.approve"), 
     if (doc.action === "RELEASE") {
       const location = await tx.warehouseLocation.findFirst({ where: { id: doc.destinationLocationId!, warehouseId: doc.source.warehouseId, isActive: true, locationType: "STORAGE" } });
       if (!location) throw new AppError(400, "Destination must be active storage in the same warehouse");
+      await assertLocationCapacity(tx, location.id, doc.quantity);
       const destination = await ensureLocationBalance(tx, { productId: doc.source.productId, warehouseId: doc.source.warehouseId, locationId: location.id, batchId: doc.source.batchId });
       await tx.inventoryLocationBalance.update({ where: { id: destination.id }, data: { quantityOnHand: { increment: doc.quantity } } });
       if (batch && batch.status !== "ACTIVE") await tx.productBatch.update({ where: { id: batch.id }, data: { status: "ACTIVE" } });

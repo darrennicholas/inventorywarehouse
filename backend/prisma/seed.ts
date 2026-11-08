@@ -277,9 +277,10 @@ async function main() {
   for (const product of products) for (const warehouse of warehouseList) {
     const fallbackLocationId = warehouse.code === "WH-JKT" ? locationByCode.get("JKT-A01")! : warehouse.code === "WH-BDG" ? locationByCode.get("BDG-A01")! : locationByCode.get("SBY-A01")!;
     const batches = product.trackBatch ? await prisma.productBatch.findMany({ where: { productId: product.id, warehouseId: warehouse.id } }) : [];
+    if (product.trackBatch && !batches.length && (quantities[`${product.sku}:${warehouse.code}`] ?? 0) !== 0) throw new Error(`Seed stock for ${product.sku} in ${warehouse.code} requires batch data`);
     const rows = batches.length
       ? batches.map((batch) => ({ locationId: batch.locationId ?? fallbackLocationId, batchId: batch.id, quantityOnHand: batch.quantityOnHand, reservedQuantity: batch.reservedQuantity }))
-      : [{ locationId: fallbackLocationId, batchId: null, quantityOnHand: quantities[`${product.sku}:${warehouse.code}`] ?? 0, reservedQuantity: 0 }];
+      : product.trackBatch ? [] : [{ locationId: fallbackLocationId, batchId: null, quantityOnHand: quantities[`${product.sku}:${warehouse.code}`] ?? 0, reservedQuantity: 0 }];
     for (const row of rows) {
       const existing = await prisma.inventoryLocationBalance.findFirst({ where: { productId: product.id, warehouseId: warehouse.id, locationId: row.locationId, batchId: row.batchId } });
       if (existing) await prisma.inventoryLocationBalance.update({ where: { id: existing.id }, data: { quantityOnHand: row.quantityOnHand, reservedQuantity: row.reservedQuantity } });

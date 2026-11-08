@@ -3,6 +3,12 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Edge adds its own password reveal button; the form has an accessible toggle. */
+#login-password::-ms-reveal,
+#login-password::-ms-clear {
+  display: none;
+}
+
 /* Shared modal surfaces keep existing forms and actions intact. */
 .sf-modal-overlay {
   background-color: rgb(15 23 42 / 48%);

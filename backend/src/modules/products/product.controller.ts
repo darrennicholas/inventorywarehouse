@@ -8,7 +8,7 @@ import { productService } from "./product.service.ts";
 import { authOf } from "../../middlewares/auth.middleware.ts";
 import { writeAuditLog } from "../audit/audit.service.ts";
 import { notifyByPermission } from "../notifications/notification.service.ts";
-import { paginateArray } from "../../utils/pagination.ts";
+import { masterListOptions, pageMeta, paginateArray } from "../../utils/pagination.ts";
 
 import type {
   CreateProductInput,
@@ -39,6 +39,12 @@ function validId(raw: unknown): string {
 
 export const listProducts = asyncHandler(
   async (req, res) => {
+    const options = masterListOptions(req.query as Record<string, unknown>);
+    if (options) {
+      const [data, total] = await Promise.all([productService.list(options), productService.count(options)]);
+      res.status(200).json({ success: true, data, meta: pageMeta(options.page, options.pageSize, total) });
+      return;
+    }
     const products = await productService.list();
     const result = paginateArray(products, req.query as Record<string, unknown>);
 

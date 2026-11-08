@@ -15,7 +15,7 @@ import type {
   UpdateCategoryInput,
 } from "@/types/category";
 
-export function useCategories() {
+export function useCategories(enabled = true) {
   const [categories, setCategories] =
     useState<Category[]>([]);
 
@@ -56,6 +56,7 @@ export function useCategories() {
   );
 
   useEffect(() => {
+    if (!enabled) return;
     const controller = new AbortController();
 
     void Promise.resolve().then(() =>
@@ -65,7 +66,7 @@ export function useCategories() {
     return () => {
       controller.abort();
     };
-  }, [fetchCategories]);
+  }, [fetchCategories, enabled]);
 
   // ==========================================
   // CREATE CATEGORY

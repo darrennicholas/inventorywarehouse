@@ -95,9 +95,10 @@ async function verifyUnique(
 
 export const productService = {
   // GET ALL
-  list() {
-    return productRepository.findAll();
+  list(options?: { skip: number; take: number; search: string; isActive?: boolean }) {
+    return productRepository.findAll(options);
   },
+  count(options: { search: string; isActive?: boolean }) { return productRepository.count(options); },
 
   // GET MASTER OPTIONS
   options() {

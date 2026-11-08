@@ -45,17 +45,18 @@ router.get("/valuation-profit", requirePermission("reports.read"), requirePermis
   const historicalRequested = targetDay.getTime() < todayJakarta.getTime();
   if (to.getTime() - from.getTime() > 366 * 86400000) throw new AppError(400, "Maximum reporting period is 366 days");
   const data = await prisma.$transaction(async (tx) => {
-    const snapshot = historicalRequested ? await tx.inventoryValuationSnapshot.findFirst({ where: { ...scope, snapshotDate: { lte: targetDay } }, orderBy: { snapshotDate: "desc" }, select: { snapshotDate: true } }) : null;
+    const snapshot = historicalRequested ? await tx.inventoryValuationSnapshot.findFirst({ where: { ...scope, snapshotDate: targetDay }, select: { snapshotDate: true } }) : null;
     let inventoryValue = new Prisma.Decimal(0), unknownUnits = 0;
     if (snapshot) {
       const rows = await tx.inventoryValuationSnapshot.findMany({ where: { ...scope, snapshotDate: snapshot.snapshotDate }, select: { knownValue: true, quantityOnHand: true, averageUnitCost: true } });
       for (const row of rows) { if (row.averageUnitCost === null) unknownUnits += row.quantityOnHand; else inventoryValue = inventoryValue.plus(row.knownValue ?? row.averageUnitCost.mul(row.quantityOnHand)); }
-    } else {
+    } else if (!historicalRequested) {
       const balances = await tx.inventoryBalance.findMany({ where: scope, select: { quantityOnHand: true, averageUnitCost: true } });
       for (const row of balances) { if (row.averageUnitCost === null) unknownUnits += row.quantityOnHand; else inventoryValue = inventoryValue.plus(row.averageUnitCost.mul(row.quantityOnHand)); }
     }
-    const valuationMeta = { inventoryValuationAsOf: snapshot?.snapshotDate ?? jakartaSnapshotDate(), inventoryValuationSource: snapshot ? "DAILY_CLOSING_SNAPSHOT" : "CURRENT_BALANCE", historicalSnapshotAvailable: !historicalRequested || Boolean(snapshot) };
-    if (!auth.permissions.includes("sales.read")) return { inventoryValue, unknownUnits, ...valuationMeta, revenue: null, cogs: null, grossProfit: null, unknownCostUnits: null, method: "MOVING_WEIGHTED_AVERAGE" };
+    const valuationMeta = { inventoryValuationAsOf: snapshot?.snapshotDate ?? (historicalRequested ? null : jakartaSnapshotDate()), inventoryValuationSource: snapshot ? "DAILY_CLOSING_SNAPSHOT" : historicalRequested ? "UNAVAILABLE" : "CURRENT_BALANCE", historicalSnapshotAvailable: !historicalRequested || Boolean(snapshot) };
+    const reportedInventoryValue = historicalRequested && !snapshot ? null : inventoryValue;
+    if (!auth.permissions.includes("sales.read")) return { inventoryValue: reportedInventoryValue, unknownUnits, ...valuationMeta, revenue: null, cogs: null, grossProfit: null, unknownCostUnits: null, method: "MOVING_WEIGHTED_AVERAGE" };
     const issues = await tx.stockMovement.findMany({ where: { ...scope, movementType: "SALE_ISSUE", occurredAt: { gte: from, lt: to } }, include: { sale: { include: { items: true } } } });
     const returns = await tx.returnOrder.findMany({ where: { ...scope, type: "SALE", status: "POSTED", postedAt: { gte: from, lt: to } }, include: { sale: true, items: { include: { saleItem: true } } } });
     let revenue = new Prisma.Decimal(0), knownCogs = new Prisma.Decimal(0), unknownCostUnits = 0;
@@ -74,7 +75,7 @@ router.get("/valuation-profit", requirePermission("reports.read"), requirePermis
       if (item.disposition !== "SCRAP") { const cost = await originalSaleCost(tx, doc.saleId!, item.productId); if (cost === null) unknownCostUnits += item.quantity; else knownCogs = knownCogs.minus(cost.mul(item.quantity)); }
     }
     const grossProfit = unknownCostUnits ? null : revenue.minus(knownCogs);
-    return { inventoryValue, unknownUnits, ...valuationMeta, revenue, cogs: unknownCostUnits ? null : knownCogs, knownCogs, grossProfit, grossMargin: grossProfit && revenue.gt(0) ? grossProfit.div(revenue).mul(100) : null, unknownCostUnits, method: "MOVING_WEIGHTED_AVERAGE" };
+    return { inventoryValue: reportedInventoryValue, unknownUnits, ...valuationMeta, revenue, cogs: unknownCostUnits ? null : knownCogs, knownCogs, grossProfit, grossMargin: grossProfit && revenue.gt(0) ? grossProfit.div(revenue).mul(100) : null, unknownCostUnits, method: "MOVING_WEIGHTED_AVERAGE" };
   }, { isolationLevel: "RepeatableRead", timeout: 20000 });
   res.json({ success: true, data: { ...data, from, to, accountingNote: "Net sales exclude invoice tax, include proportional discount and posted sales returns. Purchase tax is not capitalized. Unknown legacy costs are excluded from known valuation and prevent complete profit." } });
 }));
