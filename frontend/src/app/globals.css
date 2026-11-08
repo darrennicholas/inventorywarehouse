@@ -262,6 +262,28 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* Keep solid white utility buttons on-brand across every menu and role. */
+html:not(.dark) button[class~="bg-white"] {
+  color: #2347a8 !important;
+  background-color: #eaf1ff !important;
+  border-color: #cbdcff;
+}
+html:not(.dark) button[class~="bg-white"]:hover:not(:disabled) {
+  color: #173b9b !important;
+  background-color: #dbe8ff !important;
+  border-color: #a9c4ff;
+}
+html.dark button[class~="bg-white"] {
+  color: #dbeafe !important;
+  background-color: #1e3a63 !important;
+  border-color: #365681;
+}
+html.dark button[class~="bg-white"]:hover:not(:disabled) {
+  color: #eff6ff !important;
+  background-color: #284b7c !important;
+  border-color: #4d72a3;
+}
+
 button[data-sf-action-loading="true"] {
   cursor: wait;
 }
