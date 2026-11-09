@@ -12,7 +12,7 @@ import DataPagination from "@/components/ui/DataPagination";
 import ActionFeedback from "@/components/ui/ActionFeedback";
 import { statusLabel } from "@/lib/ui-labels";
 import { fulfillmentService } from "@/services/fulfillment.service";
-import type { FulfillmentRecord, FulfillmentSale, FulfillmentStatus } from "@/types/fulfillment";
+import type { FulfillmentRecord, FulfillmentSale, FulfillmentScanMatch, FulfillmentStatus } from "@/types/fulfillment";
 import type { NotificationTarget } from "@/types/notification";
 
 const statusStyle: Record<FulfillmentStatus, string> = {
@@ -45,6 +45,7 @@ export default function FulfillmentView({ target = null }: { target?: Notificati
   const [trackingNumber, setTrackingNumber] = useState("");
   const [shippingId, setShippingId] = useState<string | null>(null);
   const [scanCode, setScanCode] = useState("");
+  const [scanMatches, setScanMatches] = useState<FulfillmentScanMatch[]>([]);
   useEffect(() => {
     if (!target || target.page !== "fulfillment") return;
     const timer = window.setTimeout(() => { setSearch(target.reference); setStatus(""); setPage(1); }, 0);
@@ -129,15 +130,47 @@ export default function FulfillmentView({ target = null }: { target?: Notificati
   }
 
   async function scanPick() {
-    const code = scanCode.trim().toLowerCase();
+    const code = scanCode.trim();
     if (!code) return;
-    const shipment = rows.find((row) => row.status === "PICKING" && row.items.some((item) => item.pickedQuantity < item.quantity && [item.product?.barcode, item.product?.sku].some((value) => value?.toLowerCase() === code)));
-    const item = shipment?.items.find((candidate) => candidate.pickedQuantity < candidate.quantity && [candidate.product?.barcode, candidate.product?.sku].some((value) => value?.toLowerCase() === code));
-    if (!shipment || !item) { setError("No open picking line matches this barcode/SKU"); return; }
-    setWorking(`pick:${shipment.id}`);
-    try { await fulfillmentService.pick(shipment.id, [{ shipmentItemId: item.id, quantity: item.pickedQuantity + 1 }]); setScanCode(""); setNotice(`Satu unit ${item.product?.name ?? "barang"} berhasil dipindai.`); await load(); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to record scanned item"); }
+    setError("");
+    setScanMatches([]);
+    try {
+      const result = await fulfillmentService.lookupScan(code);
+      if (result.limited) { setError("Terlalu banyak pengiriman aktif dengan kode ini. Gunakan filter pengiriman atau hubungi administrator untuk mempersempit pencarian."); return; }
+      if (!result.data.length) { setError("Barcode/SKU tidak ditemukan pada antrean pengambilan aktif di gudang yang dapat Anda akses."); return; }
+      if (result.data.length === 1) { await recordScannedItem(result.data[0]); return; }
+      setScanMatches(result.data);
+      setNotice("Kode cocok dengan beberapa baris pengiriman. Pilih baris yang sedang Anda tangani.");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Pemindaian gagal. Coba lagi."); }
+  }
+
+  async function recordScannedItem(match: FulfillmentScanMatch) {
+    if (working) return;
+    setWorking(`scan:${match.shipment.id}`);
+    setError("");
+    try {
+      await fulfillmentService.pick(match.shipment.id, [{ shipmentItemId: match.item.id, quantity: match.item.pickedQuantity + 1 }]);
+      setScanCode(""); setScanMatches([]); setNotice(`Satu unit ${match.item.product?.name ?? "barang"} untuk ${match.shipment.number} berhasil dipindai.`); await load();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Tidak dapat menyimpan hasil pemindaian."); }
     finally { setWorking(null); }
+  }
+
+  async function correctPickedQuantity(row: FulfillmentRecord, item: FulfillmentRecord["items"][number], quantity: number) {
+    if (!Number.isInteger(quantity) || quantity < 0 || quantity > item.quantity) {
+      setError(`Jumlah diambil harus berupa bilangan bulat antara 0 dan ${item.quantity}.`);
+      return false;
+    }
+    setWorking(`correct:${row.id}:${item.id}`);
+    setError("");
+    try {
+      await fulfillmentService.pick(row.id, [{ shipmentItemId: item.id, quantity }]);
+      setNotice(`Jumlah diambil untuk ${item.product?.name ?? "barang"} diperbarui menjadi ${quantity}.`);
+      await load();
+      return true;
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Koreksi jumlah pengambilan gagal.");
+      return false;
+    } finally { setWorking(null); }
   }
 
 
@@ -154,6 +187,7 @@ export default function FulfillmentView({ target = null }: { target?: Notificati
     <div><div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[["Sedang diambil", stats.picking, "text-amber-600"], ["Siap dikirim", stats.packed, "text-violet-600"], ["Dalam perjalanan", stats.shipped, "text-blue-600"], ["Selesai", stats.completed, "text-emerald-600"]].map(([label, value, color]) => <div key={String(label)} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"><p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{label}</p><p className={`mt-2 text-2xl font-black sm:text-3xl ${color}`}>{value}</p></div>)}</div><p className="mt-2 text-xs text-slate-500">Ringkasan hanya menghitung pengiriman yang terlihat pada halaman ini. Total hasil filter: {total}.</p></div>
     {error && <ActionFeedback message={error} tone="error" onDismiss={() => setError("")} />}{notice && <ActionFeedback message={notice} tone="success" onDismiss={() => setNotice("")} />}
     <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5"><div className="flex items-center gap-3"><ClipboardCheck className="text-blue-600" size={20} /><div><h2 className="font-bold text-slate-900">Daftar pengiriman</h2><p className="text-xs text-slate-500">Penjualan, gudang, progres barang, dan tindakan yang diizinkan untuk role Anda.</p></div></div><div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row"><label className="relative w-full sm:w-auto"><span className="sr-only">Cari nomor penjualan atau pengiriman</span><Search size={15} className="absolute left-3 top-3 text-slate-400" /><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Cari nomor penjualan atau pengiriman" className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm sm:w-64" /></label><GlobalSelect aria-label="Filter status pengiriman" value={status} onChange={(event) => { setStatus(event.target.value as FulfillmentStatus | ""); setPage(1); }} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm sm:w-auto"><option value="">Semua status</option>{(["PICKING", "PACKED", "SHIPPED", "COMPLETED", "CANCELLED"] as FulfillmentStatus[]).map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}</GlobalSelect></div></div>{canPick && <div className="flex flex-col items-stretch gap-2 border-b border-amber-100 bg-amber-50 px-5 py-3 sm:flex-row sm:items-center"><ScanLine size={16} className="hidden text-amber-700 sm:block" /><input aria-label="Pindai barcode atau SKU" value={scanCode} onChange={(event) => setScanCode(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void scanPick(); } }} placeholder="Pindai barcode/SKU untuk mengambil barang berikutnya" className="min-w-0 flex-1 rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm" /><button type="button" disabled={Boolean(working)} onClick={() => void scanPick()} className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-amber-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 disabled:opacity-50">Ambil hasil pindai</button></div>}
+      {scanMatches.length > 1 && <div className="space-y-2 border-b border-blue-100 bg-blue-50 p-4" role="region" aria-label="Pilih hasil pemindaian"><p className="text-sm font-semibold text-blue-950">Pilih pengiriman untuk barang yang dipindai</p>{scanMatches.map(({ shipment, item }) => <button key={`${shipment.id}:${item.id}`} type="button" disabled={Boolean(working)} onClick={() => void recordScannedItem({ shipment, item })} className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-200 bg-white p-3 text-left text-sm transition hover:border-blue-400 hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50"><span><strong>{shipment.number}</strong><span className="ml-2 text-slate-600">{shipment.sale?.number} · {shipment.warehouse?.name}</span><span className="mt-1 block text-xs text-slate-500">{item.product?.name} · sisa {item.quantity - item.pickedQuantity} unit</span></span><span className="font-semibold text-blue-700">Pilih baris</span></button>)}</div>}
       {loading ? (
         <div className="flex justify-center p-14 text-sm text-slate-500"><GlobalLoading label="Memuat antrean pengiriman..." /></div>
       ) : rows.length === 0 ? (
@@ -168,7 +202,7 @@ export default function FulfillmentView({ target = null }: { target?: Notificati
             return <article key={row.id} className="space-y-3 p-4">
               <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="break-all font-bold text-slate-900">{row.number}</p><p className="mt-1 text-xs text-slate-500">{row.sale?.number ?? row.saleId} · {row.warehouse?.name ?? "Gudang"}</p><p className="mt-1 text-xs text-slate-500">{row.sale?.customer?.name ?? "Pelanggan langsung"} · {new Date(row.createdAt).toLocaleDateString("id-ID")}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${statusStyle[row.status]}`}>{statusLabel(row.status)}</span></div>
               <div className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-xs"><p>Diambil <strong className="text-slate-800">{picked}/{ordered}</strong></p><p>Dikemas <strong className="text-slate-800">{packed}/{ordered}</strong></p><p className="col-span-2 break-all">{row.trackingNumber ? `${row.courier ?? "Kurir"} · ${row.trackingNumber}` : "Belum dikirim"}</p></div>
-              <ShipmentItemDetails items={row.items} />
+              <ShipmentItemDetails shipment={row} canAdjust={canPick && row.status === "PICKING"} busy={Boolean(working)} onSavePicked={correctPickedQuantity} />
               <div data-sf-action-column className="flex justify-end border-t border-slate-100 pt-3">{renderActions(row)}</div>
             </article>;
           })}
@@ -204,7 +238,7 @@ export default function FulfillmentView({ target = null }: { target?: Notificati
                     </td>
                     <td className="max-w-[280px] px-5 py-4">
                       <p className="truncate text-xs text-slate-700">{row.items[0]?.product?.name ?? "Produk"}{row.items.length > 1 ? ` · +${row.items.length - 1} barang` : ""}</p>
-                      <ShipmentItemDetails items={row.items} compact />
+                      <ShipmentItemDetails shipment={row} canAdjust={canPick && row.status === "PICKING"} busy={Boolean(working)} onSavePicked={correctPickedQuantity} compact />
                     </td>
                     <td className="whitespace-nowrap px-5 py-4 text-xs text-slate-600">
                       <p>Diambil <strong className="text-slate-800">{picked}/{ordered}</strong></p>
@@ -230,14 +264,22 @@ export default function FulfillmentView({ target = null }: { target?: Notificati
   </section>;
 }
 
-function ShipmentItemDetails({ items, compact = false }: { items: FulfillmentRecord["items"]; compact?: boolean }) {
+function ShipmentItemDetails({ shipment, canAdjust, busy, onSavePicked, compact = false }: {
+  shipment: FulfillmentRecord;
+  canAdjust: boolean;
+  busy: boolean;
+  onSavePicked: (shipment: FulfillmentRecord, item: FulfillmentRecord["items"][number], quantity: number) => Promise<boolean>;
+  compact?: boolean;
+}) {
+  const [drafts, setDrafts] = useState<Record<string, string>>(() => Object.fromEntries(shipment.items.map((item) => [item.id, String(item.pickedQuantity)])));
   return <details className={compact ? "mt-2 text-xs" : "rounded-xl border border-slate-200 bg-white text-sm"}>
-    <summary className="w-fit cursor-pointer rounded-lg px-2 py-1 font-semibold text-blue-700 transition hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">Lihat semua barang ({items.length})</summary>
+    <summary className="w-fit cursor-pointer rounded-lg px-2 py-1 font-semibold text-blue-700 transition hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">Lihat semua barang ({shipment.items.length})</summary>
     <ul className={compact ? "mt-2 max-h-56 space-y-2 overflow-y-auto rounded-lg bg-slate-50 p-2" : "mt-2 max-h-64 space-y-2 overflow-y-auto p-3"}>
-      {items.map((item) => <li key={item.id} className="rounded-lg border border-slate-100 bg-slate-50 p-2.5">
+      {shipment.items.map((item) => <li key={item.id} className="rounded-lg border border-slate-100 bg-slate-50 p-2.5">
         <p className="font-semibold text-slate-800">{item.product?.name ?? "Produk"}</p>
         <p className="mt-0.5 break-all text-xs text-slate-500">SKU: {item.product?.sku ?? "—"}{item.product?.barcode ? ` · Barcode: ${item.product.barcode}` : ""}</p>
         <p className="mt-1 text-xs text-slate-600">Dipesan {item.quantity} · Diambil {item.pickedQuantity} · Dikemas {item.packedQuantity}</p>
+        {canAdjust && <div className="mt-2 flex flex-wrap items-end gap-2 border-t border-slate-200 pt-2"><label className="text-xs font-medium text-slate-600">Koreksi jumlah diambil<input aria-label={`Koreksi jumlah diambil untuk ${item.product?.name ?? "barang"}`} type="number" inputMode="numeric" min="0" max={item.quantity} step="1" value={drafts[item.id] ?? String(item.pickedQuantity)} onChange={(event) => setDrafts((current) => ({ ...current, [item.id]: event.target.value }))} className="mt-1 block w-28 rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200" /></label><button type="button" disabled={busy || drafts[item.id] === String(item.pickedQuantity) || drafts[item.id] === ""} onClick={async () => { const value = Number(drafts[item.id]); if (await onSavePicked(shipment, item, value)) setDrafts((current) => ({ ...current, [item.id]: String(value) })); }} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">Simpan koreksi</button></div>}
       </li>)}
     </ul>
   </details>;

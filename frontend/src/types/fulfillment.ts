@@ -25,6 +25,14 @@ export type FulfillmentRecord = {
   items: FulfillmentItem[];
 };
 
+export type FulfillmentScanMatch = {
+  shipment: Pick<FulfillmentRecord, "id" | "number" | "saleId" | "warehouseId" | "status" | "createdAt"> & {
+    sale?: { number: string } | null;
+    warehouse?: { name: string } | null;
+  };
+  item: FulfillmentItem;
+};
+
 export type FulfillmentSale = {
   id: string;
   number: string;

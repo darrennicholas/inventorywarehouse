@@ -59,6 +59,33 @@ router.get("/", requirePermission("fulfillment.read"), asyncHandler(async (req, 
   res.json({ success: true, ...data });
 }));
 
+router.get("/scan", requirePermission("fulfillment.pick"), asyncHandler(async (req, res) => {
+  const auth = authOf(req);
+  const code = z.string().trim().min(1).max(120).parse(req.query.code);
+  const allowedWarehouses = warehouseScope(auth);
+  const where = {
+    status: "PICKING" as const,
+    ...(allowedWarehouses ? { warehouseId: { in: allowedWarehouses } } : {}),
+    items: { some: { product: { OR: [
+      { sku: { equals: code, mode: "insensitive" as const } },
+      { barcode: { equals: code, mode: "insensitive" as const } },
+    ] } } },
+  };
+  const shipments = await prisma.saleShipment.findMany({ where, select: {
+    id: true, number: true, saleId: true, warehouseId: true, status: true, createdAt: true,
+    sale: { select: { number: true } },
+    warehouse: { select: { name: true } },
+    items: { where: { product: { OR: [
+      { sku: { equals: code, mode: "insensitive" as const } },
+      { barcode: { equals: code, mode: "insensitive" as const } },
+    ] } }, select: { id: true, saleItemId: true, productId: true, quantity: true, pickedQuantity: true, packedQuantity: true, product: { select: { id: true, sku: true, barcode: true, name: true } } } },
+  }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: 101 });
+  const matches = shipments.flatMap((shipment) => shipment.items
+    .filter((item) => item.pickedQuantity < item.quantity && (item.product.sku.toLocaleLowerCase() === code.toLocaleLowerCase() || item.product.barcode?.toLocaleLowerCase() === code.toLocaleLowerCase()))
+    .map((item) => ({ shipment, item })));
+  res.json({ success: true, data: matches, limited: shipments.length > 100 });
+}));
+
 router.get("/sales", requirePermission("fulfillment.read"), asyncHandler(async (req, res) => {
   const data = await prisma.$transaction((tx) => listFulfillmentSales(tx, warehouseScope(authOf(req))));
   res.json({ success: true, data });

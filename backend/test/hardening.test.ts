@@ -16,6 +16,7 @@ import { writeAuditLog } from "../src/modules/audit/audit.service.ts";
 import { dateRange, sumItems } from "../src/modules/operations/transaction-query.ts";
 import { reportError } from "../src/lib/monitoring.ts";
 import { conservativeAvailableQuantity } from "../src/modules/operations/stock-availability-summary.ts";
+import { pickShipmentSchema } from "../src/modules/fulfillment/fulfillment.validation.ts";
 
 const integrationEnabled = Boolean(
   process.env.DATABASE_URL && process.env.RUN_INTEGRATION_TESTS === "true"
@@ -26,6 +27,12 @@ test("stock report availability cannot exceed aggregate physical stock less rese
   assert.equal(conservativeAvailableQuantity(20, 10, 0), 10);
   assert.equal(conservativeAvailableQuantity(2, 10, 3), 2);
   assert.equal(conservativeAvailableQuantity(5, 4, 8), 0);
+});
+
+test("fulfillment pick correction accepts zero and rejects invalid quantities", () => {
+  const shipmentItemId = randomUUID();
+  assert.equal(pickShipmentSchema.parse({ items: [{ shipmentItemId, quantity: 0 }] }).items?.[0]?.quantity, 0);
+  assert.throws(() => pickShipmentSchema.parse({ items: [{ shipmentItemId, quantity: -1 }] }));
 });
 
 test("permission helper enforces the role permission matrix", () => {

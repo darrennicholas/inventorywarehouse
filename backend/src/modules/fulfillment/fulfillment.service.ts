@@ -196,7 +196,7 @@ export async function pickShipment(tx: FulfillmentTx, id: string, input: PickShi
   for (const item of shipment.items) {
     const quantity = requested.get(item.id);
     if (quantity === undefined) continue;
-    if (quantity < 1 || quantity > item.quantity) fail(400, "Picked quantity must be within the shipment quantity");
+    if (quantity < 0 || quantity > item.quantity) fail(400, "Picked quantity must be between zero and the shipment quantity");
     await tx.saleShipmentItem.update({ where: { id: item.id }, data: { pickedQuantity: quantity, pickedById: userId, pickedAt: new Date() } });
   }
   const updated = await tx.saleShipment.update({ where: { id }, data: { pickedAt: new Date() }, include: shipmentInclude });

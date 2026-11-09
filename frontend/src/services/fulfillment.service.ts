@@ -1,5 +1,5 @@
 import { apiRequest } from "@/lib/api";
-import type { FulfillmentRecord, FulfillmentSale, FulfillmentStatus } from "@/types/fulfillment";
+import type { FulfillmentRecord, FulfillmentSale, FulfillmentScanMatch, FulfillmentStatus } from "@/types/fulfillment";
 
 type ListResponse = { success: boolean; data: FulfillmentRecord[]; total: number; page: number; pageSize: number };
 
@@ -15,6 +15,11 @@ export const fulfillmentService = {
 
   sales() {
     return apiRequest<{ success: boolean; data: FulfillmentSale[] }>("/api/fulfillment/sales");
+  },
+
+  lookupScan(code: string) {
+    const query = new URLSearchParams({ code });
+    return apiRequest<{ success: boolean; data: FulfillmentScanMatch[]; limited: boolean }>(`/api/fulfillment/scan?${query.toString()}`);
   },
 
   createShipment(saleId: string, payload: { shippingAddress?: string | null; items: Array<{ saleItemId: string; quantity: number }> }) {

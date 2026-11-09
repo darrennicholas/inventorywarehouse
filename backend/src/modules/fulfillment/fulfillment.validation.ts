@@ -26,7 +26,7 @@ export const createShipmentSchema = z.object({
 export const pickShipmentSchema = z.object({
   items: z.array(z.object({
     shipmentItemId: uuid,
-    quantity: positiveInt,
+    quantity: z.coerce.number().int().min(0).max(1_000_000_000),
   }).strict()).min(1).optional(),
 }).strict();
 
