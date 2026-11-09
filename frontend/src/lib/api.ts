@@ -31,6 +31,9 @@ let unauthorizedHandler: (() => void) | null = null;
 const pendingMutations = new Map<string, Map<string | null, Promise<unknown>>>();
 
 function userFacingMessage(message: string): string {
+  if (/Data changed during this transaction|status changed; reload|changed by another process/i.test(message)) return "Data berubah saat Anda memprosesnya. Data formulir tetap tersimpan; muat ulang daftar, periksa status terbaru, lalu ulangi aksi bila masih diperlukan.";
+  if (/transaction was rolled back|no partial changes were saved/i.test(message)) return "Perubahan tidak disimpan karena stok atau data terkait berubah. Formulir tetap terbuka; muat ulang data dan periksa kembali sebelum mencoba lagi.";
+  if (/Record no longer exists/i.test(message)) return "Data ini sudah tidak tersedia. Muat ulang daftar untuk melihat data terbaru.";
   if (/Insufficient (available )?stock/i.test(message)) return "Stok yang dapat digunakan tidak mencukupi. Periksa gudang, lokasi, batch, dan reservasi, lalu muat ulang data sebelum mencoba lagi.";
   if (/Payment exceeds the outstanding balance/i.test(message)) return "Jumlah pembayaran melebihi sisa tagihan. Periksa histori pembayaran dan sesuaikan jumlahnya.";
   if (/Cancel or complete all active shipments/i.test(message)) return "Reservasi belum dapat dilepas karena masih ada shipment aktif. Selesaikan atau batalkan shipment melalui menu Fulfillment terlebih dahulu.";

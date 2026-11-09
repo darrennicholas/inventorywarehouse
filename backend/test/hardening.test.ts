@@ -13,6 +13,8 @@ import { notificationEventKey } from "../src/modules/notifications/notification-
 import { assertUsableBatch } from "../src/modules/operations/batch-safety.ts";
 import { warehouseScope, assertWarehouseAccess } from "../src/rbac/warehouse-scope.ts";
 import { writeAuditLog } from "../src/modules/audit/audit.service.ts";
+import { dateRange, sumItems } from "../src/modules/operations/transaction-query.ts";
+import { reportError } from "../src/lib/monitoring.ts";
 
 const integrationEnabled = Boolean(
   process.env.DATABASE_URL && process.env.RUN_INTEGRATION_TESTS === "true"
@@ -57,6 +59,28 @@ test("stock history reconstructs signed movements and newer pages correctly", ()
   assert.deepEqual(reconstructStockBalances(4, 0, []), []);
 });
 
+test("transaction query helpers use inclusive Jakarta dates and safe totals", () => {
+  assert.equal(sumItems([{ quantity: 2, unitPrice: 10 }, { quantity: 3, unitPrice: 5 }]), 35);
+  const range = dateRange({ fromDate: "2026-11-01", toDate: "2026-11-03" }, "saleDate") as { saleDate: { gte: Date; lt: Date } };
+  assert.equal(range.saleDate.gte.toISOString(), "2026-10-31T17:00:00.000Z");
+  assert.equal(range.saleDate.lt.toISOString(), "2026-11-03T17:00:00.000Z");
+  assert.equal(dateRange({ fromDate: "2026-02-30" }, "saleDate"), null);
+});
+
+test("error monitoring keeps correlation metadata and omits raw error content", () => {
+  const original = console.error;
+  let output = "";
+  console.error = (value?: unknown) => { output = String(value); };
+  try {
+    reportError(new Error("password=secret; SELECT * FROM users"), { requestId: "req-1", method: "POST", route: "/api/sales", userId: "user-1" });
+  } finally {
+    console.error = original;
+  }
+  assert.match(output, /req-1/);
+  assert.match(output, /user-1/);
+  assert.doesNotMatch(output, /secret|SELECT \*/);
+});
+
 test("CSV output escapes quotes and blocks spreadsheet formula cells", () => {
   assert.equal(csvCell('=HYPERLINK("x")'), '"\'=HYPERLINK(""x"")"');
   assert.equal(csvCell(-5), '"-5"');
@@ -97,6 +121,52 @@ test("concurrent stock changes remain consistent and never go negative", { skip:
     await assert.rejects(() => prisma.$transaction((tx) => changeStock(tx, product.id, warehouse.id, -1)), /Insufficient stock/);
   } finally {
     await prisma.inventoryBalance.deleteMany({ where: { productId: product.id, warehouseId: warehouse.id } });
+    await prisma.product.delete({ where: { id: product.id } });
+    await prisma.warehouse.delete({ where: { id: warehouse.id } });
+    await prisma.$disconnect();
+  }
+});
+
+test("concurrent sales reservations from separate users cannot reserve the same stock", { skip: !integrationEnabled }, async () => {
+  const { prisma } = await import("../src/lib/prisma.ts");
+  const { reserveSaleStock } = await import("../src/modules/operations/inventory.service.ts");
+  const users = await prisma.user.findMany({ where: { isActive: true }, select: { id: true }, take: 2 });
+  assert.equal(users.length, 2, "Run the full seed with at least two active users");
+  const suffix = randomUUID().slice(0, 8);
+  const warehouse = await prisma.warehouse.create({ data: { code: `RACE-WH-${suffix}`, name: `Reservation race ${suffix}` } });
+  const product = await prisma.product.create({ data: { sku: `RACE-SKU-${suffix}`, name: `Reservation race ${suffix}`, minStock: 0 } });
+  const location = await prisma.warehouseLocation.create({ data: { warehouseId: warehouse.id, code: `R-${suffix}`, name: "Concurrency test location" } });
+  const sales: Array<{ id: string; itemId: string; userId: string }> = [];
+
+  try {
+    await prisma.inventoryBalance.create({ data: { productId: product.id, warehouseId: warehouse.id, locationId: location.id, quantityOnHand: 5 } });
+    await prisma.inventoryLocationBalance.create({ data: { productId: product.id, warehouseId: warehouse.id, locationId: location.id, quantityOnHand: 5 } });
+    for (let index = 0; index < 2; index += 1) {
+      const sale = await prisma.sale.create({ data: {
+        number: `RACE-SALE-${suffix}-${index}`,
+        warehouseId: warehouse.id,
+        createdById: users[index]!.id,
+        status: "DRAFT",
+        items: { create: { productId: product.id, quantity: 4, unitPrice: 1, total: 4 } },
+      }, include: { items: true } });
+      sales.push({ id: sale.id, itemId: sale.items[0]!.id, userId: users[index]!.id });
+    }
+
+    const attempts = await Promise.allSettled(sales.map((sale) => prisma.$transaction((tx) => reserveSaleStock(
+      tx, sale.id, warehouse.id, sale.userId, [{ id: sale.itemId, productId: product.id, quantity: 4 }],
+    ))));
+    assert.equal(attempts.filter((attempt) => attempt.status === "fulfilled").length, 1);
+    assert.equal(attempts.filter((attempt) => attempt.status === "rejected").length, 1);
+    const balance = await prisma.inventoryBalance.findUniqueOrThrow({ where: { productId_warehouseId: { productId: product.id, warehouseId: warehouse.id } } });
+    assert.equal(balance.quantityOnHand, 5);
+    assert.equal(balance.reservedQuantity, 4);
+    assert.equal(await prisma.stockReservation.count({ where: { productId: product.id, status: "ACTIVE" } }), 1);
+  } finally {
+    await prisma.stockReservation.deleteMany({ where: { productId: product.id } });
+    await prisma.sale.deleteMany({ where: { id: { in: sales.map((sale) => sale.id) } } });
+    await prisma.inventoryLocationBalance.deleteMany({ where: { productId: product.id } });
+    await prisma.inventoryBalance.deleteMany({ where: { productId: product.id } });
+    await prisma.warehouseLocation.delete({ where: { id: location.id } });
     await prisma.product.delete({ where: { id: product.id } });
     await prisma.warehouse.delete({ where: { id: warehouse.id } });
     await prisma.$disconnect();

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { Prisma } from "../../generated/prisma/client.ts";
 
 import { prisma } from "../../lib/prisma.ts";
 import { authOf, requirePermission } from "../../middlewares/auth.middleware.ts";
@@ -30,22 +31,9 @@ import {
 // Transaction-domain router. Mounted by operations.routes.ts.
 const router = Router();
 
-function dateRange(query: Record<string, unknown>, field: string) {
-  const range: { gte?: Date; lt?: Date } = {};
-  const validDate = (value: unknown): value is string => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
-  const from = validDate(query.fromDate) ? query.fromDate : "";
-  const to = validDate(query.toDate) ? query.toDate : "";
-  if (from) range.gte = new Date(`${from}T00:00:00.000+07:00`);
-  if (to) { const exclusive = new Date(`${to}T00:00:00.000+07:00`); exclusive.setUTCDate(exclusive.getUTCDate() + 1); range.lt = exclusive; }
-  return Object.keys(range).length ? { [field]: range } : null;
-}
+import { dateRange, sumItems } from "./transaction-query.ts";
 
-
-function sumItems(items: { quantity: number; unitPrice: number }[]) {
-  return items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-}
-
-async function ensureProducts(tx: any, ids: string[]) {
+async function ensureProducts(tx: Prisma.TransactionClient, ids: string[]) {
   const products = await tx.product.findMany({
     where: { id: { in: ids }, isActive: true },
     select: { id: true },
@@ -55,17 +43,17 @@ async function ensureProducts(tx: any, ids: string[]) {
   }
 }
 
-async function ensureWarehouse(tx: any, id: string) {
+async function ensureWarehouse(tx: Prisma.TransactionClient, id: string) {
   const warehouse = await tx.warehouse.findUnique({ where: { id } });
   if (!warehouse || !warehouse.isActive) throw new AppError(400, "Warehouse is invalid or inactive");
 }
 
-async function ensureScopedWarehouse(tx: any, id: string, auth: ReturnType<typeof authOf>) {
+async function ensureScopedWarehouse(tx: Prisma.TransactionClient, id: string, auth: ReturnType<typeof authOf>) {
   assertWarehouseAccess(auth, id);
   await ensureWarehouse(tx, id);
 }
 
-async function validateRevisionLocations(tx: typeof prisma | any, warehouseId: string, productId: string, locationId?: string | null, batchId?: string | null) {
+async function validateRevisionLocations(tx: Prisma.TransactionClient | typeof prisma, warehouseId: string, productId: string, locationId?: string | null, batchId?: string | null) {
   if (locationId && !await tx.warehouseLocation.findFirst({ where: { id: locationId, warehouseId, isActive: true } })) throw new AppError(400, "Location is invalid or inactive for this warehouse");
   if (batchId) {
     const batch = await tx.productBatch.findFirst({ where: { id: batchId, warehouseId, productId } });
@@ -75,7 +63,7 @@ async function validateRevisionLocations(tx: typeof prisma | any, warehouseId: s
   }
 }
 
-async function ensureLocation(tx: any, warehouseId: string, requestedLocationId?: string | null) {
+async function ensureLocation(tx: Prisma.TransactionClient, warehouseId: string, requestedLocationId?: string | null) {
   if (requestedLocationId) {
     const location = await tx.warehouseLocation.findFirst({ where: { id: requestedLocationId, warehouseId, isActive: true } });
     if (!location) throw new AppError(400, "Location is invalid or inactive for this warehouse");
@@ -86,7 +74,7 @@ async function ensureLocation(tx: any, warehouseId: string, requestedLocationId?
   return tx.warehouseLocation.create({ data: { warehouseId, code: "UNASSIGNED", name: "Unassigned / Legacy Stock", isActive: true } });
 }
 
-async function ensureReceiptBatch(tx: any, input: { productId: string; warehouseId: string; batchNumber?: string | null; productionDate?: Date | null; expiryDate?: Date | null; locationId: string }, trackBatch: boolean, quarantineOnly = false) {
+async function ensureReceiptBatch(tx: Prisma.TransactionClient, input: { productId: string; warehouseId: string; batchNumber?: string | null; productionDate?: Date | null; expiryDate?: Date | null; locationId: string }, trackBatch: boolean, quarantineOnly = false) {
   if (!trackBatch && input.batchNumber) throw new AppError(400, "Non-batch product cannot use a batch number");
   if (trackBatch && !input.batchNumber) throw new AppError(400, `Batch number is required for ${input.productId}`);
   if (!input.batchNumber) return null;
@@ -101,7 +89,7 @@ async function ensureReceiptBatch(tx: any, input: { productId: string; warehouse
   return batch;
 }
 
-async function moveStock(tx: any, item: { productId: string; quantity: number; sourceLocationId?: string | null; destinationLocationId?: string | null; batchId?: string | null }, fromWarehouseId: string, toWarehouseId: string) {
+async function moveStock(tx: Prisma.TransactionClient, item: { productId: string; quantity: number; sourceLocationId?: string | null; destinationLocationId?: string | null; batchId?: string | null }, fromWarehouseId: string, toWarehouseId: string) {
   const sourceAllocations = await postStockOut(tx, item.productId, fromWarehouseId, item.quantity, { locationId: item.sourceLocationId, batchId: item.batchId });
   const destinationAllocations = [] as Awaited<ReturnType<typeof postStockIn>>[];
   const destinationLocation = await ensureLocation(tx, toWarehouseId, item.destinationLocationId);
@@ -150,7 +138,7 @@ async function ensureTransitionAllowed(currentStatus: string, nextStatus: string
   if (["RECEIVED", "COMPLETED", "POSTED", "CANCELLED"].includes(currentStatus)) throw new AppError(409, "A posted transaction cannot be edited");
 }
 
-async function estimateStockValue(tx: any, items: Array<{ productId: string; quantity: number }>, warehouseId: string) {
+async function estimateStockValue(tx: Prisma.TransactionClient, items: Array<{ productId: string; quantity: number }>, warehouseId: string) {
   let total = 0;
   for (const item of items) {
     const balance = await lockCostBalance(tx, item.productId, warehouseId);
@@ -313,12 +301,13 @@ router.get("/options", requirePermission("inventory.read"), asyncHandler(async (
 router.get("/purchases", requirePermission("purchases.read"), asyncHandler(async (req, res) => {
   const { page, pageSize, skip, take } = pagination(req.query as Record<string, unknown>);
   const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 120) : "";
-  const clauses: any[] = [];
+  const clauses: Prisma.PurchaseOrderWhereInput[] = [];
   const base = scopedWarehouseFilter(authOf(req));
   if (base) clauses.push(base);
   if (search) clauses.push({ OR: [{ number: { contains: search, mode: "insensitive" } }, { supplier: { name: { contains: search, mode: "insensitive" } } }, { items: { some: { product: { OR: [{ name: { contains: search, mode: "insensitive" } }, { sku: { contains: search, mode: "insensitive" } }] } } } }] });
   const status = typeof req.query.status === "string" ? req.query.status : "";
-  if (["DRAFT", "PENDING", "APPROVED", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELLED"].includes(status)) clauses.push({ status });
+  const purchaseStatuses = ["DRAFT", "PENDING", "APPROVED", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELLED"] as const;
+  if ((purchaseStatuses as readonly string[]).includes(status)) clauses.push({ status: status as typeof purchaseStatuses[number] });
   const dates = dateRange(req.query as Record<string, unknown>, "orderDate"); if (dates) clauses.push(dates);
   const where = clauses.length ? { AND: clauses } : undefined;
   const [data, total] = await Promise.all([prisma.purchaseOrder.findMany({ where, include: purchaseInclude, orderBy: { orderDate: "desc" }, skip, take }), prisma.purchaseOrder.count({ where })]);
@@ -433,11 +422,12 @@ router.get("/sales", requirePermission("sales.read"), asyncHandler(async (req, r
   const { page, pageSize, skip, take } = pagination(req.query as Record<string, unknown>);
   const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 120) : "";
   const base = scopedWarehouseFilter(authOf(req));
-  const clauses: any[] = [];
+  const clauses: Prisma.SaleWhereInput[] = [];
   if (base) clauses.push(base);
   if (search) clauses.push({ OR: [{ number: { contains: search, mode: "insensitive" } }, { customer: { name: { contains: search, mode: "insensitive" } } }, { items: { some: { product: { OR: [{ name: { contains: search, mode: "insensitive" } }, { sku: { contains: search, mode: "insensitive" } }] } } } }] });
   const status = typeof req.query.status === "string" ? req.query.status : "";
-  if (["DRAFT", "RESERVED", "PICKING", "PACKED", "PARTIALLY_SHIPPED", "SHIPPED", "COMPLETED", "CANCELLED"].includes(status)) clauses.push({ status });
+  const saleStatuses = ["DRAFT", "RESERVED", "PICKING", "PACKED", "PARTIALLY_SHIPPED", "SHIPPED", "COMPLETED", "CANCELLED"] as const;
+  if ((saleStatuses as readonly string[]).includes(status)) clauses.push({ status: status as typeof saleStatuses[number] });
   const dates = dateRange(req.query as Record<string, unknown>, "saleDate"); if (dates) clauses.push(dates);
   const where = clauses.length ? { AND: clauses } : undefined;
   const [data, total] = await Promise.all([prisma.sale.findMany({ where, include: saleInclude, orderBy: { saleDate: "desc" }, skip, take }), prisma.sale.count({ where })]);
@@ -574,12 +564,13 @@ router.delete("/sales/:id", requirePermission("sales.delete"), asyncHandler(asyn
 router.get("/adjustments", requirePermission("adjustments.read"), asyncHandler(async (req, res) => {
   const { page, pageSize, skip, take } = pagination(req.query as Record<string, unknown>);
   const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 120) : "";
-  const clauses: any[] = [];
+  const clauses: Prisma.StockAdjustmentWhereInput[] = [];
   const base = scopedWarehouseFilter(authOf(req));
   if (base) clauses.push(base);
   if (search) clauses.push({ OR: [{ number: { contains: search, mode: "insensitive" } }, { reason: { contains: search, mode: "insensitive" } }, { items: { some: { product: { OR: [{ name: { contains: search, mode: "insensitive" } }, { sku: { contains: search, mode: "insensitive" } }] } } } }] });
   const status = typeof req.query.status === "string" ? req.query.status : "";
-  if (["DRAFT", "REVISION", "POSTED", "CANCELLED"].includes(status)) clauses.push({ status });
+  const adjustmentStatuses = ["DRAFT", "REVISION", "POSTED", "CANCELLED"] as const;
+  if ((adjustmentStatuses as readonly string[]).includes(status)) clauses.push({ status: status as typeof adjustmentStatuses[number] });
   const dates = dateRange(req.query as Record<string, unknown>, "adjustmentDate"); if (dates) clauses.push(dates);
   const where = clauses.length ? { AND: clauses } : undefined;
   const [data, total] = await Promise.all([prisma.stockAdjustment.findMany({ where, include: { warehouse: true, createdBy: { select: { id: true, fullName: true } }, approvedBy: { select: { id: true, fullName: true } }, items: { include: { product: { select: { id: true, sku: true, name: true } } } } }, orderBy: { adjustmentDate: "desc" }, skip, take }), prisma.stockAdjustment.count({ where })]);
@@ -672,11 +663,12 @@ router.get("/transfers", requirePermission("transfers.read"), asyncHandler(async
   const scope = warehouseScope(auth);
   const { page, pageSize, skip, take } = pagination(req.query as Record<string, unknown>);
   const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 120) : "";
-  const clauses: any[] = [];
+  const clauses: Prisma.StockTransferWhereInput[] = [];
   if (scope) clauses.push({ OR: [{ fromWarehouseId: { in: scope } }, { toWarehouseId: { in: scope } }] });
   if (search) clauses.push({ OR: [{ number: { contains: search, mode: "insensitive" } }, { fromWarehouse: { name: { contains: search, mode: "insensitive" } } }, { toWarehouse: { name: { contains: search, mode: "insensitive" } } }, { items: { some: { product: { OR: [{ name: { contains: search, mode: "insensitive" } }, { sku: { contains: search, mode: "insensitive" } }] } } } }] });
   const status = typeof req.query.status === "string" ? req.query.status : "";
-  if (["DRAFT", "REVISION", "IN_TRANSIT", "COMPLETED", "CANCELLED"].includes(status)) clauses.push({ status });
+  const transferStatuses = ["DRAFT", "REVISION", "IN_TRANSIT", "COMPLETED", "CANCELLED"] as const;
+  if ((transferStatuses as readonly string[]).includes(status)) clauses.push({ status: status as typeof transferStatuses[number] });
   const dates = dateRange(req.query as Record<string, unknown>, "transferDate"); if (dates) clauses.push(dates);
   const where = clauses.length ? { AND: clauses } : undefined;
   const [data, total] = await Promise.all([prisma.stockTransfer.findMany({ where, include: { fromWarehouse: true, toWarehouse: true, createdBy: { select: { id: true, fullName: true } }, approvedBy: { select: { id: true, fullName: true } }, items: { include: { product: { select: { id: true, sku: true, name: true } } } } }, orderBy: { transferDate: "desc" }, skip, take }), prisma.stockTransfer.count({ where })]);

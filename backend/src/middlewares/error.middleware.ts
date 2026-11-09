@@ -1,6 +1,7 @@
 
 import type {
   ErrorRequestHandler,
+  Request,
 } from "express";
 
 import { AppError } from "../utils/AppError.ts";
@@ -25,9 +26,10 @@ export const errorHandler: ErrorRequestHandler = (
   _next
 ) => {
   const requestId = res.locals.requestId as string | undefined;
-  // Do not put query-string values (which can contain tokens or identifiers)
-  // into application error logs; the request ID is the safe correlation key.
-  reportError(error, { requestId, method: req.method, path: req.path });
+  const userId = (req as Request & { auth?: { userId: string } }).auth?.userId;
+  // Use the registered route template; raw paths can contain record IDs.
+  const route = `${req.baseUrl}${req.route?.path ?? "unmatched"}`;
+  reportError(error, { requestId, method: req.method, route, userId });
   const responseMeta = requestId ? { requestId } : {};
 
   // Custom Application Error

@@ -1,4 +1,5 @@
 import { prisma } from "../../lib/prisma.ts";
+import { Prisma } from "../../generated/prisma/client.ts";
 import { notificationEventKey } from "./notification-key.ts";
 
 type NotificationEvent = {
@@ -17,7 +18,7 @@ type NotificationEvent = {
  * related module. Warehouse staff only receive events from their own site;
  * supervisory roles continue to receive cross-warehouse events.
  */
-export async function notifyByPermission(event: NotificationEvent, client: any = prisma) {
+export async function notifyByPermission(event: NotificationEvent, client: Prisma.TransactionClient | typeof prisma = prisma) {
   try {
     const users = await client.user.findMany({
     where: {
@@ -43,7 +44,7 @@ export async function notifyByPermission(event: NotificationEvent, client: any =
     // allowing later genuine changes and explicitly keyed events through.
     const eventKey = notificationEventKey(event);
     await client.notification.createMany({
-      data: users.map((user: { id: string }) => ({
+      data: users.map((user) => ({
         fingerprint: `${eventKey}:${user.id}`,
         userId: user.id,
         type: event.type,

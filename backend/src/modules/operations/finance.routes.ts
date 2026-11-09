@@ -28,12 +28,13 @@ const paymentEditSchema = z.object({ method: z.enum(["CASH", "BANK_TRANSFER", "C
 
 function paymentFilter(req: Request) {
   const scope = warehouseScope(authOf(req));
-  const clauses: any[] = [];
+  const clauses: Prisma.PaymentWhereInput[] = [];
   if (scope) clauses.push({ OR: [{ purchaseOrder: { warehouseId: { in: scope } } }, { sale: { warehouseId: { in: scope } } }, { expense: { warehouseId: { in: scope } } }] });
   const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 120) : "";
   if (search) clauses.push({ OR: [{ number: { contains: search, mode: "insensitive" } }, { referenceNo: { contains: search, mode: "insensitive" } }, { purchaseOrder: { number: { contains: search, mode: "insensitive" } } }, { sale: { number: { contains: search, mode: "insensitive" } } }, { expense: { number: { contains: search, mode: "insensitive" } } }] });
   const status = typeof req.query.status === "string" ? req.query.status : "";
-  if (["PENDING", "PAID", "VOID"].includes(status)) clauses.push({ status });
+  const paymentStatuses = ["PENDING", "PAID", "VOID"] as const;
+  if ((paymentStatuses as readonly string[]).includes(status)) clauses.push({ status: status as typeof paymentStatuses[number] });
   const dates = dateRange(req.query as Record<string, unknown>, "paymentDate"); if (dates) clauses.push(dates);
   return clauses.length ? { AND: clauses } : undefined;
 }
@@ -135,7 +136,7 @@ router.get("/payments.csv", requirePermission("payments.read"), asyncHandler(asy
 
 router.get("/expenses", requirePermission("expenses.read"), asyncHandler(async (req, res) => {
   const { page, pageSize, skip, take } = pagination(req.query as Record<string, unknown>);
-  const clauses: any[] = [];
+  const clauses: Prisma.ExpenseWhereInput[] = [];
   const base = scopedWarehouseFilter(authOf(req));
   if (base) clauses.push(base);
   const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 120) : "";
