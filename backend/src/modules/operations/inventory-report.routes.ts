@@ -27,9 +27,9 @@ async function stockReportRows(auth: ReturnType<typeof authOf>, warehouseId?: st
   const details = await stockAvailabilitySummary(balances);
   return balances.map((balance) => {
     const detail = details.get(`${balance.productId}:${balance.warehouseId}`);
-    const availableQuantity = detail?.available ?? 0;
+    const availableQuantity = detail?.available ?? Math.max(0, balance.quantityOnHand - balance.reservedQuantity);
     const targetStock = balance.product.maxStock ?? balance.product.minStock * 2;
-    return { ...balance, availableQuantity, expiredQuantity: detail?.expired ?? 0, quarantineQuantity: detail?.quarantine ?? 0, otherUnavailableQuantity: detail?.other ?? 0, detailMissing: !detail && balance.quantityOnHand !== 0, isLowStock: availableQuantity <= balance.product.minStock, reorderQuantity: Math.max(0, targetStock - availableQuantity) };
+    return { ...balance, availableQuantity, expiredQuantity: detail?.expired ?? 0, quarantineQuantity: detail?.quarantine ?? 0, otherUnavailableQuantity: detail?.other ?? 0, detailMissing: detail?.detailMissing ?? (balance.quantityOnHand !== 0), detailMismatch: detail?.detailMismatch ?? true, isLowStock: availableQuantity <= balance.product.minStock, reorderQuantity: Math.max(0, targetStock - availableQuantity) };
   });
 }
 

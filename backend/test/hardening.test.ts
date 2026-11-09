@@ -15,10 +15,18 @@ import { warehouseScope, assertWarehouseAccess } from "../src/rbac/warehouse-sco
 import { writeAuditLog } from "../src/modules/audit/audit.service.ts";
 import { dateRange, sumItems } from "../src/modules/operations/transaction-query.ts";
 import { reportError } from "../src/lib/monitoring.ts";
+import { conservativeAvailableQuantity } from "../src/modules/operations/stock-availability-summary.ts";
 
 const integrationEnabled = Boolean(
   process.env.DATABASE_URL && process.env.RUN_INTEGRATION_TESTS === "true"
 );
+
+test("stock report availability cannot exceed aggregate physical stock less reservations", () => {
+  assert.equal(conservativeAvailableQuantity(6, 4, 2), 2);
+  assert.equal(conservativeAvailableQuantity(20, 10, 0), 10);
+  assert.equal(conservativeAvailableQuantity(2, 10, 3), 2);
+  assert.equal(conservativeAvailableQuantity(5, 4, 8), 0);
+});
 
 test("permission helper enforces the role permission matrix", () => {
   assert.equal(hasPermission(ROLE_PRESETS.ADMIN, ["roles.manage"]), true);
