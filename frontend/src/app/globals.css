@@ -55,32 +55,38 @@
   .sf-modal-overlay.justify-center > :is(div, section) { max-height: calc(100dvh - 24px); }
 }
 
-select.stockflow-select {
+select.stockflow-select,
+select:not([multiple]) {
   appearance: none;
   cursor: pointer;
   outline: none;
-  border: 1px solid #dbe3ee;
+  border: 1px solid #bfd0eb;
   border-radius: .75rem;
-  background-color: #fff;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364758b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-color: #e7efff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%233b5f9b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-position: right .8rem center;
   background-repeat: no-repeat;
   background-size: 1rem;
-  color: #172238;
+  color: #19325b;
   min-height: 2.5rem;
   padding-right: 2.6rem;
   box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
   transition: border-color 150ms, box-shadow 150ms, background-color 150ms;
 }
-.stockflow-select:hover:not(:disabled) { border-color: #b7c8e2; }
-.stockflow-select:focus-visible {
+.stockflow-select:hover:not(:disabled),
+select:not([multiple]):hover:not(:disabled) { border-color: #8daee8; background-color: #d7e5ff; }
+.stockflow-select:focus-visible,
+select:not([multiple]):focus-visible {
   border-color: #3b82f6;
   box-shadow: 0 0 0 3px rgb(59 130 246 / 18%), 0 2px 6px rgb(37 99 235 / 8%);
 }
 .stockflow-select:disabled { cursor: not-allowed; opacity: .6; }
-html.dark .stockflow-select { background-color: #17243a; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); color: #f1f5f9; border-color: #475569; }
-html.dark .stockflow-select:hover:not(:disabled) { border-color: #6683ad; }
-html.dark .stockflow-select option { background-color: #17243a; color: #f1f5f9; }
+html.dark .stockflow-select,
+html.dark select:not([multiple]) { background-color: #172b49; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23b4caec' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); color: #eaf2ff; border-color: #45648f; }
+html.dark .stockflow-select:hover:not(:disabled),
+html.dark select:not([multiple]):hover:not(:disabled) { border-color: #7297cc; background-color: #203c64; }
+html.dark .stockflow-select option,
+html.dark select:not([multiple]) option { background-color: #172b49; color: #eaf2ff; }
 
 /* ========================================
    GLOBAL THEME

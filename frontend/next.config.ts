@@ -6,6 +6,8 @@ const nextConfig: NextConfig = {
   },
   // Hide the Next.js developer tools badge from the application UI.
   devIndicators: false,
+  // Keep browser warnings/errors visible in the terminal during development.
+  logging: { browserToTerminal: "warn" },
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {
