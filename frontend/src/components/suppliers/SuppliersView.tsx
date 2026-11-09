@@ -4,7 +4,7 @@
 import GlobalLoading from "@/components/ui/GlobalLoading";
 import GlobalSelect from "@/components/ui/GlobalSelect";
 import { confirmAction } from "@/components/ui/GlobalAlert";
-import { Eye, Pencil, Trash2 } from "@/components/ui/ActionIcons";
+import ActionIconButton from "@/components/ui/ActionIconButton";
 import { LoaderCircle } from "@/components/ui/GlobalLoading";
 import {
   useEffect,
@@ -12,7 +12,7 @@ import {
   type FormEvent,
 } from "react";
 
-import { AlertCircle, Plus, RefreshCw, Search, Truck, X } from "lucide-react";
+import { AlertCircle, Eye, Pencil, Plus, RefreshCw, Search, Trash2, Truck, X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import DataPagination from "@/components/ui/DataPagination";
 import ActionFeedback from "@/components/ui/ActionFeedback";
@@ -422,7 +422,7 @@ export default function SuppliersView() {
             <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><Truck size={18} /></span><div className="min-w-0"><h3 className="truncate font-bold text-slate-900">{supplier.name}</h3><p className="mt-1 font-mono text-xs text-blue-600">{supplier.code}</p></div></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${supplier.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{statusLabel(supplier.isActive ? "ACTIVE" : "INACTIVE")}</span></div>
             <dl className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-xs"><div><dt className="text-slate-400">Email</dt><dd className="mt-1 break-words text-slate-700">{supplier.email || "—"}</dd></div><div><dt className="text-slate-400">Telepon</dt><dd className="mt-1 text-slate-700">{supplier.phone || "—"}</dd></div><div className="col-span-2"><dt className="text-slate-400">Alamat</dt><dd className="mt-1 line-clamp-2 text-slate-700">{supplier.address || "—"}</dd></div></dl>
             <div className="flex items-center justify-between text-xs text-slate-400"><span>#{start + index + 1}</span><span>{supplier.createdAt ? formatDate(supplier.createdAt) : "—"}</span></div>
-            <div data-sf-action-column className="flex flex-wrap gap-2 border-t border-slate-100 pt-3"><button type="button" disabled={detailLoading} onClick={() => void openDetail(supplier.id)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50">Lihat</button>{canWrite && <button type="button" disabled={saving} onClick={() => openEdit(supplier)} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Ubah</button>}{canWrite && <button type="button" disabled={saving || !supplier.isActive} onClick={() => void handleDeactivate(supplier)} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Nonaktifkan</button>}</div>
+            <div data-sf-action-column className="flex items-center gap-1 border-t border-slate-100 pt-3"><ActionIconButton label={`Lihat ${supplier.name}`} icon={Eye} disabled={detailLoading} onClick={() => void openDetail(supplier.id)} />{canWrite && <ActionIconButton label={`Ubah ${supplier.name}`} icon={Pencil} variant="warning" disabled={saving} onClick={() => openEdit(supplier)} />}{canWrite && <ActionIconButton label={`Nonaktifkan ${supplier.name}`} icon={Trash2} variant="danger" disabled={saving || !supplier.isActive} onClick={() => void handleDeactivate(supplier)} />}</div>
           </article>)}
           {!loading && visible.length === 0 && <p className="py-10 text-center text-sm text-slate-500">{search ? "Tidak ada pemasok yang cocok." : "Data pemasok belum tersedia."}</p>}
         </div>
@@ -433,6 +433,7 @@ export default function SuppliersView() {
             <thead>
               <tr className="border-b-2 border-slate-200 text-slate-700">
                 {[
+                  "Aksi",
                   "No.",
                   "Kode pemasok",
                   "Nama pemasok",
@@ -440,7 +441,6 @@ export default function SuppliersView() {
                   "Telepon",
                   "Alamat",
                   "Status",
-                  "Aksi",
                 ].map((heading) => (
                   <th
                     key={heading}
@@ -459,6 +459,7 @@ export default function SuppliersView() {
                     key={supplier.id}
                     className="hover:bg-[#f8faff]"
                   >
+                    <td className="px-3 py-4 align-middle"><div data-sf-action-column className="flex items-center gap-1"><ActionIconButton label={`Lihat ${supplier.name}`} icon={Eye} disabled={detailLoading} onClick={() => void openDetail(supplier.id)} />{canWrite && <ActionIconButton label={`Ubah ${supplier.name}`} icon={Pencil} variant="warning" disabled={saving} onClick={() => openEdit(supplier)} />}{canWrite && <ActionIconButton label={`Nonaktifkan ${supplier.name}`} icon={Trash2} variant="danger" disabled={saving || !supplier.isActive} onClick={() => void handleDeactivate(supplier)} />}</div></td>
                     <td className="px-3 py-4 text-slate-500">
                       {start + index + 1}
                     </td>
@@ -503,52 +504,6 @@ export default function SuppliersView() {
                       </span>
                     </td>
 
-                    <td className="whitespace-nowrap px-3 py-4">
-                      <button
-                        type="button"
-                        disabled={detailLoading}
-                        title="Lihat"
-                        onClick={() =>
-                          void openDetail(
-                            supplier.id
-                          )
-                        }
-                        className="mr-2 inline-flex items-center gap-1 rounded-md bg-slate-100 px-3 py-2 font-semibold text-slate-700 disabled:opacity-50"
-                      >
-                        <Eye size={13} />
-                        Lihat
-                      </button>
-
-                      {canWrite && <button
-                        type="button"
-                        disabled={saving}
-                        onClick={() =>
-                          openEdit(supplier)
-                        }
-                        className="mr-2 inline-flex items-center gap-1 rounded-md bg-[#159fe2] px-3 py-2 font-semibold text-white disabled:opacity-50"
-                      >
-                        <Pencil size={13} />
-                        Ubah
-                      </button>}
-
-                      {canWrite && <button
-                        type="button"
-                        disabled={
-                          saving ||
-                          !supplier.isActive
-                        }
-                        title="Nonaktifkan"
-                        aria-label={`Nonaktifkan ${supplier.name}`}
-                        onClick={() =>
-                          void handleDeactivate(
-                            supplier
-                          )
-                        }
-                        className="inline-flex items-center rounded-md bg-red-500 px-2.5 py-2 text-white disabled:opacity-35"
-                      >
-                        <Trash2 size={13} />
-                      </button>}
-                    </td>
                   </tr>
                 ))}
             </tbody>

@@ -4,7 +4,7 @@
 import GlobalLoading from "@/components/ui/GlobalLoading";
 import GlobalSelect from "@/components/ui/GlobalSelect";
 import { confirmAction } from "@/components/ui/GlobalAlert";
-import { Eye, Pencil, Trash2 } from "@/components/ui/ActionIcons";
+import ActionIconButton from "@/components/ui/ActionIconButton";
 import { LoaderCircle } from "@/components/ui/GlobalLoading";
 import {
   useEffect,
@@ -12,7 +12,7 @@ import {
   type FormEvent,
 } from "react";
 
-import { AlertCircle, Plus, RefreshCw, Search, Tags, X } from "lucide-react";
+import { AlertCircle, Eye, Pencil, Plus, RefreshCw, Search, Tags, Trash2, X } from "lucide-react";
 import DataPagination from "@/components/ui/DataPagination";
 import ActionFeedback from "@/components/ui/ActionFeedback";
 import { statusLabel } from "@/lib/ui-labels";
@@ -298,7 +298,7 @@ export default function CategoriesView() {
         <div className="divide-y divide-slate-100 px-5 md:hidden">
           {loading && <div className="py-8 text-center text-sm text-slate-500"><GlobalLoading label="Memuat kategori..." /></div>}
           {!loading && filteredCategories.length === 0 && <p className="py-10 text-center text-sm text-slate-500">{search ? "Tidak ada kategori yang cocok." : "Kategori belum tersedia."}</p>}
-          {!loading && filteredCategories.map((category, index) => <article key={category.id} className="space-y-3 py-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-bold text-slate-800">{category.name}</p><p className="mt-1 line-clamp-2 text-xs text-slate-500">{category.description || "Tidak ada deskripsi"}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${category.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{statusLabel(category.isActive ? "ACTIVE" : "INACTIVE")}</span></div><div className="flex items-center justify-between text-xs text-slate-400"><span>#{startIndex + index + 1}</span><span>{formatDate(category.createdAt)}</span></div><div data-sf-action-column className="flex flex-wrap gap-2 border-t border-slate-100 pt-3"><button type="button" onClick={() => setViewingCategory(category)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700">Lihat</button>{canWrite && <button type="button" onClick={() => openEditModal(category)} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white">Ubah</button>}{canDelete && <button type="button" disabled={saving || !category.isActive} onClick={() => void handleDeactivate(category)} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Nonaktifkan</button>}</div></article>)}
+          {!loading && filteredCategories.map((category, index) => <article key={category.id} className="space-y-3 py-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-bold text-slate-800">{category.name}</p><p className="mt-1 line-clamp-2 text-xs text-slate-500">{category.description || "Tidak ada deskripsi"}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${category.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{statusLabel(category.isActive ? "ACTIVE" : "INACTIVE")}</span></div><div className="flex items-center justify-between text-xs text-slate-400"><span>#{startIndex + index + 1}</span><span>{formatDate(category.createdAt)}</span></div><div data-sf-action-column className="flex items-center gap-1 border-t border-slate-100 pt-3"><ActionIconButton label={`Lihat kategori ${category.name}`} icon={Eye} onClick={() => setViewingCategory(category)} />{canWrite && <ActionIconButton label={`Ubah kategori ${category.name}`} icon={Pencil} variant="warning" onClick={() => openEditModal(category)} />}{canDelete && <ActionIconButton label={`Nonaktifkan kategori ${category.name}`} icon={Trash2} variant="danger" disabled={saving || !category.isActive} onClick={() => void handleDeactivate(category)} />}</div></article>)}
         </div>
 
         {/* CATEGORY TABLE */}
@@ -306,6 +306,7 @@ export default function CategoriesView() {
           <table className="w-full min-w-[650px] text-left text-xs">
             <thead>
               <tr className="border-b-2 border-slate-200 text-slate-700">
+                <th className="px-3 py-3 font-bold text-left">Aksi</th>
                 <th className="px-3 py-3 font-bold">No.</th>
                 <th className="px-3 py-3 font-bold">
                   Nama kategori
@@ -319,9 +320,6 @@ export default function CategoriesView() {
                 <th className="px-3 py-3 font-bold">
                   Dibuat
                 </th>
-                <th className="px-3 py-3 font-bold">
-                  Aksi
-                </th>
               </tr>
             </thead>
 
@@ -332,6 +330,13 @@ export default function CategoriesView() {
                     key={category.id}
                     className="hover:bg-[#f8faff]"
                   >
+                    <td className="px-3 py-4 align-middle">
+                      <div data-sf-action-column className="flex items-center gap-1">
+                        <ActionIconButton label={`Lihat kategori ${category.name}`} icon={Eye} onClick={() => setViewingCategory(category)} />
+                        {canWrite && <ActionIconButton label={`Ubah kategori ${category.name}`} icon={Pencil} variant="warning" onClick={() => openEditModal(category)} />}
+                        {canDelete && <ActionIconButton label={`Nonaktifkan kategori ${category.name}`} icon={Trash2} variant="danger" disabled={saving || !category.isActive} onClick={() => void handleDeactivate(category)} />}
+                      </div>
+                    </td>
                     <td className="px-3 py-4 text-slate-500">
                       {startIndex + index + 1}
                     </td>
@@ -370,36 +375,6 @@ export default function CategoriesView() {
                       {formatDate(category.createdAt)}
                     </td>
 
-                    <td className="px-3 py-4">
-                      <button
-                        type="button"
-                        onClick={() => setViewingCategory(category)}
-                        className="mr-2 inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 font-semibold text-slate-600 hover:bg-slate-50"
-                      >
-                        <Eye size={13} />
-                        Lihat
-                      </button>
-                      {canWrite && <button
-                        type="button"
-                        onClick={() =>
-                          openEditModal(category)
-                        }
-                        className="inline-flex items-center gap-1.5 rounded-md bg-[#159fe2] px-3 py-2 font-semibold text-white transition hover:bg-sky-600"
-                      >
-                        <Pencil size={13} />
-                        Ubah
-                      </button>}
-                      {canDelete && <button
-                        type="button"
-                        disabled={saving || !category.isActive}
-                        onClick={() => void handleDeactivate(category)}
-                        title="Deactivate"
-                        className="ml-2 inline-flex items-center gap-1.5 rounded-md bg-red-500 px-3 py-2 font-semibold text-white disabled:opacity-35"
-                      >
-                        <Trash2 size={13} />
-                        Nonaktifkan
-                      </button>}
-                    </td>
                   </tr>
                 ))}
             </tbody>

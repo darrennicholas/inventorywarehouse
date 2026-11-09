@@ -4,7 +4,7 @@
 import GlobalLoading from "@/components/ui/GlobalLoading";
 import GlobalSelect from "@/components/ui/GlobalSelect";
 import { confirmAction } from "@/components/ui/GlobalAlert";
-import { Eye, Pencil, Trash2 } from "@/components/ui/ActionIcons";
+import ActionIconButton from "@/components/ui/ActionIconButton";
 import { LoaderCircle } from "@/components/ui/GlobalLoading";
 import {
   useEffect,
@@ -12,7 +12,7 @@ import {
   type FormEvent,
 } from "react";
 
-import { AlertCircle, Download, MapPin, Plus, RefreshCw, Search, Warehouse as WarehouseIcon, X } from "lucide-react";
+import { AlertCircle, Download, Eye, MapPin, Pencil, Plus, RefreshCw, Search, Trash2, Warehouse as WarehouseIcon, X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import DataPagination from "@/components/ui/DataPagination";
 import ActionFeedback from "@/components/ui/ActionFeedback";
@@ -416,7 +416,7 @@ export default function WarehousesView() {
             <div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><WarehouseIcon size={18} /></span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><h3 className="truncate font-bold text-slate-900">{warehouse.name}</h3><span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${warehouse.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{statusLabel(warehouse.isActive ? "ACTIVE" : "INACTIVE")}</span></div><p className="mt-1 font-mono text-xs text-blue-600">{warehouse.code}</p></div></div>
             <div className="rounded-xl bg-slate-50 p-3 text-xs"><p className="text-slate-400">Alamat</p><p className="mt-1 text-slate-700">{warehouse.address || "—"}</p><p className="mt-3 text-slate-400">Dibuat</p><p className="mt-1 text-slate-700">{formatDate(warehouse.createdAt)}</p></div>
             <div className="flex items-center justify-between text-xs text-slate-400"><span>#{startIndex + index + 1}</span></div>
-            <div data-sf-action-column className="flex flex-wrap gap-2 border-t border-slate-100 pt-3"><button type="button" disabled={detailLoading} onClick={() => void openDetail(warehouse.id)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50">Lihat</button><button type="button" disabled={downloadingId === warehouse.id} onClick={() => void downloadSheet(warehouse)} className="rounded-lg bg-violet-100 px-3 py-2 text-xs font-semibold text-violet-800 disabled:opacity-50">{downloadingId === warehouse.id ? "Menyiapkan PDF..." : "Unduh lembar opname"}</button>{canWrite && <button type="button" disabled={saving} onClick={() => openEdit(warehouse)} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Ubah</button>}{canWrite && <button type="button" disabled={saving || !warehouse.isActive} onClick={() => void handleDeactivate(warehouse)} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Nonaktifkan</button>}</div>
+            <div data-sf-action-column className="flex items-center gap-1 border-t border-slate-100 pt-3"><ActionIconButton label={`Lihat ${warehouse.name}`} icon={Eye} disabled={detailLoading} onClick={() => void openDetail(warehouse.id)} /><ActionIconButton label={`Unduh lembar opname ${warehouse.name}`} icon={Download} variant="violet" disabled={downloadingId === warehouse.id} onClick={() => void downloadSheet(warehouse)} />{canWrite && <ActionIconButton label={`Ubah ${warehouse.name}`} icon={Pencil} variant="warning" disabled={saving} onClick={() => openEdit(warehouse)} />}{canWrite && <ActionIconButton label={`Nonaktifkan ${warehouse.name}`} icon={Trash2} variant="danger" disabled={saving || !warehouse.isActive} onClick={() => void handleDeactivate(warehouse)} />}</div>
           </article>)}
           {!loading && visible.length === 0 && <p className="py-10 text-center text-sm text-slate-500">{search ? "Tidak ada gudang yang cocok." : "Belum ada gudang."}</p>}
         </div>
@@ -427,13 +427,13 @@ export default function WarehousesView() {
             <thead>
               <tr className="border-b-2 border-slate-200 text-slate-700">
                 {[
+                  "Aksi",
                   "No.",
                   "Kode",
                   "Nama gudang",
                   "Alamat",
                   "Status",
                   "Dibuat",
-                  "Aksi",
                 ].map((heading) => (
                   <th
                     key={heading}
@@ -452,6 +452,7 @@ export default function WarehousesView() {
                     key={warehouse.id}
                     className="hover:bg-[#f8faff]"
                   >
+                    <td className="px-3 py-4 align-middle"><div data-sf-action-column className="flex items-center gap-1"><ActionIconButton label={`Lihat rincian ${warehouse.name}`} icon={Eye} disabled={detailLoading} onClick={() => void openDetail(warehouse.id)} /><ActionIconButton label={`Unduh lembar hitung stok fisik untuk ${warehouse.name}`} icon={Download} variant="violet" disabled={downloadingId === warehouse.id} onClick={() => void downloadSheet(warehouse)} />{canWrite && <ActionIconButton label={`Ubah ${warehouse.name}`} icon={Pencil} variant="warning" disabled={saving} onClick={() => openEdit(warehouse)} />}{canWrite && <ActionIconButton label={`Nonaktifkan ${warehouse.name}`} icon={Trash2} variant="danger" disabled={saving || !warehouse.isActive} onClick={() => void handleDeactivate(warehouse)} />}</div></td>
                     {/* NO */}
                     <td className="px-3 py-4 text-slate-500">
                       {startIndex + index + 1}
@@ -508,56 +509,6 @@ export default function WarehousesView() {
                       {formatDate(warehouse.createdAt)}
                     </td>
 
-                    {/* ACTION */}
-                    <td className="whitespace-nowrap px-3 py-4">
-                      <button
-                        type="button"
-                        disabled={detailLoading}
-                        onClick={() =>
-                          void openDetail(warehouse.id)
-                        }
-                        title="Lihat rincian"
-                        aria-label={`Lihat ${warehouse.name}`}
-                        className="mr-2 inline-flex items-center gap-1 rounded-md bg-slate-100 px-3 py-2 font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-50"
-                      >
-                        <Eye size={13} />
-                        Lihat
-                      </button>
-
-                      <button
-                        type="button"
-                        disabled={downloadingId === warehouse.id}
-                        onClick={() => void downloadSheet(warehouse)}
-                        title="Unduh lembar hitung stok fisik (PDF)"
-                        className="mr-2 inline-flex items-center gap-1 rounded-md bg-violet-50 px-3 py-2 font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-50"
-                      >
-                        {downloadingId === warehouse.id ? <LoaderCircle size={13} className="animate-spin" /> : <Download size={13} />}
-                        PDF
-                      </button>
-
-                      {canWrite && <button
-                        type="button"
-                        disabled={saving}
-                        onClick={() => openEdit(warehouse)}
-                        className="mr-2 inline-flex items-center gap-1 rounded-md bg-[#159fe2] px-3 py-2 font-semibold text-white disabled:opacity-50"
-                      >
-                        <Pencil size={13} />
-                        Ubah
-                      </button>}
-
-                      {canWrite && <button
-                        type="button"
-                        disabled={saving || !warehouse.isActive}
-                        onClick={() =>
-                          void handleDeactivate(warehouse)
-                        }
-                        title="Nonaktifkan gudang"
-                        aria-label={`Nonaktifkan ${warehouse.name}`}
-                        className="inline-flex items-center gap-1 rounded-md bg-red-500 px-2.5 py-2 font-semibold text-white disabled:opacity-35"
-                      >
-                        <Trash2 size={13} />
-                      </button>}
-                    </td>
                   </tr>
                 ))}
             </tbody>

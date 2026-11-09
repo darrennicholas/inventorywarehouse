@@ -4,6 +4,7 @@ import GlobalLoading from "@/components/ui/GlobalLoading";
 import GlobalSelect from "@/components/ui/GlobalSelect";
 import { confirmAction } from "@/components/ui/GlobalAlert";
 import { LoaderCircle } from "@/components/ui/GlobalLoading";
+import ActionIconButton from "@/components/ui/ActionIconButton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ClipboardCheck, PackageCheck, Plus, ScanLine, Search, Send, X } from "lucide-react";
 
@@ -203,7 +204,7 @@ export default function FulfillmentView({ target = null }: { target?: Notificati
               <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="break-all font-bold text-slate-900">{row.number}</p><p className="mt-1 text-xs text-slate-500">{row.sale?.number ?? row.saleId} · {row.warehouse?.name ?? "Gudang"}</p><p className="mt-1 text-xs text-slate-500">{row.sale?.customer?.name ?? "Pelanggan langsung"} · {new Date(row.createdAt).toLocaleDateString("id-ID")}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${statusStyle[row.status]}`}>{statusLabel(row.status)}</span></div>
               <div className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-xs"><p>Diambil <strong className="text-slate-800">{picked}/{ordered}</strong></p><p>Dikemas <strong className="text-slate-800">{packed}/{ordered}</strong></p><p className="col-span-2 break-all">{row.trackingNumber ? `${row.courier ?? "Kurir"} · ${row.trackingNumber}` : "Belum dikirim"}</p></div>
               <ShipmentItemDetails shipment={row} canAdjust={canPick && row.status === "PICKING"} busy={Boolean(working)} onSavePicked={correctPickedQuantity} />
-              <div data-sf-action-column className="flex justify-end border-t border-slate-100 pt-3">{renderActions(row)}</div>
+              <div data-sf-action-column className="flex justify-start border-t border-slate-100 pt-3">{renderActions(row)}</div>
             </article>;
           })}
         </div>
@@ -211,13 +212,13 @@ export default function FulfillmentView({ target = null }: { target?: Notificati
           <table className="w-full min-w-[1120px] text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
+                <th className="w-[190px] px-5 py-3 font-semibold">Aksi</th>
                 <th className="px-5 py-3 font-semibold">Pengiriman</th>
                 <th className="px-5 py-3 font-semibold">Penjualan / gudang</th>
                 <th className="px-5 py-3 font-semibold">Barang</th>
                 <th className="px-5 py-3 font-semibold">Progres</th>
                 <th className="px-5 py-3 font-semibold">Kurir / resi</th>
                 <th className="px-5 py-3 font-semibold">Status</th>
-                <th className="w-[170px] px-5 py-3 text-right font-semibold">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -227,6 +228,7 @@ export default function FulfillmentView({ target = null }: { target?: Notificati
                 const packed = row.items.reduce((sum, item) => sum + item.packedQuantity, 0);
                 return (
                   <tr key={row.id} className="align-top transition-colors hover:bg-blue-50/50">
+                    <td data-sf-action-column className="w-[190px] px-5 py-4 align-middle">{renderActions(row)}</td>
                     <td className="whitespace-nowrap px-5 py-4">
                       <p className="font-bold text-slate-900">{row.number}</p>
                       <p className="mt-1 text-xs text-slate-500">{new Date(row.createdAt).toLocaleDateString("id-ID")}</p>
@@ -248,7 +250,6 @@ export default function FulfillmentView({ target = null }: { target?: Notificati
                       {row.trackingNumber ? <><p className="font-semibold text-slate-700">{row.courier ?? "Kurir"}</p><p className="mt-1 break-all text-blue-700">{row.trackingNumber}</p></> : <span className="text-slate-400">Belum dikirim</span>}
                     </td>
                     <td className="whitespace-nowrap px-5 py-4"><span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${statusStyle[row.status]}`}>{statusLabel(row.status)}</span></td>
-                    <td data-sf-action-column className="w-[170px] px-5 py-4 text-right align-middle">{renderActions(row)}</td>
                   </tr>
                 );
               })}
@@ -297,12 +298,12 @@ function FulfillmentActions({ row, canPick, canPack, canShip, canWrite, working,
 }) {
   const busy = Boolean(working);
   const buttons = <>
-    {row.status === "PICKING" && canPick && <button type="button" aria-label={`Ambil semua barang untuk ${row.number}`} title="Ambil semua" disabled={busy} onClick={() => onAction(row, "pick")} className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm transition hover:bg-amber-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 disabled:opacity-50"><PackageCheck size={17} /></button>}
-    {row.status === "PICKING" && canPack && <button type="button" aria-label={`Kemas pengiriman ${row.number}`} title="Kemas" disabled={busy} onClick={() => onAction(row, "pack")} className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-violet-600 text-white shadow-sm transition hover:bg-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 disabled:opacity-50"><ClipboardCheck size={17} /></button>}
-    {row.status === "PACKED" && canShip && <button type="button" aria-label={`Kirim pengiriman ${row.number}`} title="Kirim" disabled={busy} onClick={() => onShip(row)} className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 disabled:opacity-50"><Send size={17} /></button>}
-    {row.status === "SHIPPED" && canWrite && <button type="button" aria-label={`Selesaikan pengiriman ${row.number}`} title="Selesaikan" disabled={busy} onClick={() => onAction(row, "complete")} className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 disabled:opacity-50"><Check size={17} /></button>}
-    {["PICKING", "PACKED"].includes(row.status) && canWrite && <button type="button" aria-label={`Batalkan pengiriman ${row.number}`} title="Batalkan" disabled={busy} onClick={() => onAction(row, "cancel")} className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-rose-700 shadow-sm transition hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:ring-offset-2 disabled:opacity-50"><X size={17} /></button>}
+    {row.status === "PICKING" && canPick && <ActionIconButton label={`Ambil semua barang untuk ${row.number}`} icon={PackageCheck} variant="warning" disabled={busy} onClick={() => onAction(row, "pick")} />}
+    {row.status === "PICKING" && canPack && <ActionIconButton label={`Kemas pengiriman ${row.number}`} icon={ClipboardCheck} variant="violet" disabled={busy} onClick={() => onAction(row, "pack")} />}
+    {row.status === "PACKED" && canShip && <ActionIconButton label={`Kirim pengiriman ${row.number}`} icon={Send} variant="primary" disabled={busy} onClick={() => onShip(row)} />}
+    {row.status === "SHIPPED" && canWrite && <ActionIconButton label={`Selesaikan pengiriman ${row.number}`} icon={Check} variant="success" disabled={busy} onClick={() => onAction(row, "complete")} />}
+    {["PICKING", "PACKED"].includes(row.status) && canWrite && <ActionIconButton label={`Batalkan pengiriman ${row.number}`} icon={X} variant="danger" disabled={busy} onClick={() => onAction(row, "cancel")} />}
   </>;
   const hasButtons = (row.status === "PICKING" && (canPick || canPack || canWrite)) || (row.status === "PACKED" && (canShip || canWrite)) || (row.status === "SHIPPED" && canWrite);
-  return <div className="flex items-center justify-end gap-2">{buttons}{!hasButtons && <span className="text-xs text-slate-400">—</span>}</div>;
+  return <div className="flex items-center justify-start gap-1">{hasButtons ? buttons : <span aria-label="Tidak ada tindakan tersedia" className="text-slate-400">—</span>}</div>;
 }

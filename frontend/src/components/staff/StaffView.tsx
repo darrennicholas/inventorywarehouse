@@ -4,7 +4,7 @@
 import GlobalLoading from "@/components/ui/GlobalLoading";
 import GlobalSelect from "@/components/ui/GlobalSelect";
 import { confirmAction } from "@/components/ui/GlobalAlert";
-import { Eye, Pencil, Trash2 } from "@/components/ui/ActionIcons";
+import ActionIconButton from "@/components/ui/ActionIconButton";
 import { LoaderCircle } from "@/components/ui/GlobalLoading";
 import {
   useEffect,
@@ -12,7 +12,7 @@ import {
   type FormEvent,
 } from "react";
 
-import { AlertCircle, Plus, RefreshCw, Search, UserRound, X } from "lucide-react";
+import { AlertCircle, Eye, Pencil, Plus, RefreshCw, Search, Trash2, UserRound, X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import DataPagination from "@/components/ui/DataPagination";
 import ActionFeedback from "@/components/ui/ActionFeedback";
@@ -575,7 +575,7 @@ export default function StaffView() {
             <div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><UserRound size={18} /></span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><h3 className="truncate font-bold text-slate-900">{person.fullName}</h3><span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${person.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{statusLabel(person.isActive ? "ACTIVE" : "INACTIVE")}</span></div><p className="mt-1 font-mono text-xs text-blue-600">{person.staffCode}</p></div></div>
             <dl className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-xs"><div><dt className="text-slate-400">Email / telepon</dt><dd className="mt-1 break-words text-slate-700">{person.email || "—"}<br />{person.phone || "—"}</dd></div><div><dt className="text-slate-400">Jabatan</dt><dd className="mt-1 text-slate-700">{person.position || "—"}</dd></div><div className="col-span-2"><dt className="text-slate-400">Gudang</dt><dd className="mt-1 text-slate-700">{person.warehouse ? `${person.warehouse.code} — ${person.warehouse.name}` : "Belum ditugaskan"}</dd></div></dl>
             <div className="flex items-center justify-between text-xs text-slate-400"><span>#{startIndex + index + 1}</span><span>{person.createdAt ? dateLabel(person.createdAt) : "—"}</span></div>
-            <div data-sf-action-column className="flex flex-wrap gap-2 border-t border-slate-100 pt-3"><button type="button" disabled={detailLoading} onClick={() => void openDetail(person.id)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50">Lihat</button>{canWrite && <button type="button" disabled={saving} onClick={() => openEdit(person)} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Ubah</button>}{canWrite && <button type="button" disabled={saving || !person.isActive} onClick={() => void handleDeactivate(person)} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Nonaktifkan</button>}</div>
+            <div data-sf-action-column className="flex items-center gap-1 border-t border-slate-100 pt-3"><ActionIconButton label={`Lihat ${person.fullName}`} icon={Eye} disabled={detailLoading} onClick={() => void openDetail(person.id)} />{canWrite && <ActionIconButton label={`Ubah ${person.fullName}`} icon={Pencil} variant="warning" disabled={saving} onClick={() => openEdit(person)} />}{canWrite && <ActionIconButton label={`Nonaktifkan ${person.fullName}`} icon={Trash2} variant="danger" disabled={saving || !person.isActive} onClick={() => void handleDeactivate(person)} />}</div>
           </article>)}
           {!loading && rows.length === 0 && <p className="py-10 text-center text-sm text-slate-500">{search ? "Tidak ada staf yang cocok." : "Data staf belum tersedia."}</p>}
         </div>
@@ -586,6 +586,7 @@ export default function StaffView() {
             <thead>
               <tr className="border-b-2 border-slate-200 text-slate-700">
                 {[
+                  "Aksi",
                   "No.",
                   "Kode staf",
                   "Nama lengkap",
@@ -593,7 +594,6 @@ export default function StaffView() {
                   "Jabatan",
                   "Gudang",
                   "Status",
-                  "Aksi",
                 ].map((label) => (
                   <th
                     key={label}
@@ -612,6 +612,7 @@ export default function StaffView() {
                     key={person.id}
                     className="hover:bg-[#f8faff]"
                   >
+                    <td className="px-3 py-4 align-middle"><div data-sf-action-column className="flex items-center gap-1"><ActionIconButton label={`Lihat rincian ${person.fullName}`} icon={Eye} disabled={detailLoading} onClick={() => void openDetail(person.id)} />{canWrite && <ActionIconButton label={`Ubah ${person.fullName}`} icon={Pencil} variant="warning" disabled={saving} onClick={() => openEdit(person)} />}{canWrite && <ActionIconButton label={`Nonaktifkan ${person.fullName}`} icon={Trash2} variant="danger" disabled={saving || !person.isActive} onClick={() => void handleDeactivate(person)} />}</div></td>
                     {/* NUMBER */}
                     <td className="px-3 py-4 text-slate-500">
                       {startIndex + index + 1}
@@ -671,52 +672,6 @@ export default function StaffView() {
                       </span>
                     </td>
 
-                    {/* ACTIONS */}
-                    <td className="whitespace-nowrap px-3 py-4">
-                      <button
-                        type="button"
-                        disabled={detailLoading}
-                        onClick={() =>
-                          void openDetail(
-                            person.id
-                          )
-                        }
-                        title="Lihat rincian"
-                        className="mr-2 inline-flex items-center gap-1 rounded-md bg-slate-100 px-3 py-2 font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-50"
-                      >
-                        <Eye size={13} />
-                        Lihat
-                      </button>
-
-                      {canWrite && <button
-                        type="button"
-                        disabled={saving}
-                        onClick={() =>
-                          openEdit(person)
-                        }
-                        className="mr-2 inline-flex items-center gap-1 rounded-md bg-[#159fe2] px-3 py-2 font-semibold text-white disabled:opacity-50"
-                      >
-                        <Pencil size={13} />
-                        Ubah
-                      </button>}
-
-                      <button
-                        type="button"
-                        disabled={
-                          saving ||
-                          !person.isActive
-                        }
-                        onClick={() =>
-                          void handleDeactivate(
-                            person
-                          )
-                        }
-                        title="Nonaktifkan"
-                        className="inline-flex items-center gap-1 rounded-md bg-red-500 px-2.5 py-2 font-semibold text-white disabled:opacity-35"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </td>
                   </tr>
                 ))}
             </tbody>

@@ -4,7 +4,7 @@
 import GlobalLoading from "@/components/ui/GlobalLoading";
 import GlobalSelect from "@/components/ui/GlobalSelect";
 import { confirmAction } from "@/components/ui/GlobalAlert";
-import { Pencil, Trash2 } from "@/components/ui/ActionIcons";
+import ActionIconButton from "@/components/ui/ActionIconButton";
 import {
   useCallback,
   useEffect,
@@ -13,7 +13,7 @@ import {
   type FormEvent,
 } from "react";
 
-import { Plus, RefreshCw, Search, ShieldCheck, Users, X } from "lucide-react";
+import { Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2, Users, X } from "lucide-react";
 
 import { authApi } from "@/lib/auth-api";
 
@@ -984,6 +984,7 @@ export default function AccessManagement() {
 
                     <thead className="border-y border-slate-100 bg-slate-50 text-xs text-slate-500">
                       <tr>
+                        <th className="px-5 py-3">Aksi</th>
                         <th className="px-5 py-3">
                           Full Name
                         </th>
@@ -1004,9 +1005,6 @@ export default function AccessManagement() {
                           Status
                         </th>
 
-                        <th className="px-5 py-3 text-right">
-                          Actions
-                        </th>
                       </tr>
                     </thead>
 
@@ -1017,6 +1015,12 @@ export default function AccessManagement() {
                           key={item.id}
                           className="hover:bg-slate-50"
                         >
+                          <td className="px-5 py-4 align-middle">
+                            <div className="flex items-center justify-start gap-1">
+                              <ActionIconButton label={`Ubah pengguna ${item.fullName}`} icon={Pencil} variant="warning" onClick={() => openEditUser(item)} />
+                              <ActionIconButton label={`Nonaktifkan pengguna ${item.fullName}`} icon={Trash2} variant="danger" disabled={!item.isActive || item.id === user?.id} onClick={() => void handleDeactivateUser(item)} />
+                            </div>
+                          </td>
 
                           <td className="px-5 py-4 font-semibold text-slate-800">
                             {item.fullName}
@@ -1050,41 +1054,6 @@ export default function AccessManagement() {
                             </span>
                           </td>
 
-                          <td className="px-5 py-4">
-                            <div className="flex justify-end gap-2">
-
-                              <button
-                                type="button"
-                                title="Edit User"
-                                aria-label={`Edit ${item.fullName}`}
-                                onClick={() =>
-                                  openEditUser(item)
-                                }
-                                className="rounded-lg bg-blue-50 p-2 text-blue-600 hover:bg-blue-100"
-                              >
-                                <Pencil size={16} />
-                              </button>
-
-                              <button
-                                type="button"
-                                title="Deactivate User"
-                                aria-label={`Deactivate ${item.fullName}`}
-                                disabled={
-                                  !item.isActive ||
-                                  item.id === user?.id
-                                }
-                                onClick={() =>
-                                  void handleDeactivateUser(
-                                    item
-                                  )
-                                }
-                                className="rounded-lg bg-red-50 p-2 text-red-600 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-30"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-
-                            </div>
-                          </td>
                         </tr>
                       ))}
 
@@ -1146,6 +1115,7 @@ export default function AccessManagement() {
 
                     <thead className="border-y border-slate-100 bg-slate-50 text-xs text-slate-500">
                       <tr>
+                        <th className="px-5 py-3">Aksi</th>
                         <th className="px-5 py-3">
                           Role Name
                         </th>
@@ -1166,9 +1136,6 @@ export default function AccessManagement() {
                           Status
                         </th>
 
-                        <th className="px-5 py-3 text-right">
-                          Actions
-                        </th>
                       </tr>
                     </thead>
 
@@ -1179,6 +1146,12 @@ export default function AccessManagement() {
                           key={role.id}
                           className="hover:bg-slate-50"
                         >
+                          <td className="px-5 py-4 align-middle">
+                            <div className="flex items-center justify-start gap-1">
+                              <ActionIconButton label={role.isSystem ? `Role sistem ${role.name} tidak dapat diubah` : `Ubah role ${role.name}`} icon={Pencil} variant="warning" disabled={role.isSystem} onClick={() => openEditRole(role)} />
+                              <ActionIconButton label={`Nonaktifkan role ${role.name}`} icon={Trash2} variant="danger" disabled={role.isSystem || !role.isActive} onClick={() => void handleDeactivateRole(role)} />
+                            </div>
+                          </td>
 
                           <td className="px-5 py-4 font-semibold">
                             {role.name}
@@ -1218,46 +1191,6 @@ export default function AccessManagement() {
                             </span>
                           </td>
 
-                          <td className="px-5 py-4">
-                            <div className="flex justify-end gap-2">
-
-                              <button
-                                type="button"
-                                title={
-                                  role.isSystem
-                                    ? "System role cannot be edited"
-                                    : "Edit Role"
-                                }
-                                aria-label={`Edit ${role.name}`}
-                                disabled={role.isSystem}
-                                onClick={() =>
-                                  openEditRole(role)
-                                }
-                                className="rounded-lg bg-blue-50 p-2 text-blue-600 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-30"
-                              >
-                                <Pencil size={16} />
-                              </button>
-
-                              <button
-                                type="button"
-                                title="Deactivate Role"
-                                aria-label={`Deactivate ${role.name}`}
-                                disabled={
-                                  role.isSystem ||
-                                  !role.isActive
-                                }
-                                onClick={() =>
-                                  void handleDeactivateRole(
-                                    role
-                                  )
-                                }
-                                className="rounded-lg bg-red-50 p-2 text-red-600 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-30"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-
-                            </div>
-                          </td>
 
                         </tr>
                       ))}

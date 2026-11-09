@@ -4,7 +4,7 @@
 import GlobalLoading from "@/components/ui/GlobalLoading";
 import GlobalSelect from "@/components/ui/GlobalSelect";
 import { confirmAction } from "@/components/ui/GlobalAlert";
-import { Eye, Trash2 } from "@/components/ui/ActionIcons";
+import ActionIconButton from "@/components/ui/ActionIconButton";
 
 import {
   useCallback,
@@ -12,7 +12,7 @@ import {
   useState,
 } from "react";
 
-import { Plus, RefreshCw, Search, ShoppingBag, ShoppingCart } from "lucide-react";
+import { Check, Eye, PackageCheck, Pencil, Plus, RefreshCw, Search, Send, ShoppingBag, ShoppingCart, Trash2 } from "lucide-react";
 
 import { useAuth } from "@/components/auth/AuthProvider";
 import { returnService } from "@/services/return.service";
@@ -178,6 +178,19 @@ export default function ReturnsView({
       ? "Retur pembelian"
       : "Retur penjualan";
 
+  function renderActions(row: ReturnRecord) {
+    return <div data-sf-action-column className="flex items-center justify-start gap-1">
+      <ActionIconButton label={`Lihat rincian retur ${row.number}`} icon={Eye} disabled={Boolean(working)} onClick={() => void openDetails(row.id)} />
+      {row.status === "DRAFT" && canWrite && <>
+        <ActionIconButton label={`Ubah retur ${row.number}`} icon={Pencil} variant="warning" disabled={Boolean(working)} onClick={() => { setEditing(row); setFormOpen(true); }} />
+        <ActionIconButton label={`Ajukan retur ${row.number}`} icon={Send} variant="primary" disabled={Boolean(working)} onClick={() => void action(row, "submit")} />
+      </>}
+      {row.status === "PENDING" && canApprove && row.createdById !== user?.id && <ActionIconButton label={`Setujui retur ${row.number}`} icon={Check} variant="success" disabled={Boolean(working)} onClick={() => void action(row, "approve")} />}
+      {row.status === "APPROVED" && canApprove && <ActionIconButton label={`Bukukan stok retur ${row.number}`} icon={PackageCheck} variant="violet" disabled={Boolean(working)} onClick={() => void action(row, "post")} />}
+      {!['POSTED', 'CANCELLED'].includes(row.status) && canDelete && <ActionIconButton label={`Batalkan retur ${row.number}`} icon={Trash2} variant="danger" disabled={Boolean(working)} onClick={() => void action(row, "cancel")} />}
+    </div>;
+  }
+
   return (
     <section className="space-y-5">
       {canReadPurchase && canReadSale && (
@@ -329,7 +342,7 @@ export default function ReturnsView({
         <div className="divide-y divide-slate-100 px-4 md:hidden">
           {loading && <div className="py-6 text-center text-sm text-slate-500"><GlobalLoading label="Memuat retur..." /></div>}
           {!loading && rows.length === 0 && <p className="py-10 text-center text-sm text-slate-500">Tidak ada retur yang cocok.</p>}
-          {!loading && rows.map((row) => <article key={row.id} className="space-y-3 py-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-bold text-slate-900">{row.number}</p><p className="mt-1 text-xs text-slate-500">{type === "PURCHASE" ? "Pesanan pembelian" : "Penjualan"} {type === "PURCHASE" ? row.purchaseOrder?.number ?? "—" : row.sale?.number ?? "—"}</p></div><ReturnStatusBadge status={row.status} /></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="text-slate-400">Gudang</dt><dd className="mt-1 text-slate-700">{row.warehouse?.name ?? "—"}</dd></div><div><dt className="text-slate-400">Jumlah barang</dt><dd className="mt-1 text-slate-700">{row.items?.length ?? 0}</dd></div><div className="col-span-2"><dt className="text-slate-400">Tanggal</dt><dd className="mt-1 text-slate-700">{new Date(row.createdAt).toLocaleDateString("id-ID")}</dd></div></dl><div data-sf-action-column className="flex flex-wrap gap-2 border-t border-slate-100 pt-3"><button type="button" onClick={() => void openDetails(row.id)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700">Lihat rincian</button>{row.status === "DRAFT" && canWrite && <><button type="button" onClick={() => { setEditing(row); setFormOpen(true); }} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">Ubah</button><button type="button" disabled={Boolean(working)} onClick={() => void action(row, "submit")} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Ajukan</button></>}{row.status === "PENDING" && canApprove && row.createdById !== user?.id && <button type="button" disabled={Boolean(working)} onClick={() => void action(row, "approve")} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Setujui</button>}{row.status === "APPROVED" && canApprove && <button type="button" disabled={Boolean(working)} onClick={() => void action(row, "post")} className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Bukukan stok</button>}{!["POSTED", "CANCELLED"].includes(row.status) && canDelete && <button type="button" disabled={Boolean(working)} onClick={() => void action(row, "cancel")} className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 disabled:opacity-50">Batalkan</button>}</div></article>)}
+          {!loading && rows.map((row) => <article key={row.id} className="space-y-3 py-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-bold text-slate-900">{row.number}</p><p className="mt-1 text-xs text-slate-500">{type === "PURCHASE" ? "Pesanan pembelian" : "Penjualan"} {type === "PURCHASE" ? row.purchaseOrder?.number ?? "—" : row.sale?.number ?? "—"}</p></div><ReturnStatusBadge status={row.status} /></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="text-slate-400">Gudang</dt><dd className="mt-1 text-slate-700">{row.warehouse?.name ?? "—"}</dd></div><div><dt className="text-slate-400">Jumlah barang</dt><dd className="mt-1 text-slate-700">{row.items?.length ?? 0}</dd></div><div className="col-span-2"><dt className="text-slate-400">Tanggal</dt><dd className="mt-1 text-slate-700">{new Date(row.createdAt).toLocaleDateString("id-ID")}</dd></div></dl><div className="border-t border-slate-100 pt-3">{renderActions(row)}</div></article>)}
         </div>
 
         <div className="hidden overflow-x-auto md:block">
@@ -337,13 +350,13 @@ export default function ReturnsView({
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 {[
+                  "Aksi",
                   "Nomor retur",
                   "Sumber",
                   "Tanggal",
                   "Gudang",
                   "Barang",
                   "Status",
-                  "Aksi",
                 ].map((h) => (
                   <th
                     key={h}
@@ -361,6 +374,7 @@ export default function ReturnsView({
                   key={row.id}
                   className="hover:bg-slate-50"
                 >
+                  <td className="px-5 py-4 align-middle">{renderActions(row)}</td>
                   <td className="px-5 py-4 font-bold text-slate-900">
                     {row.number}
                   </td>
@@ -392,110 +406,6 @@ export default function ReturnsView({
                     />
                   </td>
 
-                  <td className="px-5 py-4">
-                    <div className="flex flex-wrap items-center gap-1">
-                      <button
-                        title="Lihat rincian"
-                        onClick={() =>
-                          void openDetails(row.id)
-                        }
-                        className="rounded-lg p-2 text-blue-700 hover:bg-blue-50"
-                      >
-                        <Eye size={17} />
-                      </button>
-
-                      {row.status === "DRAFT" &&
-                        canWrite && (
-                          <>
-                            <button
-                              onClick={() => {
-                                setEditing(row);
-                                setFormOpen(true);
-                              }}
-                              className="rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                            >
-                              Ubah
-                            </button>
-
-                            <button
-                              disabled={Boolean(
-                                working
-                              )}
-                              onClick={() =>
-                                void action(
-                                  row,
-                                  "submit"
-                                )
-                              }
-                              className="rounded-lg px-2 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50"
-                            >
-                              Ajukan
-                            </button>
-                          </>
-                        )}
-
-                      {row.status === "PENDING" &&
-                        canApprove &&
-                        row.createdById !==
-                          user?.id && (
-                          <button
-                            disabled={Boolean(
-                              working
-                            )}
-                            onClick={() =>
-                              void action(
-                                row,
-                                "approve"
-                              )
-                            }
-                            className="rounded-lg px-2 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
-                          >
-                            Setujui
-                          </button>
-                        )}
-
-                      {row.status ===
-                        "APPROVED" &&
-                        canApprove && (
-                          <button
-                            disabled={Boolean(
-                              working
-                            )}
-                            onClick={() =>
-                              void action(
-                                row,
-                                "post"
-                              )
-                            }
-                            className="rounded-lg px-2 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
-                          >
-                            Bukukan stok
-                          </button>
-                        )}
-
-                      {![
-                        "POSTED",
-                        "CANCELLED",
-                      ].includes(row.status) &&
-                        canDelete && (
-                          <button
-                            title="Batalkan retur"
-                            disabled={Boolean(
-                              working
-                            )}
-                            onClick={() =>
-                              void action(
-                                row,
-                                "cancel"
-                              )
-                            }
-                            className="rounded-lg p-2 text-rose-700 hover:bg-rose-50"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        )}
-                    </div>
-                  </td>
                 </tr>
               ))}
             </tbody>

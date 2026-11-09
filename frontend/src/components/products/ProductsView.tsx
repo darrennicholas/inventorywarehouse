@@ -3,7 +3,7 @@
 
 import GlobalLoading from "@/components/ui/GlobalLoading";
 import { confirmAction } from "@/components/ui/GlobalAlert";
-import { Eye, Pencil, Trash2 } from "@/components/ui/ActionIcons";
+import ActionIconButton from "@/components/ui/ActionIconButton";
 
 import {
   useCallback,
@@ -11,7 +11,7 @@ import {
   useState,
 } from "react";
 
-import { Barcode, Package, Plus, RefreshCw, Search } from "lucide-react";
+import { Barcode, Eye, Package, Pencil, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 
 import { productService } from "@/services/product.service";
 import { apiRequest } from "@/lib/api";
@@ -302,10 +302,10 @@ export default function ProductsView({
               <div><dt className="text-slate-400">Stok / batas minimum</dt><dd className="mt-1 font-semibold text-slate-800">{product.totalStock ?? "—"} / {product.minStock} {product.unit?.code ?? "unit"}</dd></div>
               <div className="col-span-2"><dt className="text-slate-400">Kode batang</dt><dd className="mt-1 break-all text-slate-700">{product.barcode || "—"}</dd></div>
             </dl>
-            <div data-sf-action-column className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
-              <button type="button" onClick={() => setViewing(product)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700">Lihat</button>
-              {canWrite && <button type="button" disabled={saving} onClick={() => openEdit(product)} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Ubah</button>}
-              {canDelete && <button type="button" disabled={saving || !product.isActive} onClick={() => void deactivate(product)} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Nonaktifkan</button>}
+            <div data-sf-action-column className="flex flex-wrap items-center gap-1 border-t border-slate-100 pt-3">
+              <ActionIconButton label={`Lihat ${product.name}`} icon={Eye} onClick={() => setViewing(product)} />
+              {canWrite && <ActionIconButton label={`Ubah ${product.name}`} icon={Pencil} variant="warning" disabled={saving} onClick={() => openEdit(product)} />}
+              {canDelete && <ActionIconButton label={`Nonaktifkan ${product.name}`} icon={Trash2} variant="danger" disabled={saving || !product.isActive} onClick={() => void deactivate(product)} />}
             </div>
           </article>)}
           {!loading && visible.length === 0 && <p className="py-10 text-center text-sm text-slate-500">{search ? "Tidak ada produk yang cocok." : "Produk belum tersedia."}</p>}
@@ -317,6 +317,7 @@ export default function ProductsView({
             <thead>
               <tr className="border-b-2 border-slate-200 text-slate-700">
                 {[
+                  "Aksi",
                   "Gambar",
                   "Nama",
                   "SKU",
@@ -328,7 +329,6 @@ export default function ProductsView({
                   "Satuan",
                   "Kode batang",
                   "Status",
-                  "Aksi",
                 ].map((label) => (
                   <th
                     key={label}
@@ -347,6 +347,7 @@ export default function ProductsView({
                     key={product.id}
                     className="hover:bg-[#f8faff]"
                   >
+                    <td className="whitespace-nowrap px-3 py-3 align-middle"><div data-sf-action-column className="flex items-center gap-1"><ActionIconButton label={`Lihat ${product.name}`} icon={Eye} onClick={() => setViewing(product)} />{canWrite && <ActionIconButton label={`Ubah ${product.name}`} icon={Pencil} variant="warning" disabled={saving} onClick={() => openEdit(product)} />}{canDelete && <ActionIconButton label={`Nonaktifkan ${product.name}`} icon={Trash2} variant="danger" disabled={saving || !product.isActive} onClick={() => void deactivate(product)} />}</div></td>
                     {/* IMAGE */}
                     <td className="px-3 py-3">
                       <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-lg bg-blue-50 text-blue-600">
@@ -436,34 +437,6 @@ export default function ProductsView({
                       </span>
                     </td>
 
-                    {/* ACTIONS */}
-                    <td className="whitespace-nowrap px-3 py-3">
-                      <button type="button" onClick={() => setViewing(product)} className="mr-2 inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-2 font-semibold text-slate-600 hover:bg-slate-50"><Eye size={13} /> Lihat</button>
-                      {canWrite && <button
-                        type="button"
-                        onClick={() => openEdit(product)}
-                        disabled={saving}
-                        className="mr-2 inline-flex items-center gap-1 rounded-md bg-[#159fe2] px-3 py-2 font-semibold text-white disabled:opacity-50"
-                      >
-                        <Pencil size={13} />
-                        Ubah
-                      </button>}
-
-                      {canDelete && <button
-                        type="button"
-                        onClick={() =>
-                          void deactivate(product)
-                        }
-                        disabled={
-                          saving || !product.isActive
-                        }
-                        title="Nonaktifkan produk"
-                        aria-label={`Deactivate ${product.name}`}
-                        className="inline-flex items-center gap-1 rounded-md bg-red-500 px-2.5 py-2 font-semibold text-white disabled:opacity-35"
-                      >
-                        <Trash2 size={13} />
-                      </button>}
-                    </td>
                   </tr>
                 ))}
             </tbody>

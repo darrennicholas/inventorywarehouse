@@ -3,10 +3,10 @@
 import GlobalLoading from "@/components/ui/GlobalLoading";
 import GlobalSelect from "@/components/ui/GlobalSelect";
 import { confirmAction } from "@/components/ui/GlobalAlert";
-import { Edit3, Eye, Trash2 } from "@/components/ui/ActionIcons";
+import ActionIconButton from "@/components/ui/ActionIconButton";
 import { LoaderCircle } from "@/components/ui/GlobalLoading";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, CheckCircle2, ClipboardList, FileText, Plus, RefreshCw, Search, SlidersHorizontal, Truck, Warehouse, WalletCards, X, Download, PackageCheck, Clock3 } from "lucide-react";
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, CheckCircle2, ClipboardList, FileText, Plus, RefreshCw, Search, SlidersHorizontal, Truck, Warehouse, WalletCards, X, Download, PackageCheck, Clock3, Eye, Pencil, Trash2 } from "lucide-react";
 
 import { useAuth } from "@/components/auth/AuthProvider";
 import { apiDownload, apiRequest } from "@/lib/api";
@@ -147,20 +147,19 @@ export default function OperationsView({ kind, target = null }: { kind: Operatio
   async function updateSaleStatus(row: OperationRecord, status: "RESERVED" | "COMPLETED" | "DRAFT") { const actionCopy = status === "RESERVED" ? "memesan stok" : status === "COMPLETED" ? "menyelesaikan penjualan" : "melepas reservasi"; if (!await confirmAction(`Lanjutkan ${actionCopy} untuk ${row.number ?? "transaksi ini"}?`)) return; setSaving(true); setError(""); try { const endpoint = status === "RESERVED" ? `${current.endpoint}/${row.id}/reserve` : `${current.endpoint}/${row.id}`; const result = await apiRequest<{ success: boolean; message?: string }>(endpoint, { method: status === "RESERVED" ? "POST" : "PATCH", body: status === "RESERVED" ? undefined : JSON.stringify({ status }) }); if (!result.success) throw new Error(result.message ?? "Pembaruan status gagal"); setNotice(`Status ${row.number ?? "transaksi"} berhasil diperbarui: ${statusLabel(status)}.`); await load(); refreshNotificationBell(); } catch (reason) { setError(reason instanceof Error ? reason.message : "Pembaruan status gagal. Coba lagi."); } finally { setSaving(false); } }
   async function exportReport() { if (fromDate && toDate && fromDate > toDate) { setError("Tanggal awal harus sebelum atau sama dengan tanggal akhir."); return; } setSaving(true); setError(""); try { const params = new URLSearchParams(); if (searchQuery) params.set("search", searchQuery); if (kind === "stock-report" && warehouseFilter) params.set("warehouseId", warehouseFilter); if (kind === "payments") { if (statusFilter) params.set("status", statusFilter); if (fromDate) params.set("fromDate", fromDate); if (toDate) params.set("toDate", toDate); } const blob = await apiDownload(`/api/operations/${kind === "payments" ? "payments.csv" : "stock-report.csv"}?${params}`); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = kind === "payments" ? "laporan-pembayaran.csv" : "laporan-stok.csv"; anchor.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000); setNotice("Laporan sesuai filter berhasil diunduh."); } catch (reason) { setError(reason instanceof Error ? reason.message : "Unduhan gagal. Coba lagi."); } finally { setSaving(false); } }
   function renderActions(row: OperationRecord): ReactNode {
-    const actionClass = "inline-flex h-9 w-9 items-center justify-center rounded-lg transition duration-150 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2";
     const showApproval = canApprove && row.createdBy?.id !== user?.id && (
       (kind === "purchases" && row.status === "PENDING") ||
       ((kind === "adjustments" || kind === "transfers") && row.status === "DRAFT")
     );
 
     return (
-      <div data-sf-action-column className="flex shrink-0 items-center gap-1">
-        <button type="button" onClick={() => setViewing(row)} title="Lihat rincian" aria-label={`Lihat rincian ${row.number ?? "transaksi"}`} className={`${actionClass} bg-blue-50 text-blue-700 hover:bg-blue-100`}><Eye size={15} /></button>
-        {showApproval && <button type="button" onClick={() => void approve(row)} title="Setujui" aria-label={`Setujui ${row.number ?? "transaksi"}`} className={`${actionClass} bg-emerald-50 text-emerald-700 hover:bg-emerald-100`}><CheckCircle2 size={15} /></button>}
-        {kind === "purchases" && canWrite && ["APPROVED", "PARTIALLY_RECEIVED"].includes(row.status ?? "") && <button type="button" onClick={() => receive(row)} title="Terima barang" aria-label={`Terima barang untuk ${row.number ?? "pesanan"}`} className={`${actionClass} bg-indigo-50 text-indigo-700 hover:bg-indigo-100`}><PackageCheck size={15} /></button>}
-        {kind === "sales" && canWrite && row.status === "DRAFT" && <button type="button" onClick={() => void updateSaleStatus(row, "RESERVED")} title="Pesan stok" aria-label={`Pesan stok untuk ${row.number ?? "penjualan"}`} className={`${actionClass} bg-cyan-50 text-cyan-700 hover:bg-cyan-100`}><PackageCheck size={15} /></button>}
-        {canWrite && <button type="button" onClick={() => openEdit(row)} title="Ubah" aria-label={`Ubah ${row.number ?? "transaksi"}`} className={`${actionClass} bg-amber-50 text-amber-700 hover:bg-amber-100`}><Edit3 size={15} /></button>}
-        {canDelete && <button type="button" onClick={() => void remove(row)} title="Hapus atau batalkan" aria-label={`Hapus atau batalkan ${row.number ?? "transaksi"}`} className={`${actionClass} bg-rose-50 text-rose-700 hover:bg-rose-100`}><Trash2 size={15} /></button>}
+      <div data-sf-action-column className="flex shrink-0 items-center justify-start gap-1">
+        <ActionIconButton label={`Lihat rincian ${row.number ?? "transaksi"}`} icon={Eye} onClick={() => setViewing(row)} />
+        {showApproval && <ActionIconButton label={`Setujui ${row.number ?? "transaksi"}`} icon={CheckCircle2} variant="success" onClick={() => void approve(row)} />}
+        {kind === "purchases" && canWrite && ["APPROVED", "PARTIALLY_RECEIVED"].includes(row.status ?? "") && <ActionIconButton label={`Terima barang untuk ${row.number ?? "pesanan"}`} icon={PackageCheck} variant="violet" onClick={() => receive(row)} />}
+        {kind === "sales" && canWrite && row.status === "DRAFT" && <ActionIconButton label={`Pesan stok untuk ${row.number ?? "penjualan"}`} icon={PackageCheck} variant="primary" onClick={() => void updateSaleStatus(row, "RESERVED")} />}
+        {canWrite && <ActionIconButton label={`Ubah ${row.number ?? "transaksi"}`} icon={Pencil} variant="warning" onClick={() => openEdit(row)} />}
+        {canDelete && <ActionIconButton label={`Hapus atau batalkan ${row.number ?? "transaksi"}`} icon={Trash2} variant="danger" onClick={() => void remove(row)} />}
       </div>
     );
   }
@@ -195,23 +194,23 @@ function OperationTable({ kind, rows, renderActions }: { kind: OperationKind; ro
             <div><p className="text-slate-400">Gudang</p><p className="mt-1 text-slate-700">{row.warehouse?.name ?? row.fromWarehouse?.name ?? "Data operasional"}</p></div>
             <div><p className="text-slate-400">Barang</p><p className="mt-1 text-slate-700">{row.items?.length ?? 0} baris</p></div>
           </div>
-          <div className="flex justify-end border-t border-slate-100 pt-2">{renderActions(row)}</div>
+          <div className="flex justify-start border-t border-slate-100 pt-2">{renderActions(row)}</div>
         </article>;
       })}
     </div>
     <div className="hidden overflow-x-auto md:block">
       <table className="w-full min-w-[820px] text-left text-sm">
-        <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500"><tr><th className="px-6 py-4">Referensi</th><th className="px-6 py-4">Keterangan</th><th className="px-6 py-4">Tanggal</th><th className="px-6 py-4">Nilai</th><th className="px-6 py-4">Status</th><th className="px-6 py-4 text-right">Aksi</th></tr></thead>
+        <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500"><tr><th className="w-[190px] px-6 py-4">Aksi</th><th className="px-6 py-4">Referensi</th><th className="px-6 py-4">Keterangan</th><th className="px-6 py-4">Tanggal</th><th className="px-6 py-4">Nilai</th><th className="px-6 py-4">Status</th></tr></thead>
         <tbody className="divide-y divide-slate-100">{rows.map((row) => {
           const amount = row.total ?? row.amount ?? (row.items?.reduce((sum, item) => sum + Number(item.total ?? 0), 0) ?? 0);
           const status = row.status ?? (row.isPaid ? "PAID" : "UNPAID");
           return <tr key={row.id} className="group hover:bg-slate-50/80">
+            <td className="w-[190px] px-6 py-4 align-middle">{renderActions(row)}</td>
             <td className="px-6 py-4"><p className="font-bold text-slate-900">{row.number ?? row.id.slice(0, 8)}</p><p className="mt-1 text-xs text-slate-400">{row.items?.length ?? 0} baris barang</p></td>
             <td className="px-6 py-4"><p className="font-medium text-slate-700">{labelFor(kind, row)}</p><p className="mt-1 text-xs text-slate-400">{row.warehouse?.name ?? row.fromWarehouse?.name ?? "Data operasional"}</p></td>
             <td className="px-6 py-4 text-slate-500">{displayDate(recordDate(row))}</td>
             <td className="px-6 py-4 font-semibold text-slate-800">{money(amount)}</td>
             <td className="px-6 py-4"><span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClass(status)}`}>{statusLabel(status)}</span></td>
-            <td className="px-6 py-4"><div className="flex justify-end">{renderActions(row)}</div></td>
           </tr>;
         })}</tbody>
       </table>

@@ -3,7 +3,7 @@
 
 import GlobalSelect from "@/components/ui/GlobalSelect";
 import { confirmAction } from "@/components/ui/GlobalAlert";
-import { Eye, Pencil, Trash2 } from "@/components/ui/ActionIcons";
+import ActionIconButton from "@/components/ui/ActionIconButton";
 import GlobalLoading, { LoaderCircle } from "@/components/ui/GlobalLoading";
 import {
   useEffect,
@@ -11,7 +11,7 @@ import {
   type FormEvent,
 } from "react";
 
-import { AlertCircle, Boxes, LayoutGrid, List, Plus, RefreshCw, Ruler, Search, X } from "lucide-react";
+import { AlertCircle, Boxes, Eye, LayoutGrid, List, Pencil, Plus, RefreshCw, Ruler, Search, Trash2, X } from "lucide-react";
 import DataPagination from "@/components/ui/DataPagination";
 import ActionFeedback from "@/components/ui/ActionFeedback";
 import { statusLabel } from "@/lib/ui-labels";
@@ -333,6 +333,7 @@ export default function MasterDataView({ kind }: Props) {
           <table className="w-full min-w-[650px] text-left text-xs">
             <thead>
               <tr className="border-b-2 border-slate-200 text-slate-700">
+                <th className="px-3 py-3 text-left">Aksi</th>
                 <th className="px-3 py-3">No.</th>
                 {isUnit && (
                   <th className="px-3 py-3">
@@ -344,7 +345,6 @@ export default function MasterDataView({ kind }: Props) {
                 </th>
                 <th className="px-3 py-3">Status</th>
                 <th className="px-3 py-3">Dibuat</th>
-                <th className="px-3 py-3">Aksi</th>
               </tr>
             </thead>
 
@@ -354,6 +354,7 @@ export default function MasterDataView({ kind }: Props) {
                   key={item.id}
                   className="hover:bg-[#f8faff]"
                 >
+                  <td className="px-3 py-4 align-middle"><div data-sf-action-column className="flex items-center gap-1"><ActionIconButton label={`Lihat ${item.name}`} icon={Eye} onClick={() => setViewing(item)} />{canWrite && <ActionIconButton label={`Ubah ${item.name}`} icon={Pencil} variant="warning" disabled={saving} onClick={() => openEdit(item)} />}{canDelete && <ActionIconButton label={`Nonaktifkan ${item.name}`} icon={Trash2} variant="danger" disabled={saving || !item.isActive} onClick={() => void handleDeactivate(item)} />}</div></td>
                   <td className="px-3 py-4 text-slate-500">
                     {startIndex + index + 1}
                   </td>
@@ -391,39 +392,6 @@ export default function MasterDataView({ kind }: Props) {
                     {formatDate(item.createdAt)}
                   </td>
 
-                  <td className="whitespace-nowrap px-3 py-4">
-                    <button
-                      type="button"
-                      onClick={() => setViewing(item)}
-                      className="mr-2 inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-2 font-semibold text-slate-600 hover:bg-slate-50"
-                    >
-                      <Eye size={13} />
-                      Lihat
-                    </button>
-                    {canWrite && <button
-                      type="button"
-                      disabled={saving}
-                      onClick={() => openEdit(item)}
-                      className="mr-2 inline-flex items-center gap-1 rounded-md bg-[#159fe2] px-3 py-2 font-semibold text-white disabled:opacity-50"
-                    >
-                      <Pencil size={13} />
-                      Ubah
-                    </button>}
-
-                    {canDelete && <button
-                      type="button"
-                      disabled={saving || !item.isActive}
-                      onClick={() =>
-                        void handleDeactivate(item)
-                      }
-                      aria-label={`Deactivate ${item.name}`}
-                      title="Deactivate"
-                      className="inline-flex items-center gap-1 rounded-md bg-red-500 px-2.5 py-2 font-semibold text-white disabled:opacity-35"
-                    >
-                      <Trash2 size={13} />
-                      Nonaktifkan
-                    </button>}
-                  </td>
                 </tr>
               ))}
             </tbody>
@@ -467,7 +435,7 @@ export default function MasterDataView({ kind }: Props) {
             <div className="relative flex items-start justify-between"><div className={`flex h-11 w-11 items-center justify-center rounded-xl ${isUnit ? "bg-amber-100 text-amber-700" : "bg-violet-100 text-violet-700"}`}><ItemIcon size={20} /></div><span className="text-[10px] font-bold text-slate-400">#{String(startIndex + index + 1).padStart(2, "0")}</span></div>
             <p className="mt-5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{isUnit ? item.code ?? "UNIT" : "BRAND"}</p><h3 className="mt-1 truncate text-lg font-bold text-slate-900">{item.name}</h3>
             <div className="mt-4 flex items-center justify-between"><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${item.isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{statusLabel(item.isActive ? "ACTIVE" : "INACTIVE")}</span><span className="text-[10px] text-slate-400">{formatDate(item.createdAt)}</span></div>
-            <div data-sf-action-column className="mt-5 flex gap-2 border-t border-slate-200/70 pt-4"><button type="button" onClick={() => setViewing(item)} className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-white"><Eye size={13} className="mr-1 inline" /> Lihat</button>{canWrite && <button type="button" onClick={() => openEdit(item)} className="rounded-lg bg-sky-500 px-3 py-2 text-white"><Pencil size={13} /></button>}{canDelete && <button type="button" disabled={!item.isActive} onClick={() => void handleDeactivate(item)} className="rounded-lg bg-red-500 px-3 py-2 text-white disabled:opacity-30"><Trash2 size={13} /></button>}</div>
+            <div data-sf-action-column className="mt-5 flex items-center gap-1 border-t border-slate-200/70 pt-4"><ActionIconButton label={`Lihat ${item.name}`} icon={Eye} onClick={() => setViewing(item)} />{canWrite && <ActionIconButton label={`Ubah ${item.name}`} icon={Pencil} variant="warning" onClick={() => openEdit(item)} />}{canDelete && <ActionIconButton label={`Nonaktifkan ${item.name}`} icon={Trash2} variant="danger" disabled={!item.isActive} onClick={() => void handleDeactivate(item)} />}</div>
           </article>)}
         </div>}
 
