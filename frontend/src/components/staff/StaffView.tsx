@@ -12,8 +12,11 @@ import {
   type FormEvent,
 } from "react";
 
-import { AlertCircle, CheckCircle2, Plus, RefreshCw, Search, UserRound, X } from "lucide-react";
+import { AlertCircle, Plus, RefreshCw, Search, UserRound, X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import DataPagination from "@/components/ui/DataPagination";
+import ActionFeedback from "@/components/ui/ActionFeedback";
+import { statusLabel } from "@/lib/ui-labels";
 
 import { usePagedMaster } from "@/hooks/usePagedMaster";
 import { useStaff } from "@/hooks/useStaff";
@@ -171,7 +174,7 @@ export default function StaffView() {
           setWarehouseError(
             reason instanceof Error
               ? reason.message
-              : "Failed to load warehouses"
+              : "Gagal memuat daftar gudang"
           );
         }
       })
@@ -193,8 +196,6 @@ export default function StaffView() {
   const currentPage = Math.min(page, pageCount);
   const startIndex = (currentPage - 1) * pageSize;
   const rows = staff;
-  const from = total === 0 ? 0 : startIndex + 1;
-  const to = Math.min(startIndex + pageSize, total);
 
   // ====================================
   // UPDATE FORM FIELD
@@ -310,7 +311,7 @@ export default function StaffView() {
         text:
           reason instanceof Error
             ? reason.message
-            : "Failed to load staff detail",
+            : "Gagal memuat rincian staf",
       });
     } finally {
       setDetailLoading(false);
@@ -359,7 +360,7 @@ export default function StaffView() {
       )
     ) {
       setFormError(
-        "Staff code must be 2–40 characters: letters, numbers, - or _."
+        "Kode staf harus terdiri dari 2–40 karakter: huruf, angka, tanda - atau _."
       );
       return;
     }
@@ -367,7 +368,7 @@ export default function StaffView() {
     // VALIDATE FULL NAME
     if (payload.fullName.length < 2) {
       setFormError(
-        "Full name must contain at least 2 characters."
+        "Nama lengkap harus terdiri dari minimal 2 karakter."
       );
       return;
     }
@@ -389,7 +390,7 @@ export default function StaffView() {
         )
       ) {
         setFormError(
-          "Please select an active warehouse."
+          "Pilih gudang yang masih aktif."
         );
         return;
       }
@@ -404,9 +405,7 @@ export default function StaffView() {
 
       setNotice({
         type: "success",
-        text: `Staff ${
-          editing ? "updated" : "created"
-        } successfully.`,
+        text: `Staf berhasil ${editing ? "diperbarui" : "ditambahkan"}.`,
       });
 
       setModalOpen(false);
@@ -418,7 +417,7 @@ export default function StaffView() {
       setFormError(
         reason instanceof Error
           ? reason.message
-          : "Failed to save staff"
+          : "Gagal menyimpan data staf"
       );
     }
   }
@@ -438,7 +437,7 @@ export default function StaffView() {
     }
 
     const confirmed = await confirmAction(
-      `Deactivate ${person.fullName} (${person.staffCode})? The record will remain stored.`
+      `Nonaktifkan ${person.fullName} (${person.staffCode})? Data tetap tersimpan.`
     );
 
     if (!confirmed) return;
@@ -448,7 +447,7 @@ export default function StaffView() {
 
       setNotice({
         type: "success",
-        text: `${person.fullName} deactivated successfully.`,
+        text: `${person.fullName} berhasil dinonaktifkan.`,
       });
     } catch (reason) {
       setNotice({
@@ -456,7 +455,7 @@ export default function StaffView() {
         text:
           reason instanceof Error
             ? reason.message
-            : "Failed to deactivate staff",
+            : "Gagal menonaktifkan staf",
       });
     }
   }
@@ -468,56 +467,10 @@ export default function StaffView() {
   return (
     <div className="space-y-4">
       {/* NOTIFICATION */}
-      {notice && (
-        <div
-          role="status"
-          className={`flex items-center gap-2 rounded-xl border px-4 py-3 text-sm ${
-            notice.type === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : "border-red-200 bg-red-50 text-red-700"
-          }`}
-        >
-          {notice.type === "success" ? (
-            <CheckCircle2 size={17} />
-          ) : (
-            <AlertCircle size={17} />
-          )}
-
-          <span className="flex-1">
-            {notice.text}
-          </span>
-
-          <button
-            type="button"
-            aria-label="Dismiss message"
-            onClick={() => setNotice(null)}
-          >
-            <X size={16} />
-          </button>
-        </div>
-      )}
+      {notice && <ActionFeedback message={notice.text} tone={notice.type} onDismiss={() => setNotice(null)} />}
 
       {/* API ERROR */}
-      {error && (
-        <div
-          role="alert"
-          className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
-        >
-          <AlertCircle size={17} />
-
-          <span className="flex-1">
-            {error}
-          </span>
-
-          <button
-            type="button"
-            className="font-semibold underline"
-            onClick={() => void refresh()}
-          >
-            Retry
-          </button>
-        </div>
-      )}
+      {error && <ActionFeedback message={error} tone="error" action={{ label: "Coba lagi", onClick: () => void refresh() }} />}
 
       {/* STAFF TABLE */}
       <section className="overflow-hidden rounded-2xl border border-[#ebedf2] bg-white shadow-sm">
@@ -525,11 +478,11 @@ export default function StaffView() {
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-5 py-5 sm:px-7">
           <div>
             <h2 className="text-lg font-bold text-[#182237]">
-              All Staff
+              Semua staf
             </h2>
 
             <p className="mt-1 text-xs text-slate-400">
-              Manage employee profiles and warehouse assignments
+              Kelola profil staf dan penempatan gudang
             </p>
           </div>
 
@@ -538,8 +491,8 @@ export default function StaffView() {
               type="button"
               disabled={loading}
               onClick={() => void refresh()}
-              title="Refresh staff"
-              aria-label="Refresh staff"
+              title="Muat ulang staf"
+              aria-label="Muat ulang staf"
               className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50"
             >
               <RefreshCw
@@ -558,46 +511,17 @@ export default function StaffView() {
               className="inline-flex items-center gap-2 rounded-full bg-[#3867f6] px-4 py-2.5 text-xs font-semibold text-white hover:bg-blue-700"
             >
               <Plus size={17} />
-              Add Staff
+              Tambah staf
             </button>}
           </div>
         </div>
 
         {/* TOOLBAR */}
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-5 sm:px-7">
-          <div className="flex items-center gap-2 text-xs text-slate-600">
-            Show
-
-            <GlobalSelect
-              aria-label="Entries per page"
-              value={pageSize}
-              onChange={(event) => {
-                setPageSize(
-                  Number(event.target.value)
-                );
-                setPage(1);
-              }}
-              className="rounded-md border border-slate-200 bg-white px-2 py-2"
-            >
-              {[10, 25, 50].map(
-                (number) => (
-                  <option
-                    key={number}
-                    value={number}
-                  >
-                    {number}
-                  </option>
-                )
-              )}
-            </GlobalSelect>
-
-            entries
-          </div>
-
           <div className="flex flex-wrap items-center gap-2">
             {/* STATUS FILTER */}
             <GlobalSelect
-              aria-label="Filter staff by status"
+              aria-label="Filter status staf"
               value={statusFilter}
               onChange={(event) => {
                 setStatusFilter(
@@ -608,15 +532,15 @@ export default function StaffView() {
               className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs"
             >
               <option value="all">
-                All Status
+                Semua status
               </option>
 
               <option value="active">
-                Active
+                Aktif
               </option>
 
               <option value="inactive">
-                Inactive
+                Tidak aktif
               </option>
             </GlobalSelect>
 
@@ -628,7 +552,7 @@ export default function StaffView() {
               />
 
               <input
-                aria-label="Search staff"
+                aria-label="Cari staf"
                 type="search"
                 value={search}
                 onChange={(event) => {
@@ -637,27 +561,39 @@ export default function StaffView() {
                   );
                   setPage(1);
                 }}
-                placeholder="Search staff..."
+                placeholder="Cari staf..."
                 className="rounded-md border border-slate-200 py-2 pl-9 pr-3 text-xs outline-none focus:border-blue-500"
               />
             </div>
           </div>
         </div>
 
-        {/* TABLE */}
-        <div className="overflow-x-auto px-5 sm:px-7">
+        {/* KARTU UNTUK LAYAR KECIL */}
+        <div className="divide-y divide-slate-100 px-5 md:hidden">
+          {loading && <div className="py-8 text-center text-sm text-slate-500"><GlobalLoading label="Memuat staf..." /></div>}
+          {!loading && rows.map((person, index) => <article key={person.id} className="space-y-3 py-4">
+            <div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><UserRound size={18} /></span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><h3 className="truncate font-bold text-slate-900">{person.fullName}</h3><span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${person.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{statusLabel(person.isActive ? "ACTIVE" : "INACTIVE")}</span></div><p className="mt-1 font-mono text-xs text-blue-600">{person.staffCode}</p></div></div>
+            <dl className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-xs"><div><dt className="text-slate-400">Email / telepon</dt><dd className="mt-1 break-words text-slate-700">{person.email || "—"}<br />{person.phone || "—"}</dd></div><div><dt className="text-slate-400">Jabatan</dt><dd className="mt-1 text-slate-700">{person.position || "—"}</dd></div><div className="col-span-2"><dt className="text-slate-400">Gudang</dt><dd className="mt-1 text-slate-700">{person.warehouse ? `${person.warehouse.code} — ${person.warehouse.name}` : "Belum ditugaskan"}</dd></div></dl>
+            <div className="flex items-center justify-between text-xs text-slate-400"><span>#{startIndex + index + 1}</span><span>{person.createdAt ? dateLabel(person.createdAt) : "—"}</span></div>
+            <div data-sf-action-column className="flex flex-wrap gap-2 border-t border-slate-100 pt-3"><button type="button" disabled={detailLoading} onClick={() => void openDetail(person.id)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50">Lihat</button>{canWrite && <button type="button" disabled={saving} onClick={() => openEdit(person)} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Ubah</button>}{canWrite && <button type="button" disabled={saving || !person.isActive} onClick={() => void handleDeactivate(person)} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Nonaktifkan</button>}</div>
+          </article>)}
+          {!loading && rows.length === 0 && <p className="py-10 text-center text-sm text-slate-500">{search ? "Tidak ada staf yang cocok." : "Data staf belum tersedia."}</p>}
+        </div>
+
+        {/* TABEL DESKTOP */}
+        <div className="hidden overflow-x-auto px-5 sm:px-7 md:block">
           <table className="w-full min-w-[950px] text-left text-xs">
             <thead>
               <tr className="border-b-2 border-slate-200 text-slate-700">
                 {[
                   "No.",
-                  "Staff Code",
-                  "Full Name",
-                  "Email / Phone",
-                  "Position",
-                  "Warehouse",
+                  "Kode staf",
+                  "Nama lengkap",
+                  "Email / Telepon",
+                  "Jabatan",
+                  "Gudang",
                   "Status",
-                  "Action",
+                  "Aksi",
                 ].map((label) => (
                   <th
                     key={label}
@@ -719,7 +655,7 @@ export default function StaffView() {
                     <td className="px-3 py-4 text-slate-600">
                       {person.warehouse
                         ? `${person.warehouse.code} — ${person.warehouse.name}`
-                        : "Not assigned"}
+                        : "Belum ditugaskan"}
                     </td>
 
                     {/* STATUS */}
@@ -731,9 +667,7 @@ export default function StaffView() {
                             : "bg-slate-100 text-slate-500"
                         }`}
                       >
-                        {person.isActive
-                          ? "Active"
-                          : "Inactive"}
+                        {statusLabel(person.isActive ? "ACTIVE" : "INACTIVE")}
                       </span>
                     </td>
 
@@ -747,11 +681,11 @@ export default function StaffView() {
                             person.id
                           )
                         }
-                        title="View details"
+                        title="Lihat rincian"
                         className="mr-2 inline-flex items-center gap-1 rounded-md bg-slate-100 px-3 py-2 font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-50"
                       >
                         <Eye size={13} />
-                        View
+                        Lihat
                       </button>
 
                       {canWrite && <button
@@ -763,7 +697,7 @@ export default function StaffView() {
                         className="mr-2 inline-flex items-center gap-1 rounded-md bg-[#159fe2] px-3 py-2 font-semibold text-white disabled:opacity-50"
                       >
                         <Pencil size={13} />
-                        Edit
+                        Ubah
                       </button>}
 
                       <button
@@ -777,7 +711,7 @@ export default function StaffView() {
                             person
                           )
                         }
-                        title="Deactivate"
+                        title="Nonaktifkan"
                         className="inline-flex items-center gap-1 rounded-md bg-red-500 px-2.5 py-2 font-semibold text-white disabled:opacity-35"
                       >
                         <Trash2 size={13} />
@@ -791,7 +725,7 @@ export default function StaffView() {
           {/* LOADING */}
           {loading && (
             <div className="flex items-center justify-center gap-2 py-14 text-sm text-slate-500">
-              <GlobalLoading label="Loading staff..." />
+              <GlobalLoading label="Memuat staf..." />
             </div>
           )}
 
@@ -801,55 +735,13 @@ export default function StaffView() {
               <div className="py-14 text-center text-sm text-slate-500">
                 {search ||
                 statusFilter !== "all"
-                  ? "No matching staff"
-                  : "No staff registered. Click Add Staff to begin."}
+                  ? "Tidak ada staf yang cocok"
+                  : "Belum ada staf terdaftar. Pilih Tambah staf untuk memulai."}
               </div>
             )}
         </div>
 
-        {/* PAGINATION */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-5 text-xs text-slate-500 sm:px-7">
-          <span>
-            Showing {from} to {to} of{" "}
-            {total} entries
-          </span>
-
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              disabled={currentPage <= 1}
-              onClick={() =>
-                setPage(
-                  currentPage - 1
-                )
-              }
-              className="disabled:opacity-35"
-            >
-              Previous
-            </button>
-
-            <span className="rounded-md bg-sky-500 px-3 py-2 font-bold text-white">
-              {currentPage}
-            </span>
-
-            <span>/ {pageCount}</span>
-
-            <button
-              type="button"
-              disabled={
-                currentPage >= pageCount
-              }
-              onClick={() =>
-                setPage(
-                  currentPage + 1
-                )
-              }
-              className="disabled:opacity-35"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        <DataPagination page={currentPage} pageSize={pageSize} total={total} totalPages={pageCount} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} loading={loading} noun="staf" />
       </section>
 
       {/* ================================= */}
@@ -882,20 +774,20 @@ export default function StaffView() {
                   className="text-lg font-bold text-slate-900"
                 >
                   {editing
-                    ? "Edit Staff"
-                    : "Add New Staff"}
+                    ? "Ubah staf"
+                    : "Tambah staf baru"}
                 </h2>
 
                 <p className="mt-1 text-xs text-slate-400">
                   {editing
-                    ? "Update employee information"
-                    : "Register a new employee"}
+                    ? "Perbarui informasi staf"
+                    : "Daftarkan staf baru"}
                 </p>
               </div>
 
               <button
                 type="button"
-                aria-label="Close"
+                aria-label="Tutup"
                 disabled={saving}
                 onClick={closeModal}
                 className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
@@ -995,7 +887,7 @@ export default function StaffView() {
                     htmlFor="staff-phone"
                     className={labelClass}
                   >
-                    Phone
+                    Telepon
                   </label>
 
                   <input
@@ -1040,7 +932,7 @@ export default function StaffView() {
                         null
                     )
                   }
-                  placeholder="Warehouse Staff"
+                  placeholder="Staf gudang"
                   className={inputClass}
                 />
               </div>
@@ -1093,7 +985,7 @@ export default function StaffView() {
                           {warehouse.name}
                           {warehouse.isActive
                             ? ""
-                            : " (Inactive)"}
+                            : " (Tidak aktif)"}
                         </option>
                       )
                     )}
@@ -1101,7 +993,7 @@ export default function StaffView() {
 
                 {warehouseLoading && (
                   <p className="mt-1 text-xs text-slate-400">
-                    <GlobalLoading label="Loading warehouses..." />
+                    <GlobalLoading label="Memuat pilihan gudang..." />
                   </p>
                 )}
 
@@ -1141,11 +1033,11 @@ export default function StaffView() {
                   className={inputClass}
                 >
                   <option value="active">
-                    Active
+                    Aktif
                   </option>
 
                   <option value="inactive">
-                    Inactive
+                    Tidak aktif
                   </option>
                 </GlobalSelect>
               </div>
@@ -1169,7 +1061,7 @@ export default function StaffView() {
                   onClick={closeModal}
                   className="rounded-lg border border-slate-200 px-5 py-2.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
                 >
-                  Cancel
+                  Batal
                 </button>
 
                 <button
@@ -1195,8 +1087,8 @@ export default function StaffView() {
                   {saving
                     ? "Saving..."
                     : editing
-                      ? "Update Staff"
-                      : "Save Staff"}
+                      ? "Perbarui staf"
+                      : "Simpan staf"}
                 </button>
               </div>
             </form>
@@ -1237,7 +1129,7 @@ export default function StaffView() {
 
               <button
                 type="button"
-                aria-label="Close details"
+                aria-label="Tutup rincian"
                 onClick={() =>
                   setViewing(null)
                 }
@@ -1251,11 +1143,11 @@ export default function StaffView() {
             <div className="space-y-3 p-6 text-sm">
               {([
                 [
-                  "Staff Code",
+                  "Kode staf",
                   viewing.staffCode,
                 ],
                 [
-                  "Full Name",
+                  "Nama lengkap",
                   viewing.fullName,
                 ],
                 [
@@ -1263,33 +1155,31 @@ export default function StaffView() {
                   viewing.email || "—",
                 ],
                 [
-                  "Phone",
+                  "Telepon",
                   viewing.phone || "—",
                 ],
                 [
-                  "Position",
+                  "Jabatan",
                   viewing.position || "—",
                 ],
                 [
-                  "Warehouse",
+                  "Gudang",
                   viewing.warehouse
                     ? `${viewing.warehouse.code} — ${viewing.warehouse.name}`
-                    : "Not assigned",
+                    : "Belum ditugaskan",
                 ],
                 [
                   "Status",
-                  viewing.isActive
-                    ? "Active"
-                    : "Inactive",
+                  statusLabel(viewing.isActive ? "ACTIVE" : "INACTIVE"),
                 ],
                 [
-                  "Created",
+                  "Dibuat",
                   dateLabel(
                     viewing.createdAt
                   ),
                 ],
                 [
-                  "Updated",
+                  "Diperbarui",
                   dateLabel(
                     viewing.updatedAt
                   ),
@@ -1320,7 +1210,7 @@ export default function StaffView() {
                   }
                   className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold"
                 >
-                  Close
+                  Tutup
                 </button>
 
                 {canWrite && <button
@@ -1335,7 +1225,7 @@ export default function StaffView() {
                   className="inline-flex items-center gap-2 rounded-lg bg-[#3867f6] px-4 py-2 text-xs font-semibold text-white"
                 >
                   <Pencil size={14} />
-                  Edit Staff
+                  Ubah Staff
                 </button>}
               </div>
             </div>

@@ -12,7 +12,7 @@ import {
   useState,
 } from "react";
 
-import { ArrowLeft, ArrowRight, Plus, RefreshCw, Search } from "lucide-react";
+import { Plus, RefreshCw, Search } from "lucide-react";
 
 import { useAuth } from "@/components/auth/AuthProvider";
 import { returnService } from "@/services/return.service";
@@ -27,6 +27,9 @@ import ReturnFormModal from "./ReturnFormModal";
 import ReturnDetailDrawer from "./ReturnDetailDrawer";
 import ReturnStatusBadge from "./ReturnStatusBadge";
 import type { NotificationTarget } from "@/types/notification";
+import DataPagination from "@/components/ui/DataPagination";
+import ActionFeedback from "@/components/ui/ActionFeedback";
+import { statusLabel } from "@/lib/ui-labels";
 
 export default function ReturnsView({
   type,
@@ -54,6 +57,7 @@ export default function ReturnsView({
   const [error, setError] = useState("");
 
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
 
@@ -78,7 +82,7 @@ export default function ReturnsView({
     try {
       const response = await returnService.list(type, {
         page,
-        pageSize: 20,
+        pageSize,
         status: status || undefined,
         search: search.trim() || undefined,
       });
@@ -89,12 +93,12 @@ export default function ReturnsView({
       setError(
         e instanceof Error
           ? e.message
-          : "Unable to load returns"
+          : "Retur tidak dapat dimuat."
       );
     } finally {
       setLoading(false);
     }
-  }, [type, page, status, search]);
+  }, [type, page, pageSize, status, search]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -111,7 +115,7 @@ export default function ReturnsView({
       setError(
         e instanceof Error
           ? e.message
-          : "Cannot load details"
+          : "Rincian retur tidak dapat dimuat."
       );
     }
   }
@@ -129,8 +133,8 @@ export default function ReturnsView({
   ) {
     const message =
       kind === "post"
-        ? "Post this return? This will change physical stock and cannot be undone by cancellation."
-        : `${kind.toUpperCase()} return ${row.number}?`;
+        ? "Proses retur ini? Stok fisik akan berubah dan pembatalan tidak dapat mengurungkan dampaknya."
+        : `${{ submit: "Ajukan", approve: "Setujui", post: "Proses", cancel: "Batalkan" }[kind]} retur ${row.number}?`;
 
     const actionLabel = { submit: "Kirim untuk persetujuan", approve: "Setujui retur", post: "Proses retur", cancel: "Batalkan retur" }[kind];
     if (!await confirmAction(message, { title: actionLabel, confirmLabel: actionLabel, tone: kind === "cancel" || kind === "post" ? "warning" : "info" })) return;
@@ -162,15 +166,12 @@ export default function ReturnsView({
     }
   }
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(total / 20)
-  );
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const title =
     type === "PURCHASE"
-      ? "Purchase Returns"
-      : "Sales Returns";
+      ? "Retur pembelian"
+      : "Retur penjualan";
 
   return (
     <section className="space-y-5">
@@ -185,7 +186,7 @@ export default function ReturnsView({
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-xs font-semibold text-white/70">
-              Inventory Warehouse System
+              Sistem Gudang dan Persediaan
             </p>
 
             <h1 className="mt-2 text-2xl font-bold">
@@ -193,8 +194,7 @@ export default function ReturnsView({
             </h1>
 
             <p className="mt-1 text-sm text-white/80">
-              Track returns from request through
-              approval and physical stock posting.
+              Pantau retur dari pengajuan, persetujuan, hingga pembukuan stok.
             </p>
           </div>
 
@@ -204,7 +204,7 @@ export default function ReturnsView({
               className="inline-flex items-center gap-2 rounded-xl bg-white/20 px-4 py-2.5 text-sm font-semibold"
             >
               <RefreshCw size={15} />
-              Refresh
+              Muat ulang
             </button>
 
             {canWrite && (
@@ -216,7 +216,7 @@ export default function ReturnsView({
                 className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-slate-900"
               >
                 <Plus size={16} />
-                New Return
+                Buat retur
               </button>
             )}
           </div>
@@ -226,10 +226,10 @@ export default function ReturnsView({
       {/* SUMMARY */}
       <div className="grid gap-3 sm:grid-cols-3">
         {[
-          ["Total records", total],
-          ["On this page", rows.length],
+          ["Total retur", total],
+          ["Di halaman ini", rows.length],
           [
-            "Pending approval",
+            "Menunggu persetujuan",
             rows.filter(
               (x) => x.status === "PENDING"
             ).length,
@@ -265,7 +265,7 @@ export default function ReturnsView({
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              placeholder="Search return number..."
+              placeholder="Cari nomor retur..."
               className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm"
             />
           </label>
@@ -280,7 +280,7 @@ export default function ReturnsView({
             }}
             className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm"
           >
-            <option value="">All statuses</option>
+            <option value="">Semua status</option>
 
             {[
               "DRAFT",
@@ -290,33 +290,32 @@ export default function ReturnsView({
               "CANCELLED",
             ].map((s) => (
               <option key={s} value={s}>
-                {s}
+                {statusLabel(s)}
               </option>
             ))}
           </GlobalSelect>
         </div>
 
-        {error && (
-          <div
-            role="alert"
-            className="m-4 rounded-xl bg-rose-50 p-4 text-sm text-rose-700"
-          >
-            {error}
-          </div>
-        )}
+        {error && <div className="m-4"><ActionFeedback message={error} tone="error" onDismiss={() => setError("")} /></div>}
 
-        <div className="overflow-x-auto">
+        <div className="divide-y divide-slate-100 px-4 md:hidden">
+          {loading && <div className="py-6 text-center text-sm text-slate-500"><GlobalLoading label="Memuat retur..." /></div>}
+          {!loading && rows.length === 0 && <p className="py-10 text-center text-sm text-slate-500">Tidak ada retur yang cocok.</p>}
+          {!loading && rows.map((row) => <article key={row.id} className="space-y-3 py-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-bold text-slate-900">{row.number}</p><p className="mt-1 text-xs text-slate-500">{type === "PURCHASE" ? "Pesanan pembelian" : "Penjualan"} {type === "PURCHASE" ? row.purchaseOrder?.number ?? "—" : row.sale?.number ?? "—"}</p></div><ReturnStatusBadge status={row.status} /></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="text-slate-400">Gudang</dt><dd className="mt-1 text-slate-700">{row.warehouse?.name ?? "—"}</dd></div><div><dt className="text-slate-400">Jumlah barang</dt><dd className="mt-1 text-slate-700">{row.items?.length ?? 0}</dd></div><div className="col-span-2"><dt className="text-slate-400">Tanggal</dt><dd className="mt-1 text-slate-700">{new Date(row.createdAt).toLocaleDateString("id-ID")}</dd></div></dl><div data-sf-action-column className="flex flex-wrap gap-2 border-t border-slate-100 pt-3"><button type="button" onClick={() => void openDetails(row.id)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700">Lihat rincian</button>{row.status === "DRAFT" && canWrite && <><button type="button" onClick={() => { setEditing(row); setFormOpen(true); }} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">Ubah</button><button type="button" disabled={Boolean(working)} onClick={() => void action(row, "submit")} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Ajukan</button></>}{row.status === "PENDING" && canApprove && row.createdById !== user?.id && <button type="button" disabled={Boolean(working)} onClick={() => void action(row, "approve")} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Setujui</button>}{row.status === "APPROVED" && canApprove && <button type="button" disabled={Boolean(working)} onClick={() => void action(row, "post")} className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Bukukan stok</button>}{!["POSTED", "CANCELLED"].includes(row.status) && canDelete && <button type="button" disabled={Boolean(working)} onClick={() => void action(row, "cancel")} className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 disabled:opacity-50">Batalkan</button>}</div></article>)}
+        </div>
+
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[930px] text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 {[
-                  "Return number",
-                  "Source",
-                  "Date",
-                  "Warehouse",
-                  "Items",
+                  "Nomor retur",
+                  "Sumber",
+                  "Tanggal",
+                  "Gudang",
+                  "Barang",
                   "Status",
-                  "Actions",
+                  "Aksi",
                 ].map((h) => (
                   <th
                     key={h}
@@ -368,7 +367,7 @@ export default function ReturnsView({
                   <td className="px-5 py-4">
                     <div className="flex flex-wrap items-center gap-1">
                       <button
-                        title="View details"
+                        title="Lihat rincian"
                         onClick={() =>
                           void openDetails(row.id)
                         }
@@ -387,7 +386,7 @@ export default function ReturnsView({
                               }}
                               className="rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                             >
-                              Edit
+                              Ubah
                             </button>
 
                             <button
@@ -402,7 +401,7 @@ export default function ReturnsView({
                               }
                               className="rounded-lg px-2 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50"
                             >
-                              Submit
+                              Ajukan
                             </button>
                           </>
                         )}
@@ -423,7 +422,7 @@ export default function ReturnsView({
                             }
                             className="rounded-lg px-2 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
                           >
-                            Approve
+                            Setujui
                           </button>
                         )}
 
@@ -442,7 +441,7 @@ export default function ReturnsView({
                             }
                             className="rounded-lg px-2 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
                           >
-                            Post
+                            Bukukan stok
                           </button>
                         )}
 
@@ -452,7 +451,7 @@ export default function ReturnsView({
                       ].includes(row.status) &&
                         canDelete && (
                           <button
-                            title="Cancel return"
+                            title="Batalkan retur"
                             disabled={Boolean(
                               working
                             )}
@@ -477,45 +476,17 @@ export default function ReturnsView({
 
         {loading && (
           <div className="flex justify-center gap-2 p-12 text-sm text-slate-500">
-            <GlobalLoading label="Loading returns..." />
+            <GlobalLoading label="Memuat retur..." />
           </div>
         )}
 
         {!loading && rows.length === 0 && (
           <p className="p-12 text-center text-sm text-slate-500">
-            No returns found.
+            Tidak ada retur yang cocok.
           </p>
         )}
 
-        {/* PAGINATION */}
-        <div className="flex items-center justify-between border-t p-4 text-xs text-slate-500">
-          <span>
-            Page {page} of {totalPages} · {total}{" "}
-            records
-          </span>
-
-          <div className="flex gap-2">
-            <button
-              disabled={page <= 1}
-              onClick={() =>
-                setPage((p) => p - 1)
-              }
-              className="rounded-lg border px-3 py-2 disabled:opacity-40"
-            >
-              <ArrowLeft size={14} />
-            </button>
-
-            <button
-              disabled={page >= totalPages}
-              onClick={() =>
-                setPage((p) => p + 1)
-              }
-              className="rounded-lg border px-3 py-2 disabled:opacity-40"
-            >
-              <ArrowRight size={14} />
-            </button>
-          </div>
-        </div>
+        <DataPagination page={page} pageSize={pageSize} total={total} totalPages={totalPages} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} loading={loading} noun="retur" />
       </div>
 
       {/* MODALS */}

@@ -12,7 +12,10 @@ import {
   type FormEvent,
 } from "react";
 
-import { AlertCircle, CheckCircle2, Plus, RefreshCw, Search, Tags, X } from "lucide-react";
+import { AlertCircle, Plus, RefreshCw, Search, Tags, X } from "lucide-react";
+import DataPagination from "@/components/ui/DataPagination";
+import ActionFeedback from "@/components/ui/ActionFeedback";
+import { statusLabel } from "@/lib/ui-labels";
 
 import { usePagedMaster } from "@/hooks/usePagedMaster";
 import { useCategories } from "@/hooks/useCategories";
@@ -65,7 +68,7 @@ export default function CategoriesView() {
 
   // FORM STATE
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
+  const [description, setDeskripsi] = useState("");
   const [isActive, setIsActive] = useState(true);
 
   const [formError, setFormError] = useState("");
@@ -80,8 +83,6 @@ export default function CategoriesView() {
   const safePage = Math.min(currentPage, totalPages);
   const startIndex = (safePage - 1) * pageSize;
   const paginatedCategories = categories;
-  const showingFrom = total > 0 ? startIndex + 1 : 0;
-  const showingTo = Math.min(startIndex + pageSize, total);
 
   // =========================================
   // MODAL FUNCTIONS
@@ -90,7 +91,7 @@ export default function CategoriesView() {
   function openAddModal() {
     setEditingCategory(null);
     setName("");
-    setDescription("");
+    setDeskripsi("");
     setIsActive(true);
     setFormError("");
     setModalOpen(true);
@@ -99,7 +100,7 @@ export default function CategoriesView() {
   function openEditModal(category: Category) {
     setEditingCategory(category);
     setName(category.name);
-    setDescription(category.description ?? "");
+    setDeskripsi(category.description ?? "");
     setIsActive(category.isActive);
     setFormError("");
     setModalOpen(true);
@@ -141,11 +142,11 @@ export default function CategoriesView() {
     event.preventDefault();
 
     const cleanName = name.trim();
-    const cleanDescription = description.trim();
+    const cleanDeskripsi = description.trim();
 
     if (cleanName.length < 2) {
       setFormError(
-        "Category name must contain at least 2 characters."
+        "Nama kategori minimal harus terdiri dari 2 karakter."
       );
       return;
     }
@@ -156,24 +157,24 @@ export default function CategoriesView() {
       if (editingCategory) {
         await updateCategory(editingCategory.id, {
           name: cleanName,
-          description: cleanDescription || null,
+          description: cleanDeskripsi || null,
           isActive,
         });
 
         setNotice({
           type: "success",
-          message: "Category updated successfully.",
+          message: "Kategori berhasil diperbarui.",
         });
       } else {
         await createCategory({
           name: cleanName,
-          description: cleanDescription || null,
+          description: cleanDeskripsi || null,
           isActive,
         });
 
         setNotice({
           type: "success",
-          message: "Category created successfully.",
+          message: "Kategori berhasil ditambahkan.",
         });
       }
 
@@ -185,18 +186,18 @@ export default function CategoriesView() {
       setFormError(
         err instanceof Error
           ? err.message
-          : "Failed to save category"
+          : "Gagal menyimpan kategori"
       );
     }
   }
 
   async function handleDeactivate(category: Category) {
-    if (!await confirmAction(`Deactivate category "${category.name}"? The record will be retained.`)) return;
+    if (!await confirmAction(`Nonaktifkan kategori "${category.name}"? Data tetap tersimpan.`)) return;
     try {
       await deactivateCategory(category.id);
-      setNotice({ type: "success", message: "Category deactivated successfully." });
+      setNotice({ type: "success", message: "Kategori berhasil dinonaktifkan." });
     } catch (err) {
-      setNotice({ type: "error", message: err instanceof Error ? err.message : "Failed to deactivate category" });
+      setNotice({ type: "error", message: err instanceof Error ? err.message : "Gagal menonaktifkan kategori" });
     }
   }
 
@@ -207,56 +208,15 @@ export default function CategoriesView() {
   return (
     <div className="space-y-5">
       {/* SUCCESS / ERROR NOTICE */}
-      {notice && (
-        <div
-          role="status"
-          className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm ${
-            notice.type === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : "border-red-200 bg-red-50 text-red-700"
-          }`}
-        >
-          {notice.type === "success" ? (
-            <CheckCircle2 size={18} />
-          ) : (
-            <AlertCircle size={18} />
-          )}
-
-          <span className="flex-1">{notice.message}</span>
-
-          <button
-            type="button"
-            onClick={() => setNotice(null)}
-            aria-label="Dismiss notification"
-          >
-            <X size={17} />
-          </button>
-        </div>
-      )}
+      {notice && <ActionFeedback message={notice.message} tone={notice.type} onDismiss={() => setNotice(null)} />}
 
       {/* API ERROR */}
-      {error && (
-        <div
-          role="alert"
-          className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-        >
-          <AlertCircle size={18} />
-          <span className="flex-1">{error}</span>
-
-          <button
-            type="button"
-            onClick={() => void fetchCategories()}
-            className="font-semibold underline"
-          >
-            Retry
-          </button>
-        </div>
-      )}
+      {error && <ActionFeedback message={error} tone="error" action={{ label: "Coba lagi", onClick: () => void fetchCategories() }} />}
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-4 dark:border-blue-900 dark:from-blue-950/60 dark:to-slate-900"><p className="text-[10px] font-bold uppercase tracking-widest text-blue-500">Taxonomy size</p><p className="mt-2 text-2xl font-bold text-slate-900">{total}</p><p className="mt-1 text-xs text-slate-500">Product groups matching the search</p></div>
-        <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-4 dark:border-emerald-900 dark:from-emerald-950/50 dark:to-slate-900"><p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Active groups</p><p className="mt-2 text-2xl font-bold text-slate-900">{categories.filter((category) => category.isActive).length}</p><p className="mt-1 text-xs text-slate-500">Ready for product assignment</p></div>
-        <div className="rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50 to-white p-4 dark:border-violet-900 dark:from-violet-950/50 dark:to-slate-900"><p className="text-[10px] font-bold uppercase tracking-widest text-violet-600">Documented</p><p className="mt-2 text-2xl font-bold text-slate-900">{categories.filter((category) => Boolean(category.description)).length}</p><p className="mt-1 text-xs text-slate-500">Categories with descriptions</p></div>
+        <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-4 dark:border-blue-900 dark:from-blue-950/60 dark:to-slate-900"><p className="text-[10px] font-bold uppercase tracking-widest text-blue-500">Jumlah kategori</p><p className="mt-2 text-2xl font-bold text-slate-900">{total}</p><p className="mt-1 text-xs text-slate-500">Kategori sesuai pencarian</p></div>
+        <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-4 dark:border-emerald-900 dark:from-emerald-950/50 dark:to-slate-900"><p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Kategori aktif</p><p className="mt-2 text-2xl font-bold text-slate-900">{categories.filter((category) => category.isActive).length}</p><p className="mt-1 text-xs text-slate-500">Siap digunakan pada produk</p></div>
+        <div className="rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50 to-white p-4 dark:border-violet-900 dark:from-violet-950/50 dark:to-slate-900"><p className="text-[10px] font-bold uppercase tracking-widest text-violet-600">Memiliki deskripsi</p><p className="mt-2 text-2xl font-bold text-slate-900">{categories.filter((category) => Boolean(category.description)).length}</p><p className="mt-1 text-xs text-slate-500">Kategori dengan keterangan</p></div>
       </div>
 
       {/* MAIN CARD */}
@@ -265,11 +225,11 @@ export default function CategoriesView() {
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-5 py-5 sm:px-7">
           <div>
             <h2 className="text-lg font-bold text-[#182237]">
-              All Categories
+              Semua kategori
             </h2>
 
             <p className="mt-1 text-xs text-slate-400">
-              Manage product categories
+              Kelola kategori produk
             </p>
           </div>
 
@@ -296,37 +256,21 @@ export default function CategoriesView() {
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[#3867f6]">
                 <Plus size={14} strokeWidth={3} />
               </span>
-              Add Categories
+              Tambah kategori
             </button>}
           </div>
         </div>
 
         {/* TABLE TOOLBAR */}
         <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-5 sm:px-7">
-          <div className="flex items-center gap-2 text-xs text-slate-600">
-            Show
-            <GlobalSelect
-              aria-label="Entries per page"
-              value={pageSize}
-              onChange={(event) => {
-                setPageSize(Number(event.target.value));
-                setCurrentPage(1);
-              }}
-              className="rounded-md border border-slate-200 px-2 py-2 text-xs"
-            >
-              <option value={10}>10</option>
-              <option value={25}>25</option>
-              <option value={50}>50</option>
-            </GlobalSelect>
-            entries
-          </div>
+
 
           <div className="flex w-full items-center gap-2 sm:w-auto">
             <label
               htmlFor="category-search"
               className="text-xs text-slate-600"
             >
-              Search:
+              Cari:
             </label>
 
             <div className="relative min-w-0 flex-1 sm:w-64">
@@ -343,33 +287,40 @@ export default function CategoriesView() {
                   setSearch(event.target.value);
                   setCurrentPage(1);
                 }}
-                placeholder="Search categories..."
+                placeholder="Cari kategori..."
                 className="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-xs text-slate-800 outline-none focus:border-blue-400"
               />
             </div>
           </div>
         </div>
 
+        {/* CATEGORY CARDS ON SMALL SCREENS */}
+        <div className="divide-y divide-slate-100 px-5 md:hidden">
+          {loading && <div className="py-8 text-center text-sm text-slate-500"><GlobalLoading label="Memuat kategori..." /></div>}
+          {!loading && filteredCategories.length === 0 && <p className="py-10 text-center text-sm text-slate-500">{search ? "Tidak ada kategori yang cocok." : "Kategori belum tersedia."}</p>}
+          {!loading && filteredCategories.map((category, index) => <article key={category.id} className="space-y-3 py-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-bold text-slate-800">{category.name}</p><p className="mt-1 line-clamp-2 text-xs text-slate-500">{category.description || "Tidak ada deskripsi"}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${category.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{statusLabel(category.isActive ? "ACTIVE" : "INACTIVE")}</span></div><div className="flex items-center justify-between text-xs text-slate-400"><span>#{startIndex + index + 1}</span><span>{formatDate(category.createdAt)}</span></div><div data-sf-action-column className="flex flex-wrap gap-2 border-t border-slate-100 pt-3"><button type="button" onClick={() => setViewingCategory(category)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700">Lihat</button>{canWrite && <button type="button" onClick={() => openEditModal(category)} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white">Ubah</button>}{canDelete && <button type="button" disabled={saving || !category.isActive} onClick={() => void handleDeactivate(category)} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Nonaktifkan</button>}</div></article>)}
+        </div>
+
         {/* CATEGORY TABLE */}
-        <div className="overflow-x-auto px-5 sm:px-7">
+        <div className="hidden overflow-x-auto px-5 sm:px-7 md:block">
           <table className="w-full min-w-[650px] text-left text-xs">
             <thead>
               <tr className="border-b-2 border-slate-200 text-slate-700">
                 <th className="px-3 py-3 font-bold">No.</th>
                 <th className="px-3 py-3 font-bold">
-                  Category Name
+                  Nama kategori
                 </th>
                 <th className="px-3 py-3 font-bold">
-                  Description
+                  Deskripsi
                 </th>
                 <th className="px-3 py-3 font-bold">
                   Status
                 </th>
                 <th className="px-3 py-3 font-bold">
-                  Created
+                  Dibuat
                 </th>
                 <th className="px-3 py-3 font-bold">
-                  Action
+                  Aksi
                 </th>
               </tr>
             </thead>
@@ -410,8 +361,8 @@ export default function CategoriesView() {
                         }`}
                       >
                         {category.isActive
-                          ? "Active"
-                          : "Inactive"}
+                          ? "Aktif"
+                          : "Tidak aktif"}
                       </span>
                     </td>
 
@@ -426,7 +377,7 @@ export default function CategoriesView() {
                         className="mr-2 inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 font-semibold text-slate-600 hover:bg-slate-50"
                       >
                         <Eye size={13} />
-                        View
+                        Lihat
                       </button>
                       {canWrite && <button
                         type="button"
@@ -436,7 +387,7 @@ export default function CategoriesView() {
                         className="inline-flex items-center gap-1.5 rounded-md bg-[#159fe2] px-3 py-2 font-semibold text-white transition hover:bg-sky-600"
                       >
                         <Pencil size={13} />
-                        Edit
+                        Ubah
                       </button>}
                       {canDelete && <button
                         type="button"
@@ -446,7 +397,7 @@ export default function CategoriesView() {
                         className="ml-2 inline-flex items-center gap-1.5 rounded-md bg-red-500 px-3 py-2 font-semibold text-white disabled:opacity-35"
                       >
                         <Trash2 size={13} />
-                        Delete
+                        Nonaktifkan
                       </button>}
                     </td>
                   </tr>
@@ -456,7 +407,7 @@ export default function CategoriesView() {
 
           {loading && (
             <div className="flex items-center justify-center gap-2 py-14 text-sm text-slate-500">
-              <GlobalLoading label="Loading categories..." />
+              <GlobalLoading label="Memuat kategori..." />
             </div>
           )}
 
@@ -465,14 +416,14 @@ export default function CategoriesView() {
               <Tags size={35} className="text-slate-300" />
               <h3 className="mt-3 text-sm font-semibold text-slate-700">
                 {search
-                  ? "No matching categories"
-                  : "No categories found"}
+                  ? "Tidak ada kategori yang cocok"
+                  : "Kategori belum tersedia"}
               </h3>
 
               <p className="mt-1 text-xs text-slate-400">
                 {search
-                  ? "Try another search keyword."
-                  : "Add your first category."}
+                  ? "Coba kata kunci pencarian lain."
+                  : "Tambahkan kategori pertama."}
               </p>
 
               {!search && canWrite && (
@@ -481,56 +432,14 @@ export default function CategoriesView() {
                   onClick={openAddModal}
                   className="mt-5 rounded-lg bg-[#3867f6] px-4 py-2.5 text-xs font-semibold text-white"
                 >
-                  Add First Category
+                  Tambah kategori pertama
                 </button>
               )}
             </div>
           )}
         </div>
 
-        {/* PAGINATION */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-5 sm:px-7">
-          <p className="text-xs text-slate-500">
-            Showing {showingFrom} to {showingTo} of{" "}
-            {total} entries
-          </p>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={safePage <= 1}
-              onClick={() =>
-                setCurrentPage((prev) =>
-                  Math.max(1, prev - 1)
-                )
-              }
-              className="rounded-md px-3 py-2 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-40"
-            >
-              Previous
-            </button>
-
-            <span className="flex h-8 min-w-8 items-center justify-center rounded-md bg-[#159fe2] px-2 text-xs font-bold text-white">
-              {safePage}
-            </span>
-
-            <span className="text-xs text-slate-400">
-              / {totalPages}
-            </span>
-
-            <button
-              type="button"
-              disabled={safePage >= totalPages}
-              onClick={() =>
-                setCurrentPage((prev) =>
-                  Math.min(totalPages, prev + 1)
-                )
-              }
-              className="rounded-md px-3 py-2 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-40"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        <DataPagination page={safePage} pageSize={pageSize} total={total} totalPages={totalPages} onPageChange={setCurrentPage} onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }} loading={loading} noun="kategori" />
       </section>
 
       {/* ================================== */}
@@ -560,14 +469,14 @@ export default function CategoriesView() {
                   className="text-lg font-bold text-slate-800"
                 >
                   {editingCategory
-                    ? "Edit Category"
-                    : "Add New Category"}
+                  ? "Ubah kategori"
+                    : "Tambah kategori"}
                 </h2>
 
                 <p className="mt-1 text-xs text-slate-400">
                   {editingCategory
-                    ? "Update category information."
-                    : "Create a new product category."}
+                    ? "Perbarui informasi kategori."
+                    : "Tambahkan kategori produk baru."}
                 </p>
               </div>
 
@@ -575,7 +484,7 @@ export default function CategoriesView() {
                 type="button"
                 disabled={saving}
                 onClick={closeModal}
-                aria-label="Close modal"
+                aria-label="Tutup dialog"
                 className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 disabled:opacity-50"
               >
                 <X size={19} />
@@ -592,7 +501,7 @@ export default function CategoriesView() {
                   htmlFor="category-name"
                   className="mb-2 block text-sm font-semibold text-slate-700"
                 >
-                  Category Name
+                  Nama kategori
                   <span className="ml-1 text-red-500">
                     *
                   </span>
@@ -608,7 +517,7 @@ export default function CategoriesView() {
                   }
                   maxLength={100}
                   required
-                  placeholder="e.g. Electronics"
+                  placeholder="Contoh: Elektronik"
                   className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 />
               </div>
@@ -618,18 +527,18 @@ export default function CategoriesView() {
                   htmlFor="category-description"
                   className="mb-2 block text-sm font-semibold text-slate-700"
                 >
-                  Description
+                  Deskripsi
                 </label>
 
                 <textarea
                   id="category-description"
                   value={description}
                   onChange={(event) =>
-                    setDescription(event.target.value)
+                    setDeskripsi(event.target.value)
                   }
                   maxLength={500}
                   rows={3}
-                  placeholder="Enter category description..."
+                  placeholder="Masukkan deskripsi kategori..."
                   className="w-full resize-none rounded-lg border border-slate-200 px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 />
               </div>
@@ -652,8 +561,8 @@ export default function CategoriesView() {
                   }
                   className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-blue-500"
                 >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
+                  <option value="active">Aktif</option>
+                  <option value="inactive">Tidak aktif</option>
                 </GlobalSelect>
               </div>
 
@@ -676,7 +585,7 @@ export default function CategoriesView() {
                   onClick={closeModal}
                   className="rounded-lg border border-slate-200 px-5 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                 >
-                  Cancel
+                  Batal
                 </button>
 
                 <button
@@ -696,10 +605,10 @@ export default function CategoriesView() {
                   )}
 
                   {saving
-                    ? "Saving..."
+                    ? "Menyimpan..."
                     : editingCategory
-                      ? "Update Category"
-                      : "Save Category"}
+                      ? "Perbarui kategori"
+                      : "Simpan kategori"}
                 </button>
               </div>
             </form>
@@ -711,11 +620,11 @@ export default function CategoriesView() {
         <div className="sf-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setViewingCategory(null); }}>
           <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
-              <div><p className="text-xs font-bold uppercase tracking-widest text-blue-600">Category detail</p><h2 className="mt-1 text-xl font-bold text-slate-900">{viewingCategory.name}</h2></div>
+              <div><p className="text-xs font-bold uppercase tracking-widest text-blue-600">Rincian kategori</p><h2 className="mt-1 text-xl font-bold text-slate-900">{viewingCategory.name}</h2></div>
               <button type="button" onClick={() => setViewingCategory(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
             </div>
-            <div className="mt-6 grid gap-3 text-sm"><div className="rounded-xl bg-slate-50 p-4"><p className="text-xs text-slate-400">Description</p><p className="mt-1 font-medium text-slate-800">{viewingCategory.description || "No description"}</p></div><div className="flex items-center justify-between rounded-xl bg-slate-50 p-4"><span className="text-slate-500">Status</span><span className="font-semibold text-slate-800">{viewingCategory.isActive ? "Active" : "Inactive"}</span></div><div className="flex items-center justify-between rounded-xl bg-slate-50 p-4"><span className="text-slate-500">Created</span><span className="font-semibold text-slate-800">{formatDate(viewingCategory.createdAt)}</span></div></div>
-            <div className="mt-6 flex justify-end"><button type="button" onClick={() => setViewingCategory(null)} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Close</button></div>
+            <div className="mt-6 grid gap-3 text-sm"><div className="rounded-xl bg-slate-50 p-4"><p className="text-xs text-slate-400">Deskripsi</p><p className="mt-1 font-medium text-slate-800">{viewingCategory.description || "Tidak ada deskripsi"}</p></div><div className="flex items-center justify-between rounded-xl bg-slate-50 p-4"><span className="text-slate-500">Status</span><span className="font-semibold text-slate-800">{viewingCategory.isActive ? "Aktif" : "Tidak aktif"}</span></div><div className="flex items-center justify-between rounded-xl bg-slate-50 p-4"><span className="text-slate-500">Dibuat</span><span className="font-semibold text-slate-800">{formatDate(viewingCategory.createdAt)}</span></div></div>
+            <div className="mt-6 flex justify-end"><button type="button" onClick={() => setViewingCategory(null)} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Tutup</button></div>
           </div>
         </div>
       )}

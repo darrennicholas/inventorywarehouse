@@ -160,7 +160,7 @@ export default function ProductFormModal({
       setFormError(
         error instanceof Error
           ? error.message
-          : "Failed to save product"
+          : "Gagal menyimpan produk"
       );
     }
   }
@@ -190,12 +190,12 @@ export default function ProductFormModal({
               id="product-dialog-title"
               className="text-lg font-bold text-slate-900"
             >
-              {product ? "Edit Product" : "Add New Product"}
+              {product ? "Ubah produk" : "Tambah produk baru"}
             </h2>
 
             <p className="mt-1 text-xs text-slate-500">
               Isi detail produk. Stok dikelola terpisah
-              pada modul Inventory.
+              pada menu inventaris.
             </p>
           </div>
 
@@ -203,7 +203,7 @@ export default function ProductFormModal({
             type="button"
             onClick={onClose}
             disabled={saving}
-            aria-label="Close modal"
+            aria-label="Tutup dialog"
             className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 disabled:opacity-50"
           >
             <X size={20} />
@@ -219,7 +219,7 @@ export default function ProductFormModal({
             {/* SKU */}
             <div>
               <label htmlFor="p-sku" className={labelClass}>
-                Product SKU *
+                SKU produk *
               </label>
 
               <input
@@ -234,19 +234,19 @@ export default function ProductFormModal({
             </div>
 
             <div>
-              <label htmlFor="p-max-stock" className={labelClass}>Maximum Stock (Target)</label>
-              <input id="p-max-stock" className={inputClass} type="number" min={0} step={1} value={maxStock} onChange={(e) => setMaxStock(e.target.value)} placeholder="Optional" />
+              <label htmlFor="p-max-stock" className={labelClass}>Stok maksimum (target)</label>
+              <input id="p-max-stock" className={inputClass} type="number" min={0} step={1} value={maxStock} onChange={(e) => setMaxStock(e.target.value)} placeholder="Opsional" />
             </div>
 
             <div>
-              <label htmlFor="p-lead-time" className={labelClass}>Supplier Lead Time (days)</label>
+              <label htmlFor="p-lead-time" className={labelClass}>Waktu tunggu pemasok (hari)</label>
               <input id="p-lead-time" className={inputClass} type="number" min={0} max={365} step={1} value={reorderLeadDays} onChange={(e) => setReorderLeadDays(e.target.value)} />
             </div>
 
             {/* PRODUCT CODE */}
             <div>
               <label htmlFor="p-code" className={labelClass}>
-                Product Code
+                Kode produk
               </label>
 
               <input
@@ -262,7 +262,7 @@ export default function ProductFormModal({
             {/* NAME */}
             <div>
               <label htmlFor="p-name" className={labelClass}>
-                Product Name *
+                Nama produk *
               </label>
 
               <input
@@ -282,7 +282,7 @@ export default function ProductFormModal({
                 htmlFor="p-barcode"
                 className={labelClass}
               >
-                Barcode
+                Kode batang
               </label>
 
               <input
@@ -303,7 +303,7 @@ export default function ProductFormModal({
                 htmlFor="p-category"
                 className={labelClass}
               >
-                Category
+                Kategori
               </label>
 
               <GlobalSelect
@@ -314,7 +314,7 @@ export default function ProductFormModal({
                   setCategoryId(e.target.value)
                 }
               >
-                <option value="">— No Category —</option>
+                <option value="">— Tanpa kategori —</option>
 
                 {options.categories.map((item) => (
                   <option
@@ -326,7 +326,7 @@ export default function ProductFormModal({
                     }
                   >
                     {item.name}
-                    {!item.isActive ? " (Inactive)" : ""}
+                    {!item.isActive ? " (Tidak aktif)" : ""}
                   </option>
                 ))}
               </GlobalSelect>
@@ -338,7 +338,7 @@ export default function ProductFormModal({
                 htmlFor="p-brand"
                 className={labelClass}
               >
-                Brand
+                Merek
               </label>
 
               <GlobalSelect
@@ -349,7 +349,7 @@ export default function ProductFormModal({
                   setBrandId(e.target.value)
                 }
               >
-                <option value="">— No Brand —</option>
+                <option value="">— Tanpa merek —</option>
 
                 {options.brands.map((item) => (
                   <option
@@ -361,7 +361,7 @@ export default function ProductFormModal({
                     }
                   >
                     {item.name}
-                    {!item.isActive ? " (Inactive)" : ""}
+                    {!item.isActive ? " (Tidak aktif)" : ""}
                   </option>
                 ))}
               </GlobalSelect>
@@ -373,7 +373,7 @@ export default function ProductFormModal({
                 htmlFor="p-unit"
                 className={labelClass}
               >
-                Unit
+                Satuan
               </label>
 
               <GlobalSelect
@@ -384,7 +384,7 @@ export default function ProductFormModal({
                   setUnitId(e.target.value)
                 }
               >
-                <option value="">— No Unit —</option>
+                <option value="">— Tanpa satuan —</option>
 
                 {options.units.map((item) => (
                   <option
@@ -396,7 +396,7 @@ export default function ProductFormModal({
                     }
                   >
                     {item.code} — {item.name}
-                    {!item.isActive ? " (Inactive)" : ""}
+                    {!item.isActive ? " (Tidak aktif)" : ""}
                   </option>
                 ))}
               </GlobalSelect>
@@ -408,7 +408,7 @@ export default function ProductFormModal({
                 htmlFor="p-stock"
                 className={labelClass}
               >
-                Minimum Stock (Alert Qty)
+                Stok minimum (batas peringatan)
               </label>
 
               <input
@@ -446,14 +446,14 @@ export default function ProductFormModal({
                   )
                 }
               >
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
+                <option value="active">Aktif</option>
+                <option value="inactive">Tidak aktif</option>
               </GlobalSelect>
             </div>
 
             <label className="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 sm:col-span-2">
               <input type="checkbox" checked={trackBatch} onChange={(event) => setTrackBatch(event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-              <span><span className="block text-sm font-semibold text-slate-800">Track batch & expiry</span><span className="mt-0.5 block text-xs text-slate-500">Receiving will require a batch number and stock will use FEFO reservation.</span></span>
+              <span><span className="block text-sm font-semibold text-slate-800">Lacak batch dan kedaluwarsa</span><span className="mt-0.5 block text-xs text-slate-500">Penerimaan wajib mencatat nomor batch, dan reservasi stok menggunakan FEFO.</span></span>
             </label>
 
             {/* DESCRIPTION */}
@@ -462,7 +462,7 @@ export default function ProductFormModal({
                 htmlFor="p-description"
                 className={labelClass}
               >
-                Description
+                Deskripsi
               </label>
 
               <textarea
@@ -474,7 +474,7 @@ export default function ProductFormModal({
                 onChange={(e) =>
                   setDescription(e.target.value)
                 }
-                placeholder="Product details..."
+                placeholder="Detail produk..."
               />
             </div>
 
@@ -484,7 +484,7 @@ export default function ProductFormModal({
                 htmlFor="p-image"
                 className={labelClass}
               >
-                Image URL
+                URL gambar
               </label>
 
               <input
@@ -506,9 +506,8 @@ export default function ProductFormModal({
             options.units.length === 0
           ) && (
             <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Jika Brand atau Unit masih kosong,
-              isi master data melalui Prisma Studio.
-              Field ini sementara boleh kosong.
+              Jika merek atau satuan belum tersedia, tambahkan melalui menu data master.
+              Kolom ini boleh dikosongkan sementara.
             </p>
           )}
 
@@ -531,7 +530,7 @@ export default function ProductFormModal({
               disabled={saving}
               className="rounded-lg border border-slate-200 px-5 py-2.5 text-sm font-medium text-slate-700 disabled:opacity-50"
             >
-              Cancel
+              Batal
             </button>
 
             <button
@@ -551,8 +550,8 @@ export default function ProductFormModal({
               {saving
                 ? "Saving..."
                 : product
-                  ? "Update Product"
-                  : "Save Product"}
+                  ? "Perbarui produk"
+                  : "Simpan produk"}
             </button>
           </div>
         </form>

@@ -12,8 +12,11 @@ import {
   type FormEvent,
 } from "react";
 
-import { AlertCircle, CheckCircle2, Download, MapPin, Plus, RefreshCw, Search, Warehouse as WarehouseIcon, X } from "lucide-react";
+import { AlertCircle, Download, MapPin, Plus, RefreshCw, Search, Warehouse as WarehouseIcon, X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import DataPagination from "@/components/ui/DataPagination";
+import ActionFeedback from "@/components/ui/ActionFeedback";
+import { statusLabel } from "@/lib/ui-labels";
 
 import { usePagedMaster } from "@/hooks/usePagedMaster";
 import { useWarehouses } from "@/hooks/useWarehouses";
@@ -104,9 +107,9 @@ export default function WarehousesView() {
     setDownloadingId(warehouse.id);
     try {
       await warehouseService.downloadStockCountSheet(warehouse);
-      setNotice({ type: "success", message: `Stock-count PDF for ${warehouse.name} downloaded.` });
+      setNotice({ type: "success", message: `PDF lembar hitung stok untuk ${warehouse.name} berhasil diunduh.` });
     } catch (reason) {
-      setNotice({ type: "error", message: reason instanceof Error ? reason.message : "Failed to download PDF" });
+      setNotice({ type: "error", message: reason instanceof Error ? reason.message : "Gagal mengunduh PDF" });
     } finally {
       setDownloadingId(null);
     }
@@ -121,8 +124,6 @@ export default function WarehousesView() {
   const safePage = Math.min(page, totalPages);
   const startIndex = (safePage - 1) * pageSize;
   const visible = warehouses;
-  const showingFrom = total === 0 ? 0 : startIndex + 1;
-  const showingTo = Math.min(startIndex + pageSize, total);
 
   // ====================================
   // OPEN ADD MODAL
@@ -181,7 +182,7 @@ export default function WarehousesView() {
         message:
           err instanceof Error
             ? err.message
-            : "Failed to load warehouse details",
+            : "Gagal memuat rincian gudang",
       });
     } finally {
       setDetailLoading(false);
@@ -226,21 +227,21 @@ export default function WarehousesView() {
 
     if (!/^[A-Z0-9][A-Z0-9_-]{1,29}$/.test(cleanCode)) {
       setFormError(
-        "Warehouse code must contain 2–30 letters, numbers, - or _."
+        "Kode gudang harus terdiri dari 2–30 huruf, angka, tanda - atau _."
       );
       return;
     }
 
     if (cleanName.length < 2) {
       setFormError(
-        "Warehouse name must contain at least 2 characters."
+        "Nama gudang harus terdiri dari minimal 2 karakter."
       );
       return;
     }
 
     if (cleanAddress.length > 500) {
       setFormError(
-        "Address cannot exceed 500 characters."
+        "Alamat tidak boleh lebih dari 500 karakter."
       );
       return;
     }
@@ -260,14 +261,14 @@ export default function WarehousesView() {
 
         setNotice({
           type: "success",
-          message: `Warehouse "${cleanName}" updated successfully.`,
+          message: `Gudang "${cleanName}" berhasil diperbarui.`,
         });
       } else {
         await createWarehouse(payload);
 
         setNotice({
           type: "success",
-          message: `Warehouse "${cleanName}" created successfully.`,
+          message: `Gudang "${cleanName}" berhasil ditambahkan.`,
         });
       }
 
@@ -279,7 +280,7 @@ export default function WarehousesView() {
       setFormError(
         err instanceof Error
           ? err.message
-          : "Failed to save warehouse"
+          : "Gagal menyimpan data gudang"
       );
     }
   }
@@ -306,7 +307,7 @@ export default function WarehousesView() {
 
       setNotice({
         type: "success",
-        message: `Warehouse "${warehouse.name}" deactivated successfully.`,
+        message: `Warehouse "${warehouse.name}" berhasil dinonaktifkan.`,
       });
     } catch (err) {
       setNotice({
@@ -314,7 +315,7 @@ export default function WarehousesView() {
         message:
           err instanceof Error
             ? err.message
-            : "Failed to deactivate warehouse",
+            : "Gagal menonaktifkan gudang",
       });
     }
   }
@@ -326,59 +327,15 @@ export default function WarehousesView() {
   return (
     <div className="space-y-4">
       {/* NOTICE */}
-      {notice && (
-        <div
-          role="status"
-          className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm ${
-            notice.type === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : "border-red-200 bg-red-50 text-red-700"
-          }`}
-        >
-          {notice.type === "success" ? (
-            <CheckCircle2 size={18} />
-          ) : (
-            <AlertCircle size={18} />
-          )}
-
-          <span className="flex-1">
-            {notice.message}
-          </span>
-
-          <button
-            type="button"
-            aria-label="Dismiss notification"
-            onClick={() => setNotice(null)}
-          >
-            <X size={16} />
-          </button>
-        </div>
-      )}
+      {notice && <ActionFeedback message={notice.message} tone={notice.type} onDismiss={() => setNotice(null)} />}
 
       {/* API ERROR */}
-      {error && (
-        <div
-          role="alert"
-          className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-        >
-          <AlertCircle size={18} />
-
-          <span className="flex-1">{error}</span>
-
-          <button
-            type="button"
-            onClick={() => void fetchWarehouses()}
-            className="font-semibold underline"
-          >
-            Retry
-          </button>
-        </div>
-      )}
+      {error && <ActionFeedback message={error} tone="error" action={{ label: "Coba lagi", onClick: () => void fetchWarehouses() }} />}
 
       <div className="grid gap-3 md:grid-cols-[1.3fr_1fr_1fr]">
-        <div className="relative overflow-hidden rounded-2xl bg-slate-900 p-5 text-white shadow-sm"><div className="absolute -right-8 -top-10 h-28 w-28 rounded-full border-[18px] border-cyan-400/20" /><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300">Storage network</p><p className="mt-2 text-2xl font-bold">{total} locations</p><p className="mt-1 text-xs text-slate-400">Download a stock-count PDF from any warehouse row.</p></div>
-        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-5 dark:border-emerald-900 dark:bg-emerald-950/30"><p className="text-xs font-semibold text-emerald-700">Active locations</p><p className="mt-2 text-2xl font-bold text-slate-900">{warehouses.filter((warehouse) => warehouse.isActive).length}</p></div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-xs font-semibold text-slate-500">Inactive locations</p><p className="mt-2 text-2xl font-bold text-slate-900">{warehouses.filter((warehouse) => !warehouse.isActive).length}</p></div>
+        <div className="relative overflow-hidden rounded-2xl bg-slate-900 p-5 text-white shadow-sm"><div className="absolute -right-8 -top-10 h-28 w-28 rounded-full border-[18px] border-cyan-400/20" /><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300">Jaringan gudang</p><p className="mt-2 text-2xl font-bold">{total} gudang</p><p className="mt-1 text-xs text-slate-400">Unduh PDF hitung stok dari baris gudang.</p></div>
+        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-5 dark:border-emerald-900 dark:bg-emerald-950/30"><p className="text-xs font-semibold text-emerald-700">Gudang aktif</p><p className="mt-2 text-2xl font-bold text-slate-900">{warehouses.filter((warehouse) => warehouse.isActive).length}</p></div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-xs font-semibold text-slate-500">Gudang tidak aktif</p><p className="mt-2 text-2xl font-bold text-slate-900">{warehouses.filter((warehouse) => !warehouse.isActive).length}</p></div>
       </div>
 
       {/* MAIN CARD */}
@@ -387,11 +344,11 @@ export default function WarehousesView() {
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-5 py-5 sm:px-7">
           <div>
             <h2 className="text-lg font-bold text-[#182237]">
-              All Warehouses
+              Semua gudang
             </h2>
 
             <p className="mt-1 text-xs text-slate-400">
-              Manage warehouse master data and storage locations
+              Kelola data gudang dan lokasi penyimpanan
             </p>
           </div>
 
@@ -400,8 +357,8 @@ export default function WarehousesView() {
               type="button"
               disabled={loading}
               onClick={() => void fetchWarehouses()}
-              title="Refresh warehouses"
-              aria-label="Refresh warehouses"
+              title="Muat ulang gudang"
+              aria-label="Muat ulang gudang"
               className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50"
             >
               <RefreshCw
@@ -416,39 +373,19 @@ export default function WarehousesView() {
               className="inline-flex items-center gap-2 rounded-full bg-[#3867f6] px-4 py-2.5 text-xs font-semibold text-white hover:bg-blue-700"
             >
               <Plus size={17} />
-              Add Warehouse
+              Tambah gudang
             </button>}
           </div>
         </div>
 
         {/* TOOLBAR */}
         <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-5 sm:px-7">
-          <div className="flex items-center gap-2 text-xs text-slate-600">
-            Show
-
-            <GlobalSelect
-              aria-label="Entries per page"
-              value={pageSize}
-              onChange={(event) => {
-                setPageSize(Number(event.target.value));
-                setPage(1);
-              }}
-              className="rounded-md border border-slate-200 bg-white px-2 py-2"
-            >
-              <option value={10}>10</option>
-              <option value={25}>25</option>
-              <option value={50}>50</option>
-            </GlobalSelect>
-
-            entries
-          </div>
-
           <div className="flex items-center gap-2">
             <label
               htmlFor="warehouse-search"
               className="text-xs text-slate-600"
             >
-              Search:
+              Cari:
             </label>
 
             <div className="relative">
@@ -465,26 +402,38 @@ export default function WarehousesView() {
                   setSearch(event.target.value);
                   setPage(1);
                 }}
-                placeholder="Code, name, address..."
+                placeholder="Kode, nama, atau alamat..."
                 className="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-xs outline-none focus:border-blue-500"
               />
             </div>
           </div>
         </div>
 
-        {/* TABLE */}
-        <div className="overflow-x-auto px-5 sm:px-7">
+        {/* KARTU UNTUK LAYAR KECIL */}
+        <div className="divide-y divide-slate-100 px-5 md:hidden">
+          {loading && <div className="py-8 text-center text-sm text-slate-500"><GlobalLoading label="Memuat gudang..." /></div>}
+          {!loading && visible.map((warehouse, index) => <article key={warehouse.id} className="space-y-3 py-4">
+            <div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><WarehouseIcon size={18} /></span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><h3 className="truncate font-bold text-slate-900">{warehouse.name}</h3><span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${warehouse.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{statusLabel(warehouse.isActive ? "ACTIVE" : "INACTIVE")}</span></div><p className="mt-1 font-mono text-xs text-blue-600">{warehouse.code}</p></div></div>
+            <div className="rounded-xl bg-slate-50 p-3 text-xs"><p className="text-slate-400">Alamat</p><p className="mt-1 text-slate-700">{warehouse.address || "—"}</p><p className="mt-3 text-slate-400">Dibuat</p><p className="mt-1 text-slate-700">{formatDate(warehouse.createdAt)}</p></div>
+            <div className="flex items-center justify-between text-xs text-slate-400"><span>#{startIndex + index + 1}</span></div>
+            <div data-sf-action-column className="flex flex-wrap gap-2 border-t border-slate-100 pt-3"><button type="button" disabled={detailLoading} onClick={() => void openDetail(warehouse.id)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50">Lihat</button><button type="button" disabled={downloadingId === warehouse.id} onClick={() => void downloadSheet(warehouse)} className="rounded-lg bg-violet-100 px-3 py-2 text-xs font-semibold text-violet-800 disabled:opacity-50">{downloadingId === warehouse.id ? "Menyiapkan PDF..." : "Unduh lembar opname"}</button>{canWrite && <button type="button" disabled={saving} onClick={() => openEdit(warehouse)} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Ubah</button>}{canWrite && <button type="button" disabled={saving || !warehouse.isActive} onClick={() => void handleDeactivate(warehouse)} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Nonaktifkan</button>}</div>
+          </article>)}
+          {!loading && visible.length === 0 && <p className="py-10 text-center text-sm text-slate-500">{search ? "Tidak ada gudang yang cocok." : "Belum ada gudang."}</p>}
+        </div>
+
+        {/* TABEL DESKTOP */}
+        <div className="hidden overflow-x-auto px-5 sm:px-7 md:block">
           <table className="w-full min-w-[850px] text-left text-xs">
             <thead>
               <tr className="border-b-2 border-slate-200 text-slate-700">
                 {[
                   "No.",
-                  "Code",
-                  "Warehouse Name",
-                  "Address",
+                  "Kode",
+                  "Nama gudang",
+                  "Alamat",
                   "Status",
-                  "Created",
-                  "Action",
+                  "Dibuat",
+                  "Aksi",
                 ].map((heading) => (
                   <th
                     key={heading}
@@ -549,8 +498,8 @@ export default function WarehousesView() {
                         }`}
                       >
                         {warehouse.isActive
-                          ? "Active"
-                          : "Inactive"}
+                          ? "Aktif"
+                          : "Tidak aktif"}
                       </span>
                     </td>
 
@@ -567,19 +516,19 @@ export default function WarehousesView() {
                         onClick={() =>
                           void openDetail(warehouse.id)
                         }
-                        title="View Details"
-                        aria-label={`View ${warehouse.name}`}
+                        title="Lihat rincian"
+                        aria-label={`Lihat ${warehouse.name}`}
                         className="mr-2 inline-flex items-center gap-1 rounded-md bg-slate-100 px-3 py-2 font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-50"
                       >
                         <Eye size={13} />
-                        View
+                        Lihat
                       </button>
 
                       <button
                         type="button"
                         disabled={downloadingId === warehouse.id}
                         onClick={() => void downloadSheet(warehouse)}
-                        title="Download physical stock-count PDF"
+                        title="Unduh lembar hitung stok fisik (PDF)"
                         className="mr-2 inline-flex items-center gap-1 rounded-md bg-violet-50 px-3 py-2 font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-50"
                       >
                         {downloadingId === warehouse.id ? <LoaderCircle size={13} className="animate-spin" /> : <Download size={13} />}
@@ -593,7 +542,7 @@ export default function WarehousesView() {
                         className="mr-2 inline-flex items-center gap-1 rounded-md bg-[#159fe2] px-3 py-2 font-semibold text-white disabled:opacity-50"
                       >
                         <Pencil size={13} />
-                        Edit
+                        Ubah
                       </button>}
 
                       {canWrite && <button
@@ -602,8 +551,8 @@ export default function WarehousesView() {
                         onClick={() =>
                           void handleDeactivate(warehouse)
                         }
-                        title="Deactivate Warehouse"
-                        aria-label={`Deactivate ${warehouse.name}`}
+                        title="Nonaktifkan gudang"
+                        aria-label={`Nonaktifkan ${warehouse.name}`}
                         className="inline-flex items-center gap-1 rounded-md bg-red-500 px-2.5 py-2 font-semibold text-white disabled:opacity-35"
                       >
                         <Trash2 size={13} />
@@ -617,7 +566,7 @@ export default function WarehousesView() {
           {/* LOADING */}
           {loading && (
             <div className="flex items-center justify-center gap-2 py-14 text-sm text-slate-500">
-              <GlobalLoading label="Loading warehouses..." />
+              <GlobalLoading label="Memuat gudang..." />
             </div>
           )}
 
@@ -631,14 +580,14 @@ export default function WarehousesView() {
 
               <p className="mt-3 text-sm font-semibold text-slate-700">
                 {search
-                  ? "No matching warehouses"
-                  : "No warehouses found"}
+                  ? "Tidak ada gudang yang cocok"
+                  : "Belum ada gudang"}
               </p>
 
               <p className="mt-1 text-xs text-slate-400">
                 {search
-                  ? "Try another search keyword."
-                  : "Add your first warehouse to get started."}
+                  ? "Coba kata kunci pencarian lain."
+                  : "Tambahkan gudang pertama untuk memulai."}
               </p>
 
               {!search && canWrite && (
@@ -647,46 +596,14 @@ export default function WarehousesView() {
                   onClick={openAdd}
                   className="mt-5 rounded-lg bg-[#3867f6] px-4 py-2.5 text-xs font-semibold text-white"
                 >
-                  Add First Warehouse
+                  Tambah gudang pertama
                 </button>
               )}
             </div>
           )}
         </div>
 
-        {/* PAGINATION */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-5 text-xs text-slate-500 sm:px-7">
-          <p>
-            Showing {showingFrom} to {showingTo} of{" "}
-            {total} entries
-          </p>
-
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              disabled={safePage <= 1}
-              onClick={() => setPage(safePage - 1)}
-              className="disabled:opacity-35"
-            >
-              Previous
-            </button>
-
-            <span className="rounded-md bg-sky-500 px-3 py-2 font-bold text-white">
-              {safePage}
-            </span>
-
-            <span>/ {totalPages}</span>
-
-            <button
-              type="button"
-              disabled={safePage >= totalPages}
-              onClick={() => setPage(safePage + 1)}
-              className="disabled:opacity-35"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        <DataPagination page={safePage} pageSize={pageSize} total={total} totalPages={totalPages} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} loading={loading} noun="gudang" />
       </section>
 
       {/* ================================= */}
@@ -716,14 +633,14 @@ export default function WarehousesView() {
                   className="text-lg font-bold text-slate-900"
                 >
                   {editing
-                    ? "Edit Warehouse"
-                    : "Add New Warehouse"}
+                    ? "Ubah gudang"
+                    : "Tambah gudang baru"}
                 </h2>
 
                 <p className="mt-1 text-xs text-slate-400">
                   {editing
-                    ? "Update warehouse information."
-                    : "Register a new storage location."}
+                    ? "Perbarui informasi gudang."
+                    : "Daftarkan gudang dan lokasi penyimpanannya."}
                 </p>
               </div>
 
@@ -731,7 +648,7 @@ export default function WarehousesView() {
                 type="button"
                 disabled={saving}
                 onClick={closeModal}
-                aria-label="Close modal"
+                aria-label="Tutup dialog"
                 className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 disabled:opacity-50"
               >
                 <X size={19} />
@@ -750,7 +667,7 @@ export default function WarehousesView() {
                   htmlFor="warehouse-code"
                   className={labelClass}
                 >
-                  Warehouse Code *
+                  Kode gudang *
                 </label>
 
                 <input
@@ -764,7 +681,7 @@ export default function WarehousesView() {
                   maxLength={30}
                   required
                   autoFocus
-                  placeholder="e.g. WH-JKT"
+                  placeholder="misalnya WH-JKT"
                   className={inputClass}
                 />
               </div>
@@ -775,7 +692,7 @@ export default function WarehousesView() {
                   htmlFor="warehouse-name"
                   className={labelClass}
                 >
-                  Warehouse Name *
+                  Nama gudang *
                 </label>
 
                 <input
@@ -788,7 +705,7 @@ export default function WarehousesView() {
                   }
                   maxLength={120}
                   required
-                  placeholder="e.g. Jakarta Main Warehouse"
+                  placeholder="misalnya Gudang Utama Jakarta"
                   className={inputClass}
                 />
               </div>
@@ -799,7 +716,7 @@ export default function WarehousesView() {
                   htmlFor="warehouse-address"
                   className={labelClass}
                 >
-                  Warehouse Address
+                  Alamat gudang
                 </label>
 
                 <textarea
@@ -811,7 +728,7 @@ export default function WarehousesView() {
                   }
                   maxLength={500}
                   rows={3}
-                  placeholder="Enter warehouse address..."
+                  placeholder="Masukkan alamat gudang..."
                   className={inputClass}
                 />
               </div>
@@ -836,11 +753,11 @@ export default function WarehousesView() {
                   className={inputClass}
                 >
                   <option value="active">
-                    Active
+                    Aktif
                   </option>
 
                   <option value="inactive">
-                    Inactive
+                    Tidak aktif
                   </option>
                 </GlobalSelect>
               </div>
@@ -864,7 +781,7 @@ export default function WarehousesView() {
                   onClick={closeModal}
                   className="rounded-lg border border-slate-200 px-5 py-2.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
                 >
-                  Cancel
+                  Batal
                 </button>
 
                 <button
@@ -884,10 +801,10 @@ export default function WarehousesView() {
                   )}
 
                   {saving
-                    ? "Saving..."
+                    ? "Menyimpan..."
                     : editing
-                      ? "Update Warehouse"
-                      : "Save Warehouse"}
+                      ? "Perbarui gudang"
+                      : "Simpan gudang"}
                 </button>
               </div>
             </form>
@@ -920,18 +837,18 @@ export default function WarehousesView() {
                   id="warehouse-detail-title"
                   className="text-lg font-bold text-slate-900"
                 >
-                  Warehouse Details
+                  Rincian gudang
                 </h2>
 
                 <p className="mt-1 text-xs text-slate-400">
-                  Read-only warehouse information
+                  Informasi gudang hanya untuk dilihat
                 </p>
               </div>
 
               <button
                 type="button"
                 onClick={() => setViewing(null)}
-                aria-label="Close details"
+                aria-label="Tutup rincian"
                 className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
               >
                 <X size={19} />
@@ -940,19 +857,19 @@ export default function WarehousesView() {
 
             <div className="space-y-4 p-6 text-sm">
               {[
-                ["Warehouse Code", viewing.code],
-                ["Warehouse Name", viewing.name],
-                ["Address", viewing.address || "—"],
+                ["Kode gudang", viewing.code],
+                ["Nama gudang", viewing.name],
+                ["Alamat", viewing.address || "—"],
                 [
                   "Status",
-                  viewing.isActive ? "Active" : "Inactive",
+                  statusLabel(viewing.isActive ? "ACTIVE" : "INACTIVE"),
                 ],
                 [
-                  "Created At",
+                  "Dibuat pada",
                   new Date(viewing.createdAt).toLocaleString("id-ID"),
                 ],
                 [
-                  "Updated At",
+                  "Diperbarui pada",
                   new Date(viewing.updatedAt).toLocaleString("id-ID"),
                 ],
               ].map(([label, value]) => (
@@ -979,7 +896,7 @@ export default function WarehousesView() {
                   onClick={() => setViewing(null)}
                   className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700"
                 >
-                  Close
+                  Tutup
                 </button>
 
                 {canWrite && <button
@@ -992,7 +909,7 @@ export default function WarehousesView() {
                   className="inline-flex items-center gap-2 rounded-lg bg-[#3867f6] px-4 py-2 text-xs font-semibold text-white"
                 >
                   <Pencil size={14} />
-                  Edit Warehouse
+                  Ubah gudang
                 </button>}
               </div>
             </div>

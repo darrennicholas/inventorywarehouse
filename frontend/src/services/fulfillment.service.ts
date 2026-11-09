@@ -4,12 +4,12 @@ import type { FulfillmentRecord, FulfillmentSale, FulfillmentStatus } from "@/ty
 type ListResponse = { success: boolean; data: FulfillmentRecord[]; total: number; page: number; pageSize: number };
 
 export const fulfillmentService = {
-  list(params: { status?: FulfillmentStatus; search?: string; page?: number } = {}) {
+  list(params: { status?: FulfillmentStatus; search?: string; page?: number; pageSize?: number } = {}) {
     const query = new URLSearchParams();
     if (params.status) query.set("status", params.status);
     if (params.search) query.set("search", params.search);
     query.set("page", String(params.page ?? 1));
-    query.set("pageSize", "20");
+    query.set("pageSize", String(params.pageSize ?? 20));
     return apiRequest<ListResponse>(`/api/fulfillment?${query.toString()}`);
   },
 

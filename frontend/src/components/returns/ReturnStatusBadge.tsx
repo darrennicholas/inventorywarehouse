@@ -1,5 +1,6 @@
 
 import type { ReturnStatus } from "@/types/returns";
+import { statusLabel } from "@/lib/ui-labels";
 
 const colors: Record<ReturnStatus, string> = {
   DRAFT: "bg-slate-100 text-slate-700",
@@ -18,7 +19,7 @@ export default function ReturnStatusBadge({
     <span
       className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${colors[status]}`}
     >
-      {status}
+      {statusLabel(status)}
     </span>
   );
 }
