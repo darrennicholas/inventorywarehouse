@@ -4,7 +4,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
-  --font-sans: Inter, "Segoe UI Variable", "Segoe UI", Arial, sans-serif;
+  --font-sans: "Segoe UI Variable", "Segoe UI", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
   --font-serif: Georgia, "Times New Roman", serif;
 }
@@ -68,6 +68,8 @@ select:not([multiple]) {
   background-repeat: no-repeat;
   background-size: 1rem;
   color: #19325b;
+  font-weight: 500;
+  letter-spacing: -.01em;
   min-height: 2.5rem;
   padding-right: 2.6rem;
   box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
@@ -125,7 +127,7 @@ body {
   background: var(--background);
   color: var(--foreground);
 
-  font-family: Inter, "Segoe UI Variable", "Segoe UI", Arial, sans-serif;
+  font-family: "Segoe UI Variable", "Segoe UI", Arial, sans-serif;
   font-kerning: normal;
   font-optical-sizing: auto;
   font-feature-settings: "kern" 1, "liga" 1;
@@ -261,8 +263,19 @@ html.dark aside p {
 
 button:not(:disabled) {
   cursor: pointer;
-  font-family: inherit;
+  font-family: var(--font-sans);
   transition: filter 180ms ease, box-shadow 180ms ease, background-color 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+/* Keep form controls and toolbar actions on the same readable UI font. */
+button,
+input,
+select,
+textarea,
+option {
+  font-family: var(--font-sans);
+  font-kerning: normal;
+  font-feature-settings: "kern" 1, "liga" 1;
 }
 
 @media (hover: hover) {
