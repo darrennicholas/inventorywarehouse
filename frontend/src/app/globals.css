@@ -4,9 +4,9 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
-  --font-sans: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
-  --font-serif: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-sans: Inter, "Segoe UI Variable", "Segoe UI", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  --font-serif: Georgia, "Times New Roman", serif;
 }
 
 /* Edge adds its own password reveal button; the form has an accessible toggle. */
@@ -119,7 +119,10 @@ body {
   background: var(--background);
   color: var(--foreground);
 
-  font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  font-family: Inter, "Segoe UI Variable", "Segoe UI", Arial, sans-serif;
+  font-kerning: normal;
+  font-optical-sizing: auto;
+  font-feature-settings: "kern" 1, "liga" 1;
 
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -252,18 +255,20 @@ html.dark aside p {
 
 button:not(:disabled) {
   cursor: pointer;
-  transition: filter 180ms ease, box-shadow 180ms ease, background-color 180ms ease, border-color 180ms ease;
+  font-family: inherit;
+  transition: filter 180ms ease, box-shadow 180ms ease, background-color 180ms ease, border-color 180ms ease, transform 180ms ease;
 }
 
 @media (hover: hover) {
   button:not(:disabled):hover {
-    filter: brightness(1.06);
-    box-shadow: 0 5px 16px rgb(37 99 235 / 16%);
+    filter: brightness(1.04);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 22px rgb(37 99 235 / 18%), 0 0 0 1px rgb(59 130 246 / 16%);
   }
-  html.dark button:not(:disabled):hover { box-shadow: 0 5px 18px rgb(59 130 246 / 24%); }
+  html.dark button:not(:disabled):hover { box-shadow: 0 10px 22px rgb(0 0 0 / 34%), 0 0 0 1px rgb(96 165 250 / 28%); }
 }
-button:not(:disabled):active { filter: brightness(.96); }
-button:focus-visible { outline: 2px solid #60a5fa; outline-offset: 3px; }
+button:not(:disabled):active { filter: brightness(.97); transform: translateY(0) scale(.98); }
+button:focus-visible { outline: 2px solid #3b82f6; outline-offset: 3px; box-shadow: 0 0 0 5px rgb(59 130 246 / 14%); }
 @media (prefers-reduced-motion: reduce) {
   button:not(:disabled) { transition-duration: 0.01ms; }
 }
@@ -272,26 +277,26 @@ button:disabled {
   cursor: not-allowed;
 }
 
-/* Keep solid white utility buttons on-brand across every menu and role. */
-html:not(.dark) button[class~="bg-white"] {
+/* Replace white button surfaces with the StockFlow blue-tint surface everywhere. */
+html:not(.dark) button:is([class~="bg-white"], [class*=" bg-white/"], [class^="bg-white/"]) {
   color: #2347a8 !important;
   background-color: #eaf1ff !important;
-  border-color: #cbdcff;
+  border-color: #cbdcff !important;
 }
-html:not(.dark) button[class~="bg-white"]:hover:not(:disabled) {
+html:not(.dark) button:is([class~="bg-white"], [class*=" bg-white/"], [class^="bg-white/"], [class~="hover:bg-white"]):hover:not(:disabled) {
   color: #173b9b !important;
   background-color: #dbe8ff !important;
-  border-color: #a9c4ff;
+  border-color: #a9c4ff !important;
 }
-html.dark button[class~="bg-white"] {
+html.dark button:is([class~="bg-white"], [class*=" bg-white/"], [class^="bg-white/"], [class~="dark:bg-white"]) {
   color: #dbeafe !important;
   background-color: #1e3a63 !important;
-  border-color: #365681;
+  border-color: #365681 !important;
 }
-html.dark button[class~="bg-white"]:hover:not(:disabled) {
+html.dark button:is([class~="bg-white"], [class*=" bg-white/"], [class^="bg-white/"], [class~="dark:bg-white"], [class~="dark:hover:bg-white"]):hover:not(:disabled) {
   color: #eff6ff !important;
   background-color: #284b7c !important;
-  border-color: #4d72a3;
+  border-color: #4d72a3 !important;
 }
 
 button[data-sf-action-loading="true"] {
