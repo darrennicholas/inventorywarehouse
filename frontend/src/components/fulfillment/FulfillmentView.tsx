@@ -168,7 +168,7 @@ export default function FulfillmentView({ target = null }: { target?: Notificati
                 <th className="px-5 py-3 font-semibold">Progres</th>
                 <th className="px-5 py-3 font-semibold">Kurir / resi</th>
                 <th className="px-5 py-3 font-semibold">Status</th>
-                <th className="px-5 py-3 text-right font-semibold">Aksi</th>
+                <th className="w-[170px] px-5 py-3 text-right font-semibold">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -202,14 +202,14 @@ export default function FulfillmentView({ target = null }: { target?: Notificati
                       {row.trackingNumber ? <><p className="font-semibold text-slate-700">{row.courier ?? "Kurir"}</p><p className="mt-1 break-all text-blue-700">{row.trackingNumber}</p></> : <span className="text-slate-400">Belum dikirim</span>}
                     </td>
                     <td className="whitespace-nowrap px-5 py-4"><span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${statusStyle[row.status]}`}>{statusLabel(row.status)}</span></td>
-                    <td data-sf-action-column className="px-5 py-4 text-right">
-                      <div className="flex min-w-[190px] flex-wrap justify-end gap-2">
-                        {row.status === "PICKING" && canPick && <button type="button" disabled={Boolean(working)} onClick={() => void act(row, "pick")} className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><PackageCheck size={14} /> Ambil semua</button>}
-                        {row.status === "PICKING" && canPack && <button type="button" disabled={Boolean(working)} onClick={() => void act(row, "pack")} className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><ClipboardCheck size={14} /> Kemas</button>}
-                        {row.status === "PACKED" && canShip && <button type="button" disabled={Boolean(working)} onClick={() => { setShippingId(row.id); setShippingAddress(row.shippingAddress ?? ""); }} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><Send size={14} /> Kirim</button>}
-                        {row.status === "SHIPPED" && canWrite && <button type="button" disabled={Boolean(working)} onClick={() => void act(row, "complete")} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><Check size={14} /> Selesaikan</button>}
-                        {["PICKING", "PACKED"].includes(row.status) && canWrite && <button type="button" disabled={Boolean(working)} onClick={() => void act(row, "cancel")} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 disabled:opacity-50"><X size={14} /> Batalkan</button>}
-                        {!hasAction && <span className="px-2 py-2 text-xs text-slate-400">—</span>}
+                    <td data-sf-action-column className="w-[170px] px-5 py-4 text-right align-middle">
+                      <div className="flex items-center justify-end gap-2">
+                        {row.status === "PICKING" && canPick && <button type="button" aria-label={`Ambil semua barang untuk ${row.number}`} title="Ambil semua" disabled={Boolean(working)} onClick={() => void act(row, "pick")} className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm transition hover:bg-amber-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 disabled:opacity-50"><PackageCheck size={16} /></button>}
+                        {row.status === "PICKING" && canPack && <button type="button" aria-label={`Kemas pengiriman ${row.number}`} title="Kemas" disabled={Boolean(working)} onClick={() => void act(row, "pack")} className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-violet-600 text-white shadow-sm transition hover:bg-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 disabled:opacity-50"><ClipboardCheck size={16} /></button>}
+                        {row.status === "PACKED" && canShip && <button type="button" aria-label={`Kirim pengiriman ${row.number}`} title="Kirim" disabled={Boolean(working)} onClick={() => { setShippingId(row.id); setShippingAddress(row.shippingAddress ?? ""); }} className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 disabled:opacity-50"><Send size={16} /></button>}
+                        {row.status === "SHIPPED" && canWrite && <button type="button" aria-label={`Selesaikan pengiriman ${row.number}`} title="Selesaikan" disabled={Boolean(working)} onClick={() => void act(row, "complete")} className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 disabled:opacity-50"><Check size={16} /></button>}
+                        {["PICKING", "PACKED"].includes(row.status) && canWrite && <button type="button" aria-label={`Batalkan pengiriman ${row.number}`} title="Batalkan" disabled={Boolean(working)} onClick={() => void act(row, "cancel")} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-rose-700 shadow-sm transition hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:ring-offset-2 disabled:opacity-50"><X size={16} /></button>}
+                        {!hasAction && <span className="inline-block w-9 text-center text-xs text-slate-400">—</span>}
                       </div>
                     </td>
                   </tr>
