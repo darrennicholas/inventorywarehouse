@@ -279,24 +279,24 @@ button:disabled {
 
 /* Replace white button surfaces with the StockFlow blue-tint surface everywhere. */
 html:not(.dark) button:is([class~="bg-white"], [class*=" bg-white/"], [class^="bg-white/"]) {
-  color: #2347a8 !important;
-  background-color: #eaf1ff !important;
-  border-color: #cbdcff !important;
+  color: #173b8f !important;
+  background-color: #bfd4ff !important;
+  border-color: #9ebcff !important;
 }
 html:not(.dark) button:is([class~="bg-white"], [class*=" bg-white/"], [class^="bg-white/"], [class~="hover:bg-white"]):hover:not(:disabled) {
-  color: #173b9b !important;
-  background-color: #dbe8ff !important;
-  border-color: #a9c4ff !important;
+  color: #102d73 !important;
+  background-color: #9fbeff !important;
+  border-color: #7fa6f8 !important;
 }
 html.dark button:is([class~="bg-white"], [class*=" bg-white/"], [class^="bg-white/"], [class~="dark:bg-white"]) {
   color: #dbeafe !important;
-  background-color: #1e3a63 !important;
-  border-color: #365681 !important;
+  background-color: #254b7f !important;
+  border-color: #3e689f !important;
 }
 html.dark button:is([class~="bg-white"], [class*=" bg-white/"], [class^="bg-white/"], [class~="dark:bg-white"], [class~="dark:hover:bg-white"]):hover:not(:disabled) {
   color: #eff6ff !important;
-  background-color: #284b7c !important;
-  border-color: #4d72a3 !important;
+  background-color: #3264a4 !important;
+  border-color: #5e8fd1 !important;
 }
 
 button[data-sf-action-loading="true"] {
