@@ -3,7 +3,7 @@
 
 import GlobalLoading from "@/components/ui/GlobalLoading";
 import { clearActionIntent } from "@/lib/action-intent";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import {
   AlertCircle,
@@ -58,7 +58,6 @@ import StockOpnamesView from "@/components/stock-opnames/StockOpnamesView";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useTheme } from "@/components/theme/ThemeProvider";
-import { apiRequest } from "@/lib/api";
 import type { NotificationDestination, NotificationTarget } from "@/types/notification";
 
 import { useProducts } from "@/hooks/useProducts";
@@ -95,14 +94,6 @@ type MenuItem = {
   icon: LucideIcon;
   page: Page | null;
   permission?: string;
-};
-
-type DashboardMasterRow = {
-  id: string;
-  name: string;
-  code?: string;
-  isActive: boolean;
-  createdAt: string;
 };
 
 // ==========================================
@@ -354,76 +345,18 @@ export default function Home() {
   // PRODUCT DATA
   // ====================================
 
-  const productsStore = useProducts(can("products.read") && activePage === "dashboard");
+  // Product lists load in ProductsView; the chart-only dashboard has its own scoped summary request.
+  const productsStore = useProducts(false);
 
   const {
     products,
     loading,
-    error,
     fetchProducts,
   } = productsStore;
 
   const uniqueSKU = new Set(
     products.map((product) => product.sku)
   ).size;
-
-  const [categories, setCategories] =
-    useState<DashboardMasterRow[]>([]);
-  const [brands, setBrands] =
-    useState<DashboardMasterRow[]>([]);
-  const [units, setUnits] =
-    useState<DashboardMasterRow[]>([]);
-  const [masterLoading, setMasterLoading] =
-    useState(true);
-  useEffect(() => {
-    const controller = new AbortController();
-
-    void Promise.resolve().then(async () => {
-      setMasterLoading(true);
-
-      try {
-        const [categoryResponse, brandResponse, unitResponse] =
-          await Promise.all([
-            can("categories.read")
-              ? apiRequest<{ data?: DashboardMasterRow[] }>(
-                  "/api/categories?page=1&pageSize=1",
-                  { signal: controller.signal }
-                )
-              : Promise.resolve(null),
-            can("brands.read")
-              ? apiRequest<{ data?: DashboardMasterRow[] }>(
-                  "/api/brands?page=1&pageSize=1",
-                  { signal: controller.signal }
-                )
-              : Promise.resolve(null),
-            can("units.read")
-              ? apiRequest<{ data?: DashboardMasterRow[] }>(
-                  "/api/units?page=1&pageSize=1",
-                  { signal: controller.signal }
-                )
-              : Promise.resolve(null),
-          ]);
-
-        if (!controller.signal.aborted) {
-          setCategories(categoryResponse?.data ?? []);
-          setBrands(brandResponse?.data ?? []);
-          setUnits(unitResponse?.data ?? []);
-        }
-      } catch {
-        if (!controller.signal.aborted) {
-          setCategories([]);
-          setBrands([]);
-          setUnits([]);
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setMasterLoading(false);
-        }
-      }
-    });
-
-    return () => controller.abort();
-  }, [can]);
 
   // ====================================
   // ACTIVE PRODUCT SECTION
@@ -937,36 +870,14 @@ export default function Home() {
         {/* MAIN BODY */}
         {/* ================================= */}
 
-        <main className="mx-auto max-w-[1530px] space-y-6 px-4 py-7 sm:px-7 lg:px-9">
-          {/* DASHBOARD API ERROR */}
-          {error &&
-            activePage === "dashboard" && (
-              <div
-                role="alert"
-                className="rounded-xl bg-red-50 p-4 text-sm text-red-700"
-              >
-                Failed to load products:{" "}
-                {error}
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    void fetchProducts()
-                  }
-                  className="ml-3 font-semibold underline"
-                >
-                  Retry
-                </button>
-              </div>
-            )}
-
+        <main className="mx-auto max-w-[1440px] space-y-5 px-4 py-6 sm:px-6 lg:px-7">
           {activePage !== "dashboard" &&
             !can(activePermission) && (
               <div
                 role="alert"
                 className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800"
               >
-                Access Denied: you do not have permission to view this module.
+                Akses ditolak: role Anda tidak memiliki izin untuk melihat menu ini.
               </div>
             )}
 
@@ -1061,17 +972,7 @@ export default function Home() {
           {/* ================================= */}
 
           {activePage === "dashboard" && (
-            <DashboardView
-              products={products}
-              categories={categories}
-              brands={brands}
-              units={units}
-              summary={null}
-              loading={loading}
-              masterLoading={masterLoading}
-              onNavigate={navigate}
-              onOpenAttention={openNotification}
-            />
+            <DashboardView />
           )}
 
           {false && activePage === "dashboard" && (
