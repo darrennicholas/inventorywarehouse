@@ -94,6 +94,8 @@ type MenuItem = {
   icon: LucideIcon;
   page: Page | null;
   permission?: string;
+  permissions?: string[];
+  fallbackPage?: Page;
 };
 
 // ==========================================
@@ -102,25 +104,25 @@ type MenuItem = {
 
 const productSubmenus: MenuItem[] = [
   {
-    label: "Categories",
+    label: "Kategori",
     icon: Tag,
     page: "categories",
     permission: "categories.read",
   },
   {
-    label: "Brands",
+    label: "Merek",
     icon: Boxes,
     page: "brands",
     permission: "brands.read",
   },
   {
-    label: "Units",
+    label: "Satuan",
     icon: Ruler,
     page: "units",
     permission: "units.read",
   },
   {
-    label: "Products",
+    label: "Produk",
     icon: Package,
     page: "products",
     permission: "products.read",
@@ -131,102 +133,64 @@ const productSubmenus: MenuItem[] = [
 // OTHER SIDEBAR MENUS
 // ==========================================
 
-const otherMenus: MenuItem[] = [
+type MenuGroupKey = "partners" | "operations" | "finance" | "inventory";
+
+type MenuGroup = {
+  key: MenuGroupKey;
+  label: string;
+  icon: LucideIcon;
+  items: MenuItem[];
+};
+
+const otherMenuGroups: MenuGroup[] = [
   {
-    label: "Warehouse",
-    icon: Warehouse,
-    page: "warehouses",
-    permission: "warehouses.read",
-  },
-  {
-    label: "Staff",
+    key: "partners",
+    label: "Data pendukung",
     icon: Users,
-    page: "staff",
-    permission: "staff.read",
+    items: [
+      { label: "Gudang", icon: Warehouse, page: "warehouses", permission: "warehouses.read" },
+      { label: "Staf", icon: Users, page: "staff", permission: "staff.read" },
+      { label: "Pelanggan", icon: UserRound, page: "customers", permission: "customers.read" },
+      { label: "Pemasok", icon: Truck, page: "suppliers", permission: "suppliers.read" },
+    ],
   },
   {
-    label: "Customer",
-    icon: UserRound,
-    page: "customers",
-    permission: "customers.read",
-  },
-  {
-    label: "Supplier",
-    icon: Truck,
-    page: "suppliers",
-    permission: "suppliers.read",
-  },
-  {
-    label: "Purchase",
+    key: "operations",
+    label: "Operasional",
     icon: ShoppingCart,
-    page: "purchases",
-    permission: "purchases.read",
+    items: [
+      { label: "Pembelian", icon: ShoppingCart, page: "purchases", permission: "purchases.read" },
+      { label: "Penjualan", icon: ShoppingBag, page: "sales", permission: "sales.read" },
+      {
+        label: "Retur",
+        icon: ArrowDownLeft,
+        page: "purchase-returns",
+        permissions: ["purchase-returns.read", "sales-returns.read"],
+        fallbackPage: "sales-returns",
+      },
+      { label: "Pemenuhan", icon: PackageCheck, page: "fulfillment", permission: "fulfillment.read" },
+      { label: "Penyesuaian", icon: SlidersHorizontal, page: "adjustments", permission: "adjustments.read" },
+      { label: "Transfer", icon: ArrowLeftRight, page: "transfers", permission: "transfers.read" },
+    ],
   },
   {
-    label: "Sale",
-    icon: ShoppingBag,
-    page: "sales",
-    permission: "sales.read",
-  },
-  {
-    label: "Purchase Return",
-    icon: ArrowDownLeft,
-    page: "purchase-returns",
-    permission: "purchase-returns.read",
-  },
-  {
-    label: "Sales Return",
-    icon: RefreshCw,
-    page: "sales-returns",
-    permission: "sales-returns.read",
-  },
-  {
-    label: "Fulfillment",
-    icon: PackageCheck,
-    page: "fulfillment",
-    permission: "fulfillment.read",
-  },
-  {
-    label: "Adjustment",
-    icon: SlidersHorizontal,
-    page: "adjustments",
-    permission: "adjustments.read",
-  },
-  {
-    label: "Transfer",
-    icon: ArrowLeftRight,
-    page: "transfers",
-    permission: "transfers.read",
-  },
-  {
-    label: "Expense",
+    key: "finance",
+    label: "Keuangan",
     icon: Wallet,
-    page: "expenses",
-    permission: "expenses.read",
+    items: [
+      { label: "Biaya", icon: Wallet, page: "expenses", permission: "expenses.read" },
+      { label: "Pembayaran", icon: ClipboardList, page: "payments", permission: "payments.read" },
+    ],
   },
   {
-    label: "Payment Report",
-    icon: ClipboardList,
-    page: "payments",
-    permission: "payments.read",
-  },
-  {
-    label: "Stock Report",
+    key: "inventory",
+    label: "Stok & kontrol",
     icon: ChartNoAxesColumn,
-    page: "stock-report",
-    permission: "reports.read",
-  },
-  {
-    label: "Stock Opname",
-    icon: ClipboardCheck,
-    page: "stock-opnames",
-    permission: "stock-opnames.read",
-  },
-  {
-    label: "Audit Log",
-    icon: History,
-    page: "audit",
-    permission: "audit.read",
+    items: [
+      { label: "Stok", icon: ChartNoAxesColumn, page: "stock-report", permission: "reports.read" },
+      { label: "Opname", icon: ClipboardCheck, page: "stock-opnames", permission: "stock-opnames.read" },
+      { label: "Audit", icon: History, page: "audit", permission: "audit.read" },
+    ],
   },
 ];
 
@@ -236,26 +200,26 @@ const otherMenus: MenuItem[] = [
 
 const pageTitles: Record<Page, string> = {
   dashboard: "Dashboard",
-  categories: "Category Management",
-  brands: "Brand Management",
-  units: "Unit Management",
-  products: "Product Management",
-  warehouses: "Warehouse Management",
-  staff: "Staff Management",
-  customers: "Customer Management",
-  suppliers: "Supplier Management",
-  purchases: "Purchase Management",
-  sales: "Sale Management",
-  "purchase-returns": "Purchase Returns",
-  "sales-returns": "Sales Returns",
-  fulfillment: "Sales Fulfillment",
-  adjustments: "Stock Adjustment",
-  transfers: "Stock Transfer",
-  expenses: "Expense Management",
-  payments: "Payment Report",
-  "stock-report": "Stock Report",
-  audit: "Audit Log",
-  "stock-opnames": "Stock Opname",
+  categories: "Kategori",
+  brands: "Merek",
+  units: "Satuan",
+  products: "Produk",
+  warehouses: "Gudang",
+  staff: "Staf",
+  customers: "Pelanggan",
+  suppliers: "Pemasok",
+  purchases: "Pembelian",
+  sales: "Penjualan",
+  "purchase-returns": "Retur Pembelian",
+  "sales-returns": "Retur Penjualan",
+  fulfillment: "Pemenuhan Pesanan",
+  adjustments: "Penyesuaian Stok",
+  transfers: "Transfer Stok",
+  expenses: "Biaya",
+  payments: "Pembayaran",
+  "stock-report": "Laporan Stok",
+  audit: "Audit",
+  "stock-opnames": "Stok Opname",
 };
 
 const pagePermissions: Record<Page, string> = {
@@ -323,6 +287,13 @@ export default function Home() {
     setProductMenuOpen,
   ] = useState(true);
 
+  const [openMenuGroups, setOpenMenuGroups] = useState<Record<MenuGroupKey, boolean>>({
+    partners: false,
+    operations: true,
+    finance: false,
+    inventory: false,
+  });
+
   const [
     sidebarCollapsed,
     setSidebarCollapsed,
@@ -372,9 +343,15 @@ export default function Home() {
     (item) => !item.permission || can(item.permission)
   );
 
-  const visibleOtherMenus = otherMenus.filter(
-    (item) => !item.permission || can(item.permission)
-  );
+  const visibleMenuGroups = otherMenuGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        if (item.permissions) return item.permissions.some((permission) => can(permission));
+        return !item.permission || can(item.permission);
+      }),
+    }))
+    .filter((group) => group.items.length > 0);
 
   const activePermission = pagePermissions[activePage];
 
@@ -386,6 +363,13 @@ export default function Home() {
     clearActionIntent();
     setActivePage(page);
     setMobileMenuOpen(false);
+
+    const activeGroup = otherMenuGroups.find((group) =>
+      group.items.some((item) => item.page === page || item.fallbackPage === page)
+    );
+    if (activeGroup) {
+      setOpenMenuGroups((previous) => ({ ...previous, [activeGroup.key]: true }));
+    }
 
     if (page !== "products") {
       setCreateRequested(0);
@@ -399,6 +383,13 @@ export default function Home() {
     ) {
       setProductMenuOpen(true);
     }
+  }
+
+  function menuTarget(item: MenuItem): Page | null {
+    if (item.page && item.fallbackPage && !can(pagePermissions[item.page])) {
+      return item.fallbackPage;
+    }
+    return item.page;
   }
 
   function openNotification(target: NotificationDestination) {
@@ -508,7 +499,7 @@ export default function Home() {
               : "text-[10px] tracking-[0.18em]"
           }`}
         >
-          Workspace
+          Ruang kerja
         </p>
         {/* DASHBOARD */}
         {can("dashboard.read") && <button
@@ -540,7 +531,7 @@ export default function Home() {
         {/* MANAGE PRODUCT */}
         {visibleProductSubmenus.length > 0 && <button
           type="button"
-          title="Manage Product"
+          title="Data produk"
           aria-expanded={productMenuOpen}
           onClick={() =>
             setProductMenuOpen(
@@ -562,7 +553,7 @@ export default function Home() {
                 : ""
             }`}
           >
-            Manage Product
+            Data produk
           </span>
 
           <span
@@ -583,11 +574,7 @@ export default function Home() {
         {/* PRODUCT SUBMENU */}
         {productMenuOpen && visibleProductSubmenus.length > 0 && (
           <div
-            className={`mb-3 ml-5 space-y-0.5 border-l border-slate-200 pl-3 ${
-              sidebarCollapsed
-                ? "lg:hidden"
-                : ""
-            }`}
+            className="mb-3 ml-5 space-y-0.5 border-l border-slate-200 pl-3"
           >
             {visibleProductSubmenus.map(
               (item) => {
@@ -622,7 +609,7 @@ export default function Home() {
                   >
                     <Icon size={15} />
 
-                    <span className="flex-1">
+                    <span className={`flex-1 ${sidebarCollapsed ? "lg:hidden" : ""}`}>
                       {item.label}
                     </span>
                   </button>
@@ -644,56 +631,66 @@ export default function Home() {
                 : "text-[10px] tracking-[0.18em]"
             }`}
           >
-            Operations & Reports
+            Menu
           </p>
-          {visibleOtherMenus.map(
-            (item) => {
-              const Icon = item.icon;
+          {visibleMenuGroups.map((group) => {
+            const GroupIcon = group.icon;
+            const groupActive = group.items.some(
+              (item) => item.page === activePage || item.fallbackPage === activePage
+            );
+            const expanded = openMenuGroups[group.key];
 
-              const active =
-                item.page === activePage;
-
-              return (
+            return (
+              <div key={group.key} className="space-y-1">
                 <button
-                  key={item.label}
                   type="button"
-                  disabled={!item.page}
-                  aria-current={active ? "page" : undefined}
-                  title={
-                    item.page
-                      ? item.label
-                      : `${item.label} — Coming soon`
-                  }
-                  onClick={() => {
-                    if (item.page) {
-                      navigate(
-                        item.page
-                      );
-                    }
-                  }}
-                  className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-[13px] transition ${
-                    active
-                      ? "border-blue-100 bg-gradient-to-r from-[#edf3ff] to-white font-semibold text-[#2965ec] shadow-sm"
-                      : item.page
-                        ? "border-transparent text-[#626e80] hover:-translate-y-0.5 hover:bg-white hover:text-[#2965ec] hover:shadow-sm"
-                        : "cursor-not-allowed border-transparent text-[#7a8493] opacity-70"
+                  title={group.label}
+                  aria-expanded={expanded}
+                  aria-controls={`menu-group-${group.key}`}
+                  onClick={() => setOpenMenuGroups((previous) => ({ ...previous, [group.key]: !previous[group.key] }))}
+                  className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-[13px] font-semibold transition ${
+                    groupActive
+                      ? "border-blue-100 bg-gradient-to-r from-[#edf3ff] to-white text-[#2965ec] shadow-sm"
+                      : "border-transparent text-[#626e80] hover:bg-blue-50/80 hover:text-[#2965ec]"
                   }`}
                 >
-                  <Icon size={16} />
-
-                  <span
-                    className={`flex-1 ${
-                      sidebarCollapsed
-                        ? "lg:hidden"
-                        : ""
-                    }`}
-                  >
-                    {item.label}
+                  <GroupIcon size={16} />
+                  <span className={`flex-1 ${sidebarCollapsed ? "lg:hidden" : ""}`}>{group.label}</span>
+                  <span className={sidebarCollapsed ? "lg:hidden" : ""}>
+                    {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
                   </span>
                 </button>
-              );
-            }
-          )}
+                {expanded && (
+                  <div id={`menu-group-${group.key}`} className="mb-2 ml-5 space-y-0.5 border-l border-slate-200 pl-3">
+                    {group.items.map((item) => {
+                      const Icon = item.icon;
+                      const active = item.page === activePage || item.fallbackPage === activePage;
+                      const targetPage = menuTarget(item);
+
+                      return (
+                        <button
+                          key={item.label}
+                          type="button"
+                          disabled={!targetPage}
+                          aria-current={active ? "page" : undefined}
+                          title={item.label}
+                          onClick={() => { if (targetPage) navigate(targetPage); }}
+                          className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[12px] transition ${
+                            active
+                              ? "bg-[#f3f6ff] font-semibold text-[#2867ed] shadow-sm"
+                              : "text-slate-500 hover:translate-x-0.5 hover:bg-[#f3f6ff] hover:text-[#2965ec]"
+                          }`}
+                        >
+                          <Icon size={15} />
+                          <span className={`flex-1 ${sidebarCollapsed ? "lg:hidden" : ""}`}>{item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </nav>
 
@@ -953,11 +950,14 @@ export default function Home() {
             <OperationsView key={activePage} kind={activePage as "purchases" | "sales" | "adjustments" | "transfers" | "expenses" | "payments" | "stock-report"} target={notificationTarget?.page === activePage ? notificationTarget : null} />
           )}
 
-          {activePage === "purchase-returns" && can("purchase-returns.read") && (
-            <ReturnsView type="PURCHASE" target={notificationTarget?.page === activePage ? notificationTarget : null} />
-          )}
-          {activePage === "sales-returns" && can("sales-returns.read") && (
-            <ReturnsView type="SALE" target={notificationTarget?.page === activePage ? notificationTarget : null} />
+          {((activePage === "purchase-returns" && can("purchase-returns.read")) ||
+            (activePage === "sales-returns" && can("sales-returns.read"))) && (
+            <ReturnsView
+              key={activePage}
+              type={activePage === "purchase-returns" ? "PURCHASE" : "SALE"}
+              onTypeChange={(type) => navigate(type === "PURCHASE" ? "purchase-returns" : "sales-returns")}
+              target={notificationTarget?.page === activePage ? notificationTarget : null}
+            />
           )}
           {activePage === "fulfillment" && can("fulfillment.read") && (
             <FulfillmentView target={notificationTarget?.page === activePage ? notificationTarget : null} />

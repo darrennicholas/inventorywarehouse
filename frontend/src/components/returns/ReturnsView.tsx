@@ -12,7 +12,7 @@ import {
   useState,
 } from "react";
 
-import { Plus, RefreshCw, Search } from "lucide-react";
+import { Plus, RefreshCw, Search, ShoppingBag, ShoppingCart } from "lucide-react";
 
 import { useAuth } from "@/components/auth/AuthProvider";
 import { returnService } from "@/services/return.service";
@@ -33,9 +33,11 @@ import { statusLabel } from "@/lib/ui-labels";
 
 export default function ReturnsView({
   type,
+  onTypeChange,
   target = null,
 }: {
   type: ReturnType;
+  onTypeChange: (type: ReturnType) => void;
   target?: NotificationTarget | null;
 }) {
   const { can, user } = useAuth();
@@ -74,6 +76,9 @@ export default function ReturnsView({
   const [editing, setEditing] = useState<
     ReturnRecord | null
   >(null);
+
+  const canReadPurchase = can("purchase-returns.read");
+  const canReadSale = can("sales-returns.read");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -175,6 +180,29 @@ export default function ReturnsView({
 
   return (
     <section className="space-y-5">
+      {canReadPurchase && canReadSale && (
+        <div className="inline-flex rounded-2xl border border-blue-100 bg-blue-50/70 p-1.5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          {([
+            { value: "PURCHASE" as const, label: "Retur pembelian", Icon: ShoppingCart },
+            { value: "SALE" as const, label: "Retur penjualan", Icon: ShoppingBag },
+          ]).map(({ value, label, Icon }) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={type === value}
+              onClick={() => { if (type !== value) onTypeChange(value); }}
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
+                type === value
+                  ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/20"
+                  : "text-slate-600 hover:bg-white hover:text-blue-700 hover:shadow-sm dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-blue-300"
+              }`}
+            >
+              <Icon size={16} />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       {/* HEADER */}
       <div
         className={`rounded-3xl bg-gradient-to-br ${
