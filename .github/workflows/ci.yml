@@ -117,7 +117,7 @@ jobs:
       - name: Prepare disposable staging database and backend
         working-directory: backend
         run: |
-          npm ci
+          npm ci --include=dev
           npx prisma generate
           npx prisma migrate deploy
           npm run seed:access
@@ -134,7 +134,7 @@ jobs:
       - name: Install frontend dependencies and generate API types
         working-directory: frontend
         run: |
-          npm ci
+          npm ci --include=dev
           npm run api:contract
           npx tsc --noEmit
           npm run build
