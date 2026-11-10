@@ -48,8 +48,10 @@ test("warehouse scope follows staff assignment for custom roles", () => {
   assert.deepEqual(warehouseScope(customStaff), ["wh-a"]);
   assert.throws(() => assertWarehouseAccess(customStaff, "wh-b"), /another warehouse/i);
   assert.throws(() => warehouseScope({ ...customStaff, warehouseId: null }), /not assigned/i);
-  assert.equal(warehouseScope({ ...customStaff, roleCode: "ADMIN", warehouseId: null }), undefined);
-  assert.equal(warehouseScope({ ...customStaff, roleCode: "CUSTOM_NO_STAFF", staffId: null, warehouseId: null }), undefined);
+  assert.deepEqual(warehouseScope({ ...customStaff, roleCode: "ADMIN", permissions: ["warehouses.access_all"], warehouseId: null }), undefined);
+  assert.throws(() => warehouseScope({ ...customStaff, roleCode: "CUSTOM_NO_STAFF", staffId: null, warehouseId: null }), /warehouse assignment or cross-warehouse permission/i);
+  assert.equal(hasPermission(ROLE_PRESETS.WAREHOUSE_MANAGER, ["warehouses.access_all"]), true);
+  assert.equal(hasPermission(ROLE_PRESETS.WAREHOUSE_STAFF, ["warehouses.access_all"]), false);
 });
 
 test("audit writes preserve actor and before/after snapshots on the supplied transaction client", async () => {

@@ -17,6 +17,7 @@ import {
   registerUnauthorizedHandler,
   setCsrfToken,
 } from "@/lib/auth-api";
+import type { components } from "@/lib/api-contract.generated";
 
 import type {
   AuthSessionData,
@@ -130,15 +131,13 @@ export function AuthProvider({
 
   const login = useCallback(
     async (email: string, password: string) => {
+      const credentials = { email, password } satisfies components["schemas"]["LoginRequest"];
       const result =
         await authApi<AuthSessionData>(
           "/api/auth/login",
           {
             method: "POST",
-            body: JSON.stringify({
-              email,
-              password,
-            }),
+            body: JSON.stringify(credentials),
           }
         );
 

@@ -3,21 +3,16 @@ import type { AuthContext } from "../middlewares/auth.middleware.ts";
 
 /**
  * Warehouse scope is deliberately centralized so every inventory query uses
- * the same rule. Staff members are restricted to their assigned warehouse;
- * supervisory, procurement and audit roles can work across warehouses.
+ * the same rule. Assigned staff are scoped to their warehouse. Cross-warehouse
+ * access requires an explicit permission; unknown/custom roles fail closed.
  */
 export function warehouseScope(auth: AuthContext): string[] | undefined {
-  // These built-in roles are explicitly allowed to work across warehouses.
-  // Any staff-linked custom role inherits the warehouse boundary of its staff
-  // assignment, even if its custom role code is different.
-  const crossWarehouseRoles = new Set([
-    "ADMIN",
-    "WAREHOUSE_MANAGER",
-    "PROCUREMENT",
-    "AUDITOR",
-  ]);
-  if (crossWarehouseRoles.has(auth.roleCode)) return undefined;
-  if (auth.roleCode !== "WAREHOUSE_STAFF" && !auth.staffId) return undefined;
+  if (auth.permissions.includes("warehouses.access_all")) return undefined;
+  // Any staff-linked role inherits the physical warehouse boundary of its
+  // staff assignment, regardless of the role's code or whether it is custom.
+  if (!auth.staffId) {
+    throw new AppError(403, "This account needs a warehouse assignment or cross-warehouse permission");
+  }
   if (!auth.warehouseId) {
     throw new AppError(403, "This staff account is not assigned to a warehouse");
   }

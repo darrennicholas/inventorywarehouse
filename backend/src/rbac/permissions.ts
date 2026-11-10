@@ -6,6 +6,8 @@ export const PERMISSION_KEYS = [
   "units.read", "units.write", "units.delete",
   "products.read", "products.write", "products.delete",
   "warehouses.read", "warehouses.write", "warehouses.delete",
+  // Grants access across warehouses. Warehouse assignment remains the default.
+  "warehouses.access_all",
   "staff.read", "staff.write", "staff.delete",
   "customers.read", "customers.write", "customers.delete",
   "suppliers.read", "suppliers.write", "suppliers.delete",
@@ -39,7 +41,7 @@ export const ROLE_PRESETS: Record<RoleCode, readonly PermissionKey[]> = {
   ADMIN: [...PERMISSION_KEYS],
   WAREHOUSE_MANAGER: [
     "dashboard.read", "categories.read", "brands.read", "units.read", "products.read",
-    "warehouses.read", "warehouses.write", "warehouses.delete", "staff.read",
+    "warehouses.read", "warehouses.write", "warehouses.delete", "warehouses.access_all", "staff.read",
     "inventory.read", "inventory.write", "inventory.relocate", "purchases.read", "sales.read", "purchases.approve",
     "purchase-returns.read", "purchase-returns.write", "purchase-returns.approve", "purchase-returns.delete",
     "sales-returns.read", "sales-returns.write", "sales-returns.approve", "sales-returns.delete",
@@ -58,14 +60,14 @@ export const ROLE_PRESETS: Record<RoleCode, readonly PermissionKey[]> = {
   ],
   PROCUREMENT: [
     "dashboard.read", "products.read", "suppliers.read", "suppliers.write", "suppliers.delete",
-    "warehouses.read", "inventory.read", "purchases.read", "purchases.write", "purchases.delete", "purchases.approve",
+    "warehouses.read", "warehouses.access_all", "inventory.read", "purchases.read", "purchases.write", "purchases.delete", "purchases.approve",
     "purchase-returns.read", "purchase-returns.write", "purchase-returns.approve", "purchase-returns.delete",
     "fulfillment.read",
     "expenses.read", "payments.read", "reports.read", "stock-opnames.read", "stock-opnames.write",
   ],
   AUDITOR: [
     "dashboard.read", "categories.read", "brands.read", "units.read", "products.read",
-    "warehouses.read", "staff.read", "customers.read", "suppliers.read", "inventory.read",
+    "warehouses.read", "warehouses.access_all", "staff.read", "customers.read", "suppliers.read", "inventory.read",
     "purchases.read", "sales.read", "purchase-returns.read", "sales-returns.read",
     "fulfillment.read",
     "adjustments.read", "transfers.read", "expenses.read", "payments.read", "reports.read", "audit.read", "stock-opnames.read",
