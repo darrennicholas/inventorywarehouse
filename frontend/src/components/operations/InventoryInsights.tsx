@@ -7,7 +7,7 @@ import type { NotificationTarget } from "@/types/notification";
 import { OpeningCostPanel } from "@/components/dashboard/CostAndProfitPanel";
 
 type Item = { key: string; productId: string; quantity: string; locationId: string; sourceLocationId: string; batchId: string };
-type StockLine = { id: string; quantityOnHand?: number | string; reservedQuantity?: number | string; availableQuantity?: number | string; quarantineQuantity?: number; expiredQuantity?: number; otherUnavailableQuantity?: number; detailMissing?: boolean; product?: { id?: string; name?: string; sku?: string }; warehouse?: { id?: string; name?: string } };
+type StockLine = { id: string; quantityOnHand?: number | string; reservedQuantity?: number | string; availableQuantity?: number | string; quarantineQuantity?: number; expiredQuantity?: number; otherUnavailableQuantity?: number; detailMissing?: boolean; product?: { id?: string; name?: string; sku?: string; barcode?: string }; warehouse?: { id?: string; name?: string } };
 type Availability = { product: { name: string }; onHand: number; reserved: number; available: number; locations: { location: { code: string }; batch: { batchNumber: string } | null; available: number }[] };
 type Movement = { id: string; occurredAt: string; movementType: string; quantity: number; before: number; after: number; actor: string; source: { kind: string; number: string | null } | null };
 type Source = { kind: string; number: string; status: string; notes: string | null; items: { product: string; sku: string; quantity: number }[] };
@@ -59,21 +59,53 @@ export function StockAvailabilityPanel({ warehouseId, items, outgoing }: { wareh
   return <section className="space-y-2 rounded-2xl bg-slate-50 p-4 dark:bg-slate-800"><h4 className="text-sm font-semibold text-slate-900 dark:text-white">Stok yang dapat digunakan</h4><p className="text-xs text-slate-500 dark:text-slate-300">Lokasi penyimpanan aktif dan batch yang belum kedaluwarsa. Stok dapat berubah sebelum transaksi diproses.</p>{items.filter((item) => item.productId).map((item) => <AvailabilityLine key={`${item.key}-${warehouseId}-${item.productId}-${item.locationId}-${item.sourceLocationId}-${item.batchId}`} item={item} warehouseId={warehouseId} outgoing={outgoing} requested={items.filter((other) => other.productId === item.productId && (other.sourceLocationId || other.locationId) === (item.sourceLocationId || item.locationId) && other.batchId === item.batchId).reduce((sum, other) => sum + (Number(other.quantity) || 0), 0)} />)}</section>;
 }
 
-export function StockHistoryPanel({ rows, target }: { rows: StockLine[]; target?: NotificationTarget | null }) {
+export function StockHistoryPanel({ rows, target, warehouseId: warehouseFilter }: { rows: StockLine[]; target?: NotificationTarget | null; warehouseId?: string }) {
   const [selected, setSelected] = useState("");
+  const [selectedRow, setSelectedRow] = useState<StockLine | null>(null);
+  const [optionSearch, setOptionSearch] = useState("");
+  const [optionPage, setOptionPage] = useState(1);
+  const [optionRows, setOptionRows] = useState<StockLine[]>([]);
+  const [optionMeta, setOptionMeta] = useState<{ total: number; totalPages: number } | null>(null);
+  const [optionLoading, setOptionLoading] = useState(false);
+  const [optionError, setOptionError] = useState("");
   const [page, setPage] = useState(1);
   const [result, setResult] = useState<{ data: Movement[]; balance: { onHand: number; reserved: number; available: number }; meta: { totalPages: number } } | null>(null);
   const [error, setError] = useState("");
   const [source, setSource] = useState<Source | null>(null);
   const [sourceLoading, setSourceLoading] = useState(false);
   const handledTarget = useRef(0);
-  const row = rows.find((item) => item.id === selected);
+  const currentRow = optionRows.find((item) => item.id === selected) ?? rows.find((item) => item.id === selected) ?? (selectedRow?.id === selected ? selectedRow : undefined);
+  const row = currentRow && (!warehouseFilter || currentRow.warehouse?.id === warehouseFilter) ? currentRow : undefined;
   const productId = row?.product?.id; const warehouseId = row?.warehouse?.id;
+  const stockTargetId = target?.page === "stock-report" ? target.recordId : null;
+  const stockTargetToken = target?.page === "stock-report" ? target.token : null;
   useEffect(() => {
-    if (!target || target.page !== "stock-report" || handledTarget.current === target.token || !rows.some((item) => item.id === target.recordId)) return;
-    const timer = window.setTimeout(() => { handledTarget.current = target.token; setSelected(target.recordId); setPage(1); }, 0);
-    return () => window.clearTimeout(timer);
-  }, [rows, target]);
+    if (!stockTargetId || stockTargetToken === null || handledTarget.current === stockTargetToken) return;
+    handledTarget.current = stockTargetToken;
+    let active = true;
+    const params = new URLSearchParams({ balanceId: stockTargetId, page: "1", pageSize: "1" });
+    void apiRequest<{ data: StockLine[] }>(`/api/operations/stock-report?${params}`).then((response) => {
+      if (!active) return;
+      const next = response.data[0];
+      if (next) { setSelectedRow(next); setSelected(next.id); setPage(1); }
+      else setError("Baris stok dari notifikasi tidak tersedia pada cakupan gudang Anda.");
+    }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Baris stok dari notifikasi tidak dapat dibuka."); });
+    return () => { active = false; };
+  }, [stockTargetId, stockTargetToken]);
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams({ page: String(optionPage), pageSize: "20" });
+    if (warehouseFilter) params.set("warehouseId", warehouseFilter);
+    if (optionSearch.trim()) params.set("search", optionSearch.trim().slice(0, 120));
+    const timer = window.setTimeout(() => {
+      setOptionLoading(true); setOptionError("");
+      void apiRequest<{ data: StockLine[]; meta: { total: number; totalPages: number } }>(`/api/operations/stock-report?${params}`, { signal: controller.signal })
+        .then((response) => { if (!controller.signal.aborted) { setOptionRows(response.data); setOptionMeta(response.meta); } })
+        .catch((reason) => { if (!controller.signal.aborted) setOptionError(reason instanceof Error ? reason.message : "Pilihan produk dan gudang tidak dapat dimuat."); })
+        .finally(() => { if (!controller.signal.aborted) setOptionLoading(false); });
+    }, 200);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [warehouseFilter, optionSearch, optionPage]);
   useEffect(() => {
     if (!productId || !warehouseId) return;
     let active = true;
@@ -87,7 +119,7 @@ export function StockHistoryPanel({ rows, target }: { rows: StockLine[]; target?
     catch (failure) { setError(failure instanceof Error ? failure.message : "Dokumen sumber tidak dapat dimuat."); }
     finally { setSourceLoading(false); }
   }
-  return <section className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900"><h3 className="font-bold text-slate-900 dark:text-white">Jejak pergerakan stok</h3><p className="mt-1 text-xs text-slate-500">Pilih produk dan gudang dari halaman laporan untuk melihat dokumen sumber dan saldo pergerakan.</p><GlobalSelect className="mt-3 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-white" value={selected} onChange={(event) => { setSelected(event.target.value); setPage(1); setResult(null); }}><option value="">Pilih produk dan gudang</option>{rows.filter((item) => item.product?.id && item.warehouse?.id).map((item) => <option key={item.id} value={item.id}>{item.product?.sku} · {item.product?.name} — {item.warehouse?.name}</option>)}</GlobalSelect>
+  return <section className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900"><h3 className="font-bold text-slate-900 dark:text-white">Jejak pergerakan stok</h3><p className="mt-1 text-xs text-slate-500">Cari produk berdasarkan SKU, nama, atau barcode. Pilihan mencakup semua halaman laporan dalam cakupan gudang yang diizinkan.</p><label className="mt-3 block text-xs font-semibold text-slate-600 dark:text-slate-300">Cari produk<input type="search" maxLength={120} value={optionSearch} onChange={(event) => { setOptionSearch(event.target.value); setOptionPage(1); }} placeholder="Ketik SKU, nama produk, atau barcode" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white" /></label><GlobalSelect aria-label="Pilih produk dan gudang untuk riwayat" className="mt-2 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-white" value={selected} onChange={(event) => { const nextId = event.target.value; setSelected(nextId); setSelectedRow(optionRows.find((item) => item.id === nextId) ?? rows.find((item) => item.id === nextId) ?? null); setPage(1); setResult(null); setError(""); }}><option value="">Pilih produk dan gudang</option>{selectedRow && !optionRows.some((item) => item.id === selectedRow.id) && <option value={selectedRow.id}>{selectedRow.product?.sku} · {selectedRow.product?.name} — {selectedRow.warehouse?.name}</option>}{optionRows.filter((item) => item.product?.id && item.warehouse?.id).map((item) => <option key={item.id} value={item.id}>{item.product?.sku} · {item.product?.name} — {item.warehouse?.name}</option>)}</GlobalSelect><div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">{optionError ? <span role="alert" className="text-red-600">{optionError}</span> : <span>{optionLoading ? "Memuat pilihan…" : `${optionMeta?.total ?? 0} saldo cocok`}</span>}<div className="flex items-center gap-2"><button type="button" disabled={optionLoading || optionPage <= 1} onClick={() => setOptionPage((current) => current - 1)} className="rounded-lg border border-slate-200 bg-blue-50 px-3 py-1.5 font-semibold text-blue-800 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-45">Sebelumnya</button><span>Halaman {optionPage} / {Math.max(1, optionMeta?.totalPages ?? 1)}</span><button type="button" disabled={optionLoading || optionPage >= (optionMeta?.totalPages ?? 1)} onClick={() => setOptionPage((current) => current + 1)} className="rounded-lg border border-slate-200 bg-blue-50 px-3 py-1.5 font-semibold text-blue-800 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-45">Berikutnya</button></div></div>
     {row && <div className="mt-3 rounded-xl bg-slate-50 p-3 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-200"><p>Fisik: {row.quantityOnHand ?? 0} · Direservasi: {row.reservedQuantity ?? 0} · Karantina: {row.quarantineQuantity ?? 0} · Kedaluwarsa: {row.expiredQuantity ?? 0} · Tidak tersedia lainnya: {row.otherUnavailableQuantity ?? 0} · <strong>Layak dialokasikan: {row.availableQuantity ?? 0}</strong></p><p className="mt-1 text-slate-500">Kategori fisik tidak saling tumpang tindih; reservasi adalah bagian dari stok fisik. Hanya lokasi penyimpanan aktif dan batch yang layak dihitung tersedia.</p>{row.detailMissing && <p role="alert" className="mt-1 font-semibold text-amber-700 dark:text-amber-300">Detail lokasi belum tersedia untuk saldo ini. Jalankan pemeriksaan stok dan koreksi melalui prosedur yang disetujui.</p>}</div>}
     {productId && warehouseId && <Reconciliation key={`reconciliation:${productId}:${warehouseId}`} productId={productId} warehouseId={warehouseId} />}
     {productId && warehouseId && <OpeningCostPanel key={`opening-cost:${productId}:${warehouseId}`} productId={productId} warehouseId={warehouseId} />}

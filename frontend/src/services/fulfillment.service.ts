@@ -1,7 +1,7 @@
 import { apiRequest } from "@/lib/api";
 import type { FulfillmentRecord, FulfillmentSale, FulfillmentScanMatch, FulfillmentStatus } from "@/types/fulfillment";
 
-type ListResponse = { success: boolean; data: FulfillmentRecord[]; total: number; page: number; pageSize: number };
+type ListResponse = { success: boolean; data: FulfillmentRecord[]; total: number; page: number; pageSize: number; summary: Record<FulfillmentStatus, number> };
 
 export const fulfillmentService = {
   list(params: { status?: FulfillmentStatus; search?: string; page?: number; pageSize?: number } = {}) {
@@ -17,9 +17,9 @@ export const fulfillmentService = {
     return apiRequest<{ success: boolean; data: FulfillmentSale[] }>("/api/fulfillment/sales");
   },
 
-  lookupScan(code: string) {
-    const query = new URLSearchParams({ code });
-    return apiRequest<{ success: boolean; data: FulfillmentScanMatch[]; limited: boolean }>(`/api/fulfillment/scan?${query.toString()}`);
+  lookupScan(code: string, page = 1) {
+    const query = new URLSearchParams({ code, page: String(page) });
+    return apiRequest<{ success: boolean; data: FulfillmentScanMatch[]; page: number; pageSize: number; hasMore: boolean }>(`/api/fulfillment/scan?${query.toString()}`);
   },
 
   createShipment(saleId: string, payload: { shippingAddress?: string | null; items: Array<{ saleItemId: string; quantity: number }> }) {

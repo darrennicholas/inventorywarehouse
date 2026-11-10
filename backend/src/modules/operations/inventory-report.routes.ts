@@ -21,8 +21,8 @@ const relocationSchema = z.object({
   items: z.array(z.object({ productId: z.uuid(), batchId: z.uuid().nullable().optional(), quantity: z.coerce.number().int().positive().max(1_000_000) }).strict()).min(1).max(100),
 }).strict().refine((value) => value.fromLocationId !== value.toLocationId, { message: "Source and destination locations must be different", path: ["toLocationId"] });
 
-async function stockReportRows(auth: ReturnType<typeof authOf>, warehouseId?: string, productId?: string, page?: { skip: number; take: number }, search = "") {
-  const where = { ...scopedWarehouseFilter(auth, warehouseId), ...(productId ? { productId } : {}), ...(search ? { product: { OR: [{ name: { contains: search, mode: "insensitive" as const } }, { sku: { contains: search, mode: "insensitive" as const } }, { barcode: { contains: search, mode: "insensitive" as const } }] } } : {}) };
+async function stockReportRows(auth: ReturnType<typeof authOf>, warehouseId?: string, productId?: string, page?: { skip: number; take: number }, search = "", balanceId?: string) {
+  const where = { ...scopedWarehouseFilter(auth, warehouseId), ...(productId ? { productId } : {}), ...(balanceId ? { id: balanceId } : {}), ...(search ? { product: { OR: [{ name: { contains: search, mode: "insensitive" as const } }, { sku: { contains: search, mode: "insensitive" as const } }, { barcode: { contains: search, mode: "insensitive" as const } }] } } : {}) };
   const balances = await prisma.inventoryBalance.findMany({ where, ...(page ? { skip: page.skip, take: page.take } : {}), include: { product: { select: { id: true, sku: true, barcode: true, name: true, minStock: true, maxStock: true, reorderLeadDays: true, unit: { select: { code: true } } } }, warehouse: { select: { id: true, code: true, name: true } }, location: { select: { id: true, code: true, name: true, zone: true, rack: true, shelf: true, bin: true } } }, orderBy: [{ warehouse: { name: "asc" } }, { product: { name: "asc" } }] });
   const details = await stockAvailabilitySummary(balances);
   return balances.map((balance) => {
@@ -255,9 +255,10 @@ router.get("/stock-report", requirePermission("reports.read"), asyncHandler(asyn
   const auth = authOf(req);
   const warehouseId = requestedWarehouseId(req);
   const productId = typeof req.query.productId === "string" ? req.query.productId : undefined;
+  const balanceId = typeof req.query.balanceId === "string" ? z.uuid().parse(req.query.balanceId) : undefined;
   const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 120) : "";
-  const where = { ...scopedWarehouseFilter(auth, warehouseId), ...(productId ? { productId } : {}), ...(search ? { product: { OR: [{ name: { contains: search, mode: "insensitive" as const } }, { sku: { contains: search, mode: "insensitive" as const } }, { barcode: { contains: search, mode: "insensitive" as const } }] } } : {}) };
-  const [rows, total] = await Promise.all([stockReportRows(auth, warehouseId, productId, { skip, take }, search), prisma.inventoryBalance.count({ where })]);
+  const where = { ...scopedWarehouseFilter(auth, warehouseId), ...(productId ? { productId } : {}), ...(balanceId ? { id: balanceId } : {}), ...(search ? { product: { OR: [{ name: { contains: search, mode: "insensitive" as const } }, { sku: { contains: search, mode: "insensitive" as const } }, { barcode: { contains: search, mode: "insensitive" as const } }] } } : {}) };
+  const [rows, total] = await Promise.all([stockReportRows(auth, warehouseId, productId, { skip, take }, search, balanceId), prisma.inventoryBalance.count({ where })]);
   res.json({ success: true, data: rows, meta: pageMeta(page, pageSize, total) });
 }));
 

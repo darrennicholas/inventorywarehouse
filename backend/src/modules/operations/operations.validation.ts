@@ -58,7 +58,7 @@ export const purchaseReceiveSchema = z.object({
     expiryDate: z.coerce.date().nullable().optional(),
     locationId: uuid.nullable().optional(),
     notes: z.string().trim().max(500).nullable().optional(),
-  }).strict().refine((item) => item.quantity + item.damagedQuantity > 0, "Accepted plus damaged quantity must be positive")).min(1).optional(),
+  }).strict().refine((item) => item.quantity + item.damagedQuantity > 0, "Jumlah barang baik dan rusak harus lebih dari nol.")).min(1).optional(),
 }).strict();
 
 export const saleSchema = z.object({

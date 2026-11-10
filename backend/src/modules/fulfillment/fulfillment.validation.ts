@@ -12,6 +12,11 @@ export const fulfillmentListQuerySchema = z.object({
   search: z.string().trim().max(100).optional(),
 }).strict();
 
+export const fulfillmentScanQuerySchema = z.object({
+  code: z.string().trim().min(1).max(120),
+  page: z.coerce.number().int().min(1).max(1_000_000_000).default(1),
+}).strict();
+
 export const createShipmentSchema = z.object({
   number: z.string().trim().min(2).max(60).optional(),
   shippingAddress: z.string().trim().max(1000).nullable().optional(),

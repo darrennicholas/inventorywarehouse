@@ -35,7 +35,7 @@ export async function validateRevisionLocations(tx: Prisma.TransactionClient | t
 export async function ensureLocation(tx: Prisma.TransactionClient, warehouseId: string, requestedLocationId?: string | null) {
   if (requestedLocationId) {
     const location = await tx.warehouseLocation.findFirst({ where: { id: requestedLocationId, warehouseId, isActive: true } });
-    if (!location) throw new AppError(400, "Location is invalid or inactive for this warehouse");
+    if (!location) throw new AppError(400, "Lokasi tidak valid atau tidak aktif di gudang ini.");
     return location;
   }
   const location = await tx.warehouseLocation.findFirst({ where: { warehouseId, isActive: true, locationType: "STORAGE" }, orderBy: { code: "asc" } });
@@ -44,17 +44,17 @@ export async function ensureLocation(tx: Prisma.TransactionClient, warehouseId: 
 }
 
 export async function ensureReceiptBatch(tx: Prisma.TransactionClient, input: { productId: string; warehouseId: string; batchNumber?: string | null; productionDate?: Date | null; expiryDate?: Date | null; locationId: string }, trackBatch: boolean, quarantineOnly = false) {
-  if (!trackBatch && input.batchNumber) throw new AppError(400, "Non-batch product cannot use a batch number");
-  if (trackBatch && !input.batchNumber) throw new AppError(400, `Batch number is required for ${input.productId}`);
+  if (!trackBatch && input.batchNumber) throw new AppError(400, "Produk ini tidak menggunakan batch, jadi nomor batch tidak boleh diisi.");
+  if (trackBatch && !input.batchNumber) throw new AppError(400, `Nomor batch wajib diisi untuk produk ${input.productId}.`);
   if (!input.batchNumber) return null;
-  if (!quarantineOnly && input.expiryDate && input.expiryDate <= new Date()) throw new AppError(400, "Expired goods cannot be received into available stock");
+  if (!quarantineOnly && input.expiryDate && input.expiryDate <= new Date()) throw new AppError(400, "Barang kedaluwarsa tidak dapat diterima sebagai stok tersedia.");
   const batch = await tx.productBatch.upsert({
     where: { productId_warehouseId_batchNumber: { productId: input.productId, warehouseId: input.warehouseId, batchNumber: input.batchNumber } },
     create: { productId: input.productId, warehouseId: input.warehouseId, locationId: input.locationId, batchNumber: input.batchNumber, productionDate: input.productionDate ?? null, expiryDate: input.expiryDate ?? null, quantityOnHand: 0, reservedQuantity: 0, status: "ACTIVE" },
     update: {},
   });
   if (!quarantineOnly) assertUsableBatch(batch, input);
-  else for (const field of ["productionDate", "expiryDate"] as const) if (input[field] && batch[field]?.getTime() !== input[field]!.getTime()) throw new AppError(409, `Existing batch ${field} cannot be overwritten`);
+  else for (const field of ["productionDate", "expiryDate"] as const) if (input[field] && batch[field]?.getTime() !== input[field]!.getTime()) throw new AppError(409, `Tanggal batch ${field === "expiryDate" ? "kedaluwarsa" : "produksi"} yang sudah ada tidak dapat diubah.`);
   return batch;
 }
 

@@ -54,13 +54,13 @@ function shipmentNumber() {
 
 export async function getShipmentForRoute(tx: FulfillmentTx, id: string) {
   const shipment = await tx.saleShipment.findUnique({ where: { id }, include: shipmentInclude });
-  if (!shipment) fail(404, "Shipment not found");
+  if (!shipment) fail(404, "Pengiriman tidak ditemukan.");
   return shipment;
 }
 
 async function lockShipmentAndSale(tx: FulfillmentTx, id: string) {
   const snapshot = await tx.saleShipment.findUnique({ where: { id }, select: { id: true, saleId: true } });
-  if (!snapshot) fail(404, "Shipment not found");
+  if (!snapshot) fail(404, "Pengiriman tidak ditemukan.");
   await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Sale" WHERE "id" = ${snapshot.saleId}::uuid FOR UPDATE`);
   await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SaleShipment" WHERE "id" = ${id}::uuid FOR UPDATE`);
   return getShipmentForRoute(tx, id);
@@ -83,7 +83,7 @@ async function setSaleProgress(
   completeWhenAllShipmentsCompleted = false,
 ) {
   const sale = await tx.sale.findUnique({ where: { id: saleId }, include: { items: { select: { id: true, quantity: true } } } });
-  if (!sale) fail(404, "Sale not found");
+  if (!sale) fail(404, "Penjualan tidak ditemukan.");
   const shipped = await shippedQuantityByItem(tx, saleId);
   const shipmentStatuses = await tx.saleShipment.findMany({
     where: { saleId, status: { not: "CANCELLED" } },
@@ -106,8 +106,7 @@ async function setSaleProgress(
 }
 
 export async function listFulfillments(tx: FulfillmentTx, query: FulfillmentListQuery, warehouseIds?: string[]) {
-  const where: Prisma.SaleShipmentWhereInput = {
-    ...(query.status ? { status: query.status } : {}),
+  const summaryWhere: Prisma.SaleShipmentWhereInput = {
     ...(query.saleId ? { saleId: query.saleId } : {}),
     ...(query.search ? { OR: [{ number: { contains: query.search, mode: "insensitive" } }, { sale: { number: { contains: query.search, mode: "insensitive" } } }] } : {}),
     warehouseId: query.warehouseId && warehouseIds
@@ -116,11 +115,15 @@ export async function listFulfillments(tx: FulfillmentTx, query: FulfillmentList
         ? query.warehouseId
         : warehouseIds ? { in: warehouseIds } : undefined,
   };
-  const [data, total] = await Promise.all([
+  const where: Prisma.SaleShipmentWhereInput = { ...summaryWhere, ...(query.status ? { status: query.status } : {}) };
+  const [data, total, groupedStatuses] = await Promise.all([
     tx.saleShipment.findMany({ where, include: shipmentInclude, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }),
     tx.saleShipment.count({ where }),
+    tx.saleShipment.groupBy({ by: ["status"], where: summaryWhere, _count: { _all: true } }),
   ]);
-  return { data, total, page: query.page, pageSize: query.pageSize };
+  const summary = { PICKING: 0, PACKED: 0, SHIPPED: 0, COMPLETED: 0, CANCELLED: 0 };
+  for (const item of groupedStatuses) summary[item.status] = item._count._all;
+  return { data, total, page: query.page, pageSize: query.pageSize, summary };
 }
 
 export async function listFulfillmentSales(tx: FulfillmentTx, warehouseIds?: string[]) {
@@ -144,13 +147,13 @@ export async function createShipment(tx: FulfillmentTx, saleId: string, input: C
   // create shipments against the same reservation at the same time.
   await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Sale" WHERE "id" = ${saleId}::uuid FOR UPDATE`);
   const sale = await tx.sale.findUnique({ where: { id: saleId }, include: { items: true, customer: { select: { address: true } } } });
-  if (!sale) fail(404, "Sale not found");
+  if (!sale) fail(404, "Penjualan tidak ditemukan.");
   if (!["RESERVED", "PICKING", "PACKED", "PARTIALLY_SHIPPED"].includes(sale.status)) {
-    fail(409, "Sale must have reserved stock before creating a shipment");
+    fail(409, "Stok penjualan harus dipesan sebelum pengiriman dapat dibuat.");
   }
 
   const requested = new Map(input.items.map((item) => [item.saleItemId, item]));
-  if (requested.size !== input.items.length) fail(400, "A sale item can only appear once per shipment");
+  if (requested.size !== input.items.length) fail(400, "Barang penjualan yang sama hanya boleh dicantumkan satu kali dalam pengiriman.");
   const shipped = await shippedQuantityByItem(tx, saleId);
   const openShipmentItems = await tx.saleShipmentItem.findMany({
     where: {
@@ -166,11 +169,11 @@ export async function createShipment(tx: FulfillmentTx, saleId: string, input: C
 
   for (const item of input.items) {
     const saleItem = sale.items.find((candidate) => candidate.id === item.saleItemId);
-    if (!saleItem) fail(400, "Shipment item is not part of this sale");
+    if (!saleItem) fail(400, "Barang pengiriman bukan bagian dari penjualan ini.");
     const alreadyShipped = shipped.get(item.saleItemId) ?? 0;
     const alreadyCommitted = openCommitted.get(item.saleItemId) ?? 0;
-    if (alreadyShipped + alreadyCommitted + item.quantity > saleItem.quantity) fail(409, `Shipment quantity exceeds remaining quantity for ${item.saleItemId}`);
-    if ((reserved.get(item.saleItemId) ?? 0) < alreadyCommitted + item.quantity) fail(409, `Reserved stock is insufficient for ${item.saleItemId}`);
+    if (alreadyShipped + alreadyCommitted + item.quantity > saleItem.quantity) fail(409, `Jumlah pengiriman melebihi sisa jumlah barang ${item.saleItemId}.`);
+    if ((reserved.get(item.saleItemId) ?? 0) < alreadyCommitted + item.quantity) fail(409, `Stok yang dipesan tidak mencukupi untuk barang ${item.saleItemId}.`);
   }
 
   const created = await tx.saleShipment.create({
@@ -191,12 +194,12 @@ export async function createShipment(tx: FulfillmentTx, saleId: string, input: C
 
 export async function pickShipment(tx: FulfillmentTx, id: string, input: PickShipmentInput, userId: string) {
   const shipment = await lockShipmentAndSale(tx, id);
-  if (shipment.status !== "PICKING") fail(409, "Only PICKING shipments can be picked");
+  if (shipment.status !== "PICKING") fail(409, "Barang hanya dapat diambil saat status pengiriman Sedang diambil.");
   const requested = input.items?.length ? new Map(input.items.map((item) => [item.shipmentItemId, item.quantity])) : new Map(shipment.items.map((item) => [item.id, item.quantity]));
   for (const item of shipment.items) {
     const quantity = requested.get(item.id);
     if (quantity === undefined) continue;
-    if (quantity < 0 || quantity > item.quantity) fail(400, "Picked quantity must be between zero and the shipment quantity");
+    if (quantity < 0 || quantity > item.quantity) fail(400, "Jumlah barang yang diambil harus antara nol dan jumlah pengiriman.");
     await tx.saleShipmentItem.update({ where: { id: item.id }, data: { pickedQuantity: quantity, pickedById: userId, pickedAt: new Date() } });
   }
   const updated = await tx.saleShipment.update({ where: { id }, data: { pickedAt: new Date() }, include: shipmentInclude });
@@ -205,8 +208,8 @@ export async function pickShipment(tx: FulfillmentTx, id: string, input: PickShi
 
 export async function packShipment(tx: FulfillmentTx, id: string, userId: string) {
   const shipment = await lockShipmentAndSale(tx, id);
-  if (shipment.status !== "PICKING") fail(409, "Only PICKING shipments can be packed");
-  if (shipment.items.some((item) => item.pickedQuantity !== item.quantity)) fail(409, "All shipment items must be picked before packing");
+  if (shipment.status !== "PICKING") fail(409, "Pengiriman hanya dapat dikemas saat statusnya Sedang diambil.");
+  if (shipment.items.some((item) => item.pickedQuantity !== item.quantity)) fail(409, "Semua barang harus diambil sebelum pengiriman dikemas.");
   const items = await tx.saleShipmentItem.findMany({ where: { shipmentId: id }, select: { id: true, quantity: true } });
   for (const item of items) await tx.saleShipmentItem.update({ where: { id: item.id }, data: { packedQuantity: item.quantity, packedById: userId, packedAt: new Date() } });
   await tx.saleShipment.update({ where: { id }, data: { status: "PACKED", packedAt: new Date() } });
@@ -216,8 +219,8 @@ export async function packShipment(tx: FulfillmentTx, id: string, userId: string
 
 export async function shipShipment(tx: FulfillmentTx, id: string, input: ShipShipmentInput, userId: string) {
   const shipment = await lockShipmentAndSale(tx, id);
-  if (shipment.status !== "PACKED") fail(409, "Only PACKED shipments can be shipped");
-  if (shipment.items.some((item) => item.packedQuantity !== item.quantity)) fail(409, "All shipment items must be packed before shipping");
+  if (shipment.status !== "PACKED") fail(409, "Pengiriman hanya dapat dikirim setelah statusnya Siap dikirim.");
+  if (shipment.items.some((item) => item.packedQuantity !== item.quantity)) fail(409, "Semua barang harus dikemas sebelum dikirim.");
 
   for (const item of shipment.items) {
     const allocations = await consumeSaleReservationsForItems(tx, shipment.saleId, [{ saleItemId: item.saleItemId, quantity: item.quantity }]);
@@ -231,7 +234,7 @@ export async function shipShipment(tx: FulfillmentTx, id: string, input: ShipShi
 
 export async function completeShipment(tx: FulfillmentTx, id: string) {
   const shipment = await lockShipmentAndSale(tx, id);
-  if (shipment.status !== "SHIPPED") fail(409, "Only SHIPPED shipments can be completed");
+  if (shipment.status !== "SHIPPED") fail(409, "Pengiriman hanya dapat diselesaikan setelah berstatus Dalam perjalanan.");
   await tx.saleShipment.update({ where: { id }, data: { status: "COMPLETED", completedAt: new Date() } });
   const outstandingShipments = await tx.saleShipment.count({
     where: { saleId: shipment.saleId, status: { in: ["PICKING", "PACKED", "SHIPPED"] } },
@@ -242,7 +245,7 @@ export async function completeShipment(tx: FulfillmentTx, id: string) {
 
 export async function cancelShipment(tx: FulfillmentTx, id: string) {
   const shipment = await lockShipmentAndSale(tx, id);
-  if (!["PICKING", "PACKED"].includes(shipment.status)) fail(409, "Only unshipped shipments can be cancelled");
+  if (!["PICKING", "PACKED"].includes(shipment.status)) fail(409, "Hanya pengiriman yang belum dikirim yang dapat dibatalkan.");
   await tx.saleShipment.update({ where: { id }, data: { status: "CANCELLED" } });
   await setSaleProgress(tx, shipment.saleId, "RESERVED");
   return getShipmentForRoute(tx, id);
