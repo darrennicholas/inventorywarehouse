@@ -64,7 +64,8 @@ for (const account of roleAccounts) {
     const summary = await dashboardSummary;
     expect(summary.status(), `Dashboard summary failed for ${account.name}: ${await summary.text()}`).toBe(200);
     await expect(page.getByRole("heading", { name: "Dashboard", level: 1, exact: true })).toBeVisible();
-    await expect(page.getByText(account.name, { exact: true })).toBeVisible();
+    // The profile button renders both the user's name and role; they match for warehouse roles.
+    await expect(page.locator("header button[aria-expanded]").getByText(account.name, { exact: true }).first()).toBeVisible();
     await expect(page.locator("nextjs-portal")).toHaveCount(0);
   });
 }
