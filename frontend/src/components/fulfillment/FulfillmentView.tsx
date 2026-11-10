@@ -6,7 +6,7 @@ import { confirmAction } from "@/components/ui/GlobalAlert";
 import { LoaderCircle } from "@/components/ui/GlobalLoading";
 import ActionIconButton from "@/components/ui/ActionIconButton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ClipboardCheck, PackageCheck, Plus, ScanLine, Search, Send, X } from "lucide-react";
+import { Check, ClipboardCheck, Eye, PackageCheck, Pencil, Plus, ScanLine, Search, Send, X } from "lucide-react";
 
 import { useAuth } from "@/components/auth/AuthProvider";
 import DataPagination from "@/components/ui/DataPagination";
@@ -254,11 +254,11 @@ export default function FulfillmentView({ target = null }: { target?: Notificati
                     </td>
                     <td className="max-w-[280px] px-5 py-4">
                       <p className="truncate text-xs text-slate-700">{row.items[0]?.product?.name ?? "Produk"}{row.items.length > 1 ? ` · +${row.items.length - 1} barang` : ""}</p>
-                      <ShipmentItemDetails shipment={row} canAdjust={canPick && row.status === "PICKING"} busy={Boolean(working)} onSavePicked={correctPickedQuantity} compact />
                     </td>
                     <td className="whitespace-nowrap px-5 py-4 text-xs text-slate-600">
                       <p>Diambil <strong className="text-slate-800">{picked}/{ordered}</strong></p>
                       <p className="mt-1">Dikemas <strong className="text-slate-800">{packed}/{ordered}</strong></p>
+                      <ShipmentItemDetails shipment={row} canAdjust={canPick && row.status === "PICKING"} busy={Boolean(working)} onSavePicked={correctPickedQuantity} compact />
                     </td>
                     <td className="px-5 py-4 text-xs">
                       {row.trackingNumber ? <><p className="font-semibold text-slate-700">{row.courier ?? "Kurir"}</p><p className="mt-1 break-all text-blue-700">{row.trackingNumber}</p></> : <span className="text-slate-400">Belum dikirim</span>}
@@ -288,7 +288,7 @@ function ShipmentItemDetails({ shipment, canAdjust, busy, onSavePicked, compact 
 }) {
   const [drafts, setDrafts] = useState<Record<string, string>>(() => Object.fromEntries(shipment.items.map((item) => [item.id, String(item.pickedQuantity)])));
   return <details className={compact ? "mt-2 text-xs" : "rounded-xl border border-slate-200 bg-white text-sm"}>
-    <summary className="w-fit cursor-pointer rounded-lg px-2 py-1 font-semibold text-blue-700 transition hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">{canAdjust ? "Lihat / koreksi barang" : "Lihat semua barang"} ({shipment.items.length})</summary>
+    <summary className="w-fit cursor-pointer rounded-lg px-2 py-1 font-semibold text-blue-700 transition hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"><span className="inline-flex items-center gap-1.5">{canAdjust ? <><Pencil size={13} aria-hidden="true" /> Koreksi jumlah</> : <><Eye size={13} aria-hidden="true" /> Rincian barang</>} ({shipment.items.length})</span></summary>
     <ul className={compact ? "mt-2 max-h-56 space-y-2 overflow-y-auto rounded-lg bg-slate-50 p-2" : "mt-2 max-h-64 space-y-2 overflow-y-auto p-3"}>
       {shipment.items.map((item) => <li key={item.id} className="rounded-lg border border-slate-100 bg-slate-50 p-2.5">
         <p className="font-semibold text-slate-800">{item.product?.name ?? "Produk"}</p>

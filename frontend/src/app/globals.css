@@ -288,8 +288,40 @@ option {
 }
 button:not(:disabled):active { filter: brightness(.97); transform: translateY(0) scale(.98); }
 button:focus-visible { outline: 2px solid #3b82f6; outline-offset: 3px; box-shadow: 0 0 0 5px rgb(59 130 246 / 14%); }
+.sf-action-icon-wrap { position: relative; display: inline-flex; align-items: center; }
+.sf-action-icon-tooltip {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 7px);
+  left: 0;
+  width: max-content;
+  max-width: min(16rem, calc(100vw - 2rem));
+  padding: .4rem .6rem;
+  border: 1px solid rgb(148 163 184 / 28%);
+  border-radius: .55rem;
+  background: #172554;
+  color: #fff;
+  font-size: .7rem;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  box-shadow: 0 8px 18px rgb(15 23 42 / 20%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-3px);
+  transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+}
+.sf-action-icon-wrap:hover > .sf-action-icon-tooltip,
+.sf-action-icon-wrap:focus-within > .sf-action-icon-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+html.dark .sf-action-icon-tooltip { border-color: rgb(148 163 184 / 20%); background: #0f172a; }
 @media (prefers-reduced-motion: reduce) {
-  button:not(:disabled) { transition-duration: 0.01ms; }
+  button:not(:disabled), .sf-action-icon-tooltip { transition-duration: 0.01ms; }
 }
 
 button:disabled {

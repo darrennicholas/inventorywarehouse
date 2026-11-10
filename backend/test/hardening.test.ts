@@ -113,10 +113,10 @@ test("receiving and transfers cannot revive or silently rewrite batches", () => 
   const now = new Date("2026-01-01T00:00:00Z");
   const batch = { status: "ACTIVE", expiryDate: new Date("2027-01-01T00:00:00Z"), productionDate: new Date("2025-01-01T00:00:00Z") };
   assert.doesNotThrow(() => assertUsableBatch(batch, { expiryDate: batch.expiryDate }, now));
-  assert.throws(() => assertUsableBatch({ ...batch, status: "QUARANTINED" }, {}, now), /quarantined/);
-  assert.throws(() => assertUsableBatch({ ...batch, status: "EXPIRED" }, {}, now), /expired/);
-  assert.throws(() => assertUsableBatch(batch, { expiryDate: new Date("2028-01-01T00:00:00Z") }, now), /differs/);
-  assert.throws(() => assertUsableBatch(batch, { expiryDate: new Date("2025-01-01T00:00:00Z") }, now), /Expired goods/);
+  assert.throws(() => assertUsableBatch({ ...batch, status: "QUARANTINED" }, {}, now), /dikarantina/);
+  assert.throws(() => assertUsableBatch({ ...batch, status: "EXPIRED" }, {}, now), /kedaluwarsa/);
+  assert.throws(() => assertUsableBatch(batch, { expiryDate: new Date("2028-01-01T00:00:00Z") }, now), /berbeda/);
+  assert.throws(() => assertUsableBatch(batch, { expiryDate: new Date("2025-01-01T00:00:00Z") }, now), /kedaluwarsa/);
 });
 
 test("concurrent stock changes remain consistent and never go negative", { skip: !integrationEnabled }, async () => {

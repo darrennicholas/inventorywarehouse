@@ -86,6 +86,7 @@ export default function OperationsView({ kind, target = null }: { kind: Operatio
   const [reportWarehouses, setReportWarehouses] = useState<OptionRecord[]>([]);
   const loadSequence = useRef(0);
   const openedNotification = useRef(0);
+  const deleteActionInFlight = useRef(false);
 
   function refreshNotificationBell() { window.dispatchEvent(new Event("stockflow:notifications")); }
 
@@ -132,14 +133,24 @@ export default function OperationsView({ kind, target = null }: { kind: Operatio
   async function save() { const revision = Boolean(editing && editing.status === "REVISION" && (kind === "adjustments" || kind === "transfers")); if ((!editing || revision) && kind === "purchases" && (!form.supplierId || !form.warehouseId)) { setError("Pilih supplier dan gudang penerima terlebih dahulu."); return; } if (!editing && kind === "sales" && !form.warehouseId) { setError("Pilih gudang pengeluaran terlebih dahulu."); return; } if ((!editing || revision) && kind === "adjustments" && (!form.warehouseId || !form.reason.trim())) { setError("Pilih gudang dan isi alasan penyesuaian stok."); return; } if ((!editing || revision) && kind === "transfers" && (!form.fromWarehouseId || !form.toWarehouseId)) { setError("Pilih gudang asal dan gudang tujuan."); return; } if (!editing && kind === "payments" && !form.relationId) { setError("Pilih transaksi yang akan dibayar."); return; } if (!editing && kind === "expenses" && !form.category.trim()) { setError("Isi kategori pengeluaran terlebih dahulu."); return; } if ((!editing || revision) && ["purchases", "sales", "adjustments", "transfers"].includes(kind)) { if (lineItems.length === 0 || lineItems.some((item) => !item.productId || !Number.isInteger(Number(item.quantity)) || Number(item.quantity) < 1 || ((kind === "purchases" || kind === "sales") && (!Number.isFinite(Number(item.unitPrice)) || Number(item.unitPrice) < 0)))) { setError("Lengkapi produk, jumlah minimal 1, dan harga yang valid pada setiap baris."); return; } if (kind === "transfers" && form.fromWarehouseId === form.toWarehouseId) { setError("Gudang asal dan tujuan harus berbeda."); return; } } setSaving(true); setError(""); try { const endpoint = editing ? `${current.endpoint}/${editing.id}${revision ? "/revise" : ""}` : current.endpoint; const result = await apiRequest<{ success: boolean; message?: string }>(endpoint, { method: editing && !revision ? "PATCH" : "POST", body: JSON.stringify(editing && !revision ? editPayload() : createPayload()) }); if (!result.success) throw new Error(result.message ?? "Penyimpanan gagal"); setFormOpen(false); setNotice(editing ? "Perubahan berhasil disimpan." : "Transaksi berhasil dibuat."); await load(); refreshNotificationBell(); } catch (reason) { setError(reason instanceof Error ? reason.message : "Penyimpanan gagal. Periksa data dan coba lagi."); } finally { setSaving(false); } }
   async function approve(row: OperationRecord) { setSaving(true); setError(""); try { const result = await apiRequest<{ success: boolean; message?: string }>(`${current.endpoint}/${row.id}/approve`, { method: "POST" }); if (!result.success) throw new Error(result.message ?? "Persetujuan gagal"); setNotice(`${row.number ?? "Transaksi"} berhasil disetujui.`); await load(); refreshNotificationBell(); } catch (reason) { setError(reason instanceof Error ? reason.message : "Persetujuan gagal. Coba lagi."); } finally { setSaving(false); } }
   async function remove(row: OperationRecord) {
-    if (!canDelete || !await confirmAction(`Batalkan atau hapus ${row.number ?? "catatan ini"}? Tindakan ini dapat mengubah status atau tidak bisa dibatalkan.`)) return;
+    if (!canDelete || saving || deleteActionInFlight.current) return;
+    deleteActionInFlight.current = true;
+    let started = false;
     try {
+      if (!await confirmAction(`Batalkan atau hapus ${row.number ?? "catatan ini"}? Tindakan ini dapat mengubah status atau tidak bisa dibatalkan.`)) return;
+      if (saving) return;
+      started = true;
+      setSaving(true);
+      setError("");
       await apiRequest<{ success: boolean; message?: string }>(`/api/operations/${kind}/${row.id}`, { method: "DELETE" });
       setNotice(`${row.number ?? "Catatan"} berhasil dibatalkan atau dihapus.`);
       await load();
       refreshNotificationBell();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Aksi gagal. Coba lagi.");
+    } finally {
+      deleteActionInFlight.current = false;
+      if (started) setSaving(false);
     }
   }
   function receive(row: OperationRecord) { setError(""); setReceivingRow(row); void loadOptions(); }
@@ -154,12 +165,12 @@ export default function OperationsView({ kind, target = null }: { kind: Operatio
 
     return (
       <div data-sf-action-column className="flex shrink-0 items-center justify-start gap-1">
-        <ActionIconButton label={`Lihat rincian ${row.number ?? "transaksi"}`} icon={Eye} onClick={() => setViewing(row)} />
-        {showApproval && <ActionIconButton label={`Setujui ${row.number ?? "transaksi"}`} icon={CheckCircle2} variant="success" onClick={() => void approve(row)} />}
-        {kind === "purchases" && canWrite && ["APPROVED", "PARTIALLY_RECEIVED"].includes(row.status ?? "") && <ActionIconButton label={`Terima barang untuk ${row.number ?? "pesanan"}`} icon={PackageCheck} variant="violet" onClick={() => receive(row)} />}
-        {kind === "sales" && canWrite && row.status === "DRAFT" && <ActionIconButton label={`Pesan stok untuk ${row.number ?? "penjualan"}`} icon={PackageCheck} variant="primary" onClick={() => void updateSaleStatus(row, "RESERVED")} />}
-        {canWrite && <ActionIconButton label={`Ubah ${row.number ?? "transaksi"}`} icon={Pencil} variant="warning" onClick={() => openEdit(row)} />}
-        {canDelete && <ActionIconButton label={`Hapus atau batalkan ${row.number ?? "transaksi"}`} icon={Trash2} variant="danger" onClick={() => void remove(row)} />}
+        <ActionIconButton label={`Lihat rincian ${row.number ?? "transaksi"}`} icon={Eye} disabled={saving} onClick={() => setViewing(row)} />
+        {showApproval && <ActionIconButton label={`Setujui ${row.number ?? "transaksi"}`} icon={CheckCircle2} variant="success" disabled={saving} onClick={() => void approve(row)} />}
+        {kind === "purchases" && canWrite && ["APPROVED", "PARTIALLY_RECEIVED"].includes(row.status ?? "") && <ActionIconButton label={`Terima barang untuk ${row.number ?? "pesanan"}`} icon={PackageCheck} variant="violet" disabled={saving} onClick={() => receive(row)} />}
+        {kind === "sales" && canWrite && row.status === "DRAFT" && <ActionIconButton label={`Pesan stok untuk ${row.number ?? "penjualan"}`} icon={PackageCheck} variant="primary" disabled={saving} onClick={() => void updateSaleStatus(row, "RESERVED")} />}
+        {canWrite && <ActionIconButton label={`Ubah ${row.number ?? "transaksi"}`} icon={Pencil} variant="warning" disabled={saving} onClick={() => openEdit(row)} />}
+        {canDelete && <ActionIconButton label={`Hapus atau batalkan ${row.number ?? "transaksi"}`} icon={Trash2} variant="danger" disabled={saving} onClick={() => void remove(row)} />}
       </div>
     );
   }
