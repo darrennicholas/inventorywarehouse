@@ -24,7 +24,7 @@ test("administrator can sign in and reach the role-aware dashboard", async ({ pa
 
   await expect(page.getByRole("heading", { name: "Dashboard", level: 1, exact: true })).toBeVisible();
   const summaryResponse = await dashboardSummary;
-  expect(summaryResponse.status(), `Dashboard summary failed: ${await summaryResponse.text()}`).toBe(200);
+  expect(summaryResponse.status(), `Dashboard summary failed for administrator: ${await summaryResponse.text()}`).toBe(200);
   await page.getByRole("button", { name: "Stok & kontrol", exact: true }).click();
   await expect(page.getByRole("button", { name: "Audit", exact: true })).toBeVisible();
   await expect(page.getByText("System Administrator", { exact: true })).toBeVisible();
@@ -59,8 +59,10 @@ for (const account of roleAccounts) {
     );
     await page.getByRole("button", { name: "Sign In" }).click();
 
-    expect((await loginResponse).status()).toBe(200);
-    expect((await dashboardSummary).status()).toBe(200);
+    const login = await loginResponse;
+    expect(login.status(), `Login failed for ${account.name}: ${await login.text()}`).toBe(200);
+    const summary = await dashboardSummary;
+    expect(summary.status(), `Dashboard summary failed for ${account.name}: ${await summary.text()}`).toBe(200);
     await expect(page.getByRole("heading", { name: "Dashboard", level: 1, exact: true })).toBeVisible();
     await expect(page.getByText(account.name, { exact: true })).toBeVisible();
     await expect(page.locator("nextjs-portal")).toHaveCount(0);
