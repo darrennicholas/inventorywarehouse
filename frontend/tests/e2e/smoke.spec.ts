@@ -9,13 +9,18 @@ test("administrator can sign in and reach the role-aware dashboard", async ({ pa
   await page.goto("/");
   await page.getByLabel("Email Address").fill(adminEmail!);
   await page.getByLabel("Password", { exact: true }).fill(adminPassword!);
+  const dashboardSummary = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === "/api/operations/dashboard-summary",
+  );
   await page.getByRole("button", { name: "Sign In" }).click();
 
   await expect(page.getByRole("heading", { name: "Dashboard", level: 1, exact: true })).toBeVisible();
+  const summaryResponse = await dashboardSummary;
+  expect(summaryResponse.status(), `Dashboard summary failed: ${await summaryResponse.text()}`).toBe(200);
   await page.getByRole("button", { name: "Stok & kontrol", exact: true }).click();
   await expect(page.getByRole("button", { name: "Audit", exact: true })).toBeVisible();
   await expect(page.getByText("System Administrator", { exact: true })).toBeVisible();
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.locator("nextjs-portal")).toHaveCount(0);
 });
 
 test("login form reports invalid credentials without exposing a runtime overlay", async ({ page }) => {
