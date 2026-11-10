@@ -73,7 +73,7 @@ async function main(): Promise<void> {
   const users = [
     { code: "ADMIN" as const, email: adminEmail, name: "System Administrator", password: adminPassword },
     { code: "WAREHOUSE_MANAGER" as const, email: process.env.WAREHOUSE_MANAGER_EMAIL?.trim().toLowerCase() ?? "warehouse.manager@stockflow.local", name: "Warehouse Manager", password: process.env.WAREHOUSE_MANAGER_PASSWORD ?? demoPassword },
-    { code: "WAREHOUSE_STAFF" as const, email: process.env.WAREHOUSE_STAFF_EMAIL?.trim().toLowerCase() ?? "warehouse.staff@stockflow.local", name: "Warehouse Staff", password: process.env.WAREHOUSE_STAFF_PASSWORD ?? demoPassword },
+    { code: "WAREHOUSE_STAFF" as const, email: process.env.WAREHOUSE_STAFF_EMAIL?.trim().toLowerCase() ?? "warehouse.staff@stockflow.local", name: "Warehouse Staff", password: process.env.WAREHOUSE_STAFF_PASSWORD ?? demoPassword, staff: { code: "STF-WHS-001", name: "Siti Rahma", position: "Warehouse Staff", warehouseCode: "WH-BDG", warehouseName: "Gudang Bandung" } },
     { code: "PROCUREMENT" as const, email: process.env.PROCUREMENT_EMAIL?.trim().toLowerCase() ?? "procurement@stockflow.local", name: "Procurement Officer", password: process.env.PROCUREMENT_PASSWORD ?? demoPassword },
     { code: "AUDITOR" as const, email: process.env.AUDITOR_EMAIL?.trim().toLowerCase() ?? "auditor@stockflow.local", name: "Inventory Auditor", password: process.env.AUDITOR_PASSWORD ?? demoPassword },
   ];
@@ -87,7 +87,27 @@ async function main(): Promise<void> {
       continue;
     }
     if (user.password.length < 12) throw new Error(`${user.code}_PASSWORD must be at least 12 characters`);
-    await prisma.user.create({ data: { email: user.email, fullName: user.name, passwordHash: await bcrypt.hash(user.password, 12), roleId: role.id, isActive: true } });
+    let staffId: string | undefined;
+    if ("staff" in user && user.staff) {
+      const warehouse = await prisma.warehouse.upsert({
+        where: { code: user.staff.warehouseCode },
+        update: {},
+        create: { code: user.staff.warehouseCode, name: user.staff.warehouseName },
+        select: { id: true },
+      });
+      const staff = await prisma.staff.upsert({
+        where: { staffCode: user.staff.code },
+        update: {},
+        create: { staffCode: user.staff.code, fullName: user.staff.name, email: user.email, position: user.staff.position, warehouseId: warehouse.id },
+        select: { id: true },
+      });
+      const linkedUser = await prisma.user.findUnique({ where: { staffId: staff.id }, select: { email: true } });
+      if (linkedUser && linkedUser.email !== user.email) {
+        throw new Error(`Staff profile ${user.staff.code} is already linked to ${linkedUser.email}`);
+      }
+      staffId = staff.id;
+    }
+    await prisma.user.create({ data: { email: user.email, fullName: user.name, passwordHash: await bcrypt.hash(user.password, 12), roleId: role.id, ...(staffId ? { staffId } : {}), isActive: true } });
     console.log(`Created ${user.code}: ${user.email}`);
   }
   console.log(`Permissions: ${await prisma.permission.count()}, Roles: ${await prisma.role.count()}, Users: ${await prisma.user.count()}`);
