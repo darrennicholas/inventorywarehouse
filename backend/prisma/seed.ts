@@ -215,7 +215,20 @@ async function main() {
     });
   }
 
-  const warehouseList = await prisma.warehouse.findMany({ select: { id: true, code: true } });
+  // Batasi proses transaksi demo hanya ke warehouse yang memang dibuat oleh seeder.
+  // Sebelumnya findMany() mengambil SEMUA warehouse di database. Jika ada warehouse
+  // tambahan milik user yang belum mempunyai location demo, fallback dapat memakai
+  // location warehouse lain dan memicu constraint:
+  // "InventoryLocationBalance location does not belong to warehouse".
+  const seededWarehouseCodes = [
+    "WH-JKT", "WH-BDG", "WH-SBY", "WH-DPS", "WH-MDN",
+    "WH-MKS", "WH-SMG", "WH-MLG", "WH-YGY", "WH-BKS",
+  ] as const;
+
+  const warehouseList = await prisma.warehouse.findMany({
+    where: { code: { in: [...seededWarehouseCodes] } },
+    select: { id: true, code: true },
+  });
   const warehouseMap = new Map(warehouseList.map((item) => [item.code, item.id]));
   const locationByCode = new Map<string, string>();
   for (const location of ([
@@ -252,15 +265,51 @@ async function main() {
   const jkt = id(warehouseMap, "WH-JKT"), bdg = id(warehouseMap, "WH-BDG"), sby = id(warehouseMap, "WH-SBY");
   const procurement = id(roleUserMap, "PROCUREMENT"), manager = id(roleUserMap, "WAREHOUSE_MANAGER"), staff = id(roleUserMap, "WAREHOUSE_STAFF"), admin = id(roleUserMap, "ADMIN");
 
-  const seededReturns = await prisma.returnOrder.findMany({ where: { number: { startsWith: "SEED-" } }, select: { id: true } });
+  // Cleanup return transaction lebih dulu karena ReturnOrder memiliki FK ke PurchaseOrder/Sale.
+  // Jangan hanya mengandalkan nomor ReturnOrder "SEED-*": return non-SEED yang menunjuk
+  // ke transaksi demo juga harus ikut dibersihkan sebelum parent demo dihapus.
+  const seededReturns = await prisma.returnOrder.findMany({
+    where: {
+      OR: [
+        { number: { startsWith: "SEED-" } },
+        { purchaseOrder: { number: { startsWith: "SEED-" } } },
+        { sale: { number: { startsWith: "SEED-" } } },
+      ],
+    },
+    select: { id: true },
+  });
+
   const seededReturnIds = seededReturns.map((item) => item.id);
-  const seededSettlements = seededReturnIds.length ? await prisma.returnSettlement.findMany({ where: { returnOrderId: { in: seededReturnIds } }, select: { id: true } }) : [];
-  const seededSettlementIds = seededSettlements.map((item) => item.id);
-  if (seededSettlementIds.length) await prisma.creditApplication.deleteMany({ where: { settlementId: { in: seededSettlementIds } } });
+
   if (seededReturnIds.length) {
-    await prisma.quarantineDecision.deleteMany({ where: { returnOrderId: { in: seededReturnIds } } });
-    await prisma.returnSettlement.deleteMany({ where: { returnOrderId: { in: seededReturnIds } } });
-    await prisma.returnOrder.deleteMany({ where: { id: { in: seededReturnIds } } });
+    // ReturnSettlement dapat memiliki CreditApplication, jadi child tersebut
+    // wajib dihapus sebelum settlement.
+    const seededSettlements = await prisma.returnSettlement.findMany({
+      where: { returnOrderId: { in: seededReturnIds } },
+      select: { id: true },
+    });
+
+    const seededSettlementIds = seededSettlements.map((item) => item.id);
+
+    if (seededSettlementIds.length) {
+      await prisma.creditApplication.deleteMany({
+        where: { settlementId: { in: seededSettlementIds } },
+      });
+    }
+
+    // QuarantineDecision juga dapat mereferensikan ReturnOrder.
+    await prisma.quarantineDecision.deleteMany({
+      where: { returnOrderId: { in: seededReturnIds } },
+    });
+
+    await prisma.returnSettlement.deleteMany({
+      where: { returnOrderId: { in: seededReturnIds } },
+    });
+
+    // Setelah semua child dibersihkan, ReturnOrder aman dihapus.
+    await prisma.returnOrder.deleteMany({
+      where: { id: { in: seededReturnIds } },
+    });
   }
   await prisma.quarantineDecision.deleteMany({ where: { reason: { startsWith: "Seed:" } } });
   await prisma.saleShipment.deleteMany({ where: { number: { startsWith: "SEED-" } } });
@@ -334,7 +383,10 @@ async function main() {
   const balanceMap = new Map<string, string>();
   for (const product of products) for (const warehouse of warehouseList) {
     const key = `${product.sku}:${warehouse.code}`;
-    const defaultLocationId = locationByCode.get(`${warehouse.code.slice(3)}-A01`) ?? locationByCode.get("SBY-A01")!;
+    const defaultLocationId = locationByCode.get(`${warehouse.code.slice(3)}-A01`);
+    if (!defaultLocationId) {
+      throw new Error(`Default seed location untuk ${warehouse.code} tidak ditemukan.`);
+    }
     const balance = await prisma.inventoryBalance.upsert({
       where: { productId_warehouseId: { productId: product.id, warehouseId: warehouse.id } },
       update: { quantityOnHand: quantities[key] ?? 0, reservedQuantity: 0, locationId: defaultLocationId },
@@ -349,8 +401,16 @@ async function main() {
   const seededCableBatch = await prisma.productBatch.findUnique({ where: { productId_warehouseId_batchNumber: { productId: id(productMap, "CB-UGR-USBC"), warehouseId: jkt, batchNumber: "LOT-CB-2610-A" } } });
   await prisma.goodsReceipt.create({ data: { number: "SEED-GR-202610-001", purchaseOrderId: poReceived.id, warehouseId: jkt, receivedById: procurement, receivedAt: date(5), notes: "Seed goods receipt", items: { create: receivedPurchaseItems.map((item) => ({ purchaseOrderItemId: item.id, productId: item.productId, locationId: locationByCode.get("JKT-A01")!, batchId: item.productId === id(productMap, "CB-UGR-USBC") ? seededCableBatch?.id ?? null : null, quantity: item.quantity, damagedQuantity: 0 })) } } });
   for (const product of products) for (const warehouse of warehouseList) {
-    const fallbackLocationId = locationByCode.get(`${warehouse.code.slice(3)}-A01`) ?? locationByCode.get("SBY-A01")!;
-    const batches = product.trackBatch ? await prisma.productBatch.findMany({ where: { productId: product.id, warehouseId: warehouse.id } }) : [];
+    const fallbackLocationId = locationByCode.get(`${warehouse.code.slice(3)}-A01`);
+    if (!fallbackLocationId) {
+      throw new Error(`Default seed location untuk ${warehouse.code} tidak ditemukan.`);
+    }
+
+    const batches = product.trackBatch
+      ? await prisma.productBatch.findMany({
+          where: { productId: product.id, warehouseId: warehouse.id },
+        })
+      : [];
     if (product.trackBatch && !batches.length && (quantities[`${product.sku}:${warehouse.code}`] ?? 0) !== 0) throw new Error(`Seed stock for ${product.sku} in ${warehouse.code} requires batch data`);
     const rows = batches.length
       ? batches.map((batch) => ({ locationId: batch.locationId ?? fallbackLocationId, batchId: batch.id, quantityOnHand: batch.quantityOnHand, reservedQuantity: batch.reservedQuantity }))
@@ -406,18 +466,50 @@ async function main() {
   }
 
   const saleStatuses = ["RESERVED", "PICKING", "PACKED", "PARTIALLY_SHIPPED", "SHIPPED", "CANCELLED", "DRAFT", "COMPLETED"] as const;
+
+  // SaleItem memiliki unique constraint pada kombinasi (saleId, productId),
+  // jadi setiap Sale tidak boleh memiliki productId yang sama dua kali.
+  const primaryProductId = id(productMap, "LP-LNV-T14");
+  const secondaryProducts = productIds.filter((productId) => productId !== primaryProductId);
+
+  if (!secondaryProducts.length) {
+    throw new Error("Seed membutuhkan minimal satu produk sekunder untuk membuat SaleItem yang unik.");
+  }
+
   for (let index = 0; index < saleStatuses.length; index++) {
     const status = saleStatuses[index];
     const warehouseId = index % 2 === 0 ? jkt : bdg;
-    const lineItems = [id(productMap, "LP-LNV-T14"), productIds[(index + 1) % productIds.length]!];
+
+    const lineItems = [
+      primaryProductId,
+      secondaryProducts[index % secondaryProducts.length]!,
+    ];
+
     const unitPrice = 175000 + index * 10000;
-    await prisma.sale.create({ data: {
-      number: `SEED-SALE-202611-${String(index + 3).padStart(3, "0")}`,
-      customerId: customerIds[index % customerIds.length]!, warehouseId, createdById: staff, status,
-      saleDate: date(13 + index), notes: `Seed: skenario sales ${status.toLowerCase()}`,
-      subtotal: unitPrice * 10, discount: 0, tax: Math.round(unitPrice * 10 * 0.11), total: Math.round(unitPrice * 10 * 1.11),
-      items: { create: lineItems.map((productId) => ({ productId, quantity: 5, unitPrice, total: unitPrice * 5 })) },
-    } });
+
+    await prisma.sale.create({
+      data: {
+        number: `SEED-SALE-202611-${String(index + 3).padStart(3, "0")}`,
+        customerId: customerIds[index % customerIds.length]!,
+        warehouseId,
+        createdById: staff,
+        status,
+        saleDate: date(13 + index),
+        notes: `Seed: skenario sales ${status.toLowerCase()}`,
+        subtotal: unitPrice * 10,
+        discount: 0,
+        tax: Math.round(unitPrice * 10 * 0.11),
+        total: Math.round(unitPrice * 10 * 1.11),
+        items: {
+          create: lineItems.map((productId) => ({
+            productId,
+            quantity: 5,
+            unitPrice,
+            total: unitPrice * 5,
+          })),
+        },
+      },
+    });
   }
 
   const saleRows = await prisma.sale.findMany({ where: { number: { startsWith: "SEED-SALE-" } }, include: { items: true }, orderBy: { number: "asc" } });
