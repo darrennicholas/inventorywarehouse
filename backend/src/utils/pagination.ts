@@ -1,3 +1,11 @@
+import { z } from "zod";
+
+export const paginationQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).max(100_000).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+  search: z.string().trim().max(120).default(""),
+}).strict();
+
 export function pagination(query: Record<string, unknown>) {
   const pageValue = Number(query.page ?? 1);
   const pageSizeValue = Number(query.pageSize ?? 50);

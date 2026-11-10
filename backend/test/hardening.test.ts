@@ -17,6 +17,8 @@ import { dateRange, sumItems } from "../src/modules/operations/transaction-query
 import { reportError } from "../src/lib/monitoring.ts";
 import { conservativeAvailableQuantity } from "../src/modules/operations/stock-availability-summary.ts";
 import { pickShipmentSchema } from "../src/modules/fulfillment/fulfillment.validation.ts";
+import { adjustmentEditSchema, adjustmentListQuerySchema, expenseListQuerySchema, paymentListQuerySchema, purchaseEditSchema, purchaseListQuerySchema, saleEditSchema, saleListQuerySchema, transactionIdParamsSchema, transactionReasonSchema, transferEditSchema, transferListQuerySchema } from "../src/modules/operations/operations.validation.ts";
+import { workflowActions } from "../src/modules/operations/workflow-actions.ts";
 
 const integrationEnabled = Boolean(
   process.env.DATABASE_URL && process.env.RUN_INTEGRATION_TESTS === "true"
@@ -39,6 +41,7 @@ test("permission helper enforces the role permission matrix", () => {
   assert.equal(hasPermission(ROLE_PRESETS.ADMIN, ["roles.manage"]), true);
   assert.equal(hasPermission(ROLE_PRESETS.WAREHOUSE_MANAGER, ["transfers.approve"]), true);
   assert.equal(hasPermission(ROLE_PRESETS.PROCUREMENT, ["purchases.approve"]), true);
+  assert.equal(hasPermission(ROLE_PRESETS.WAREHOUSE_STAFF, ["dashboard.read"]), true);
   assert.equal(hasPermission(ROLE_PRESETS.WAREHOUSE_STAFF, ["purchases.approve"]), false);
   assert.equal(hasPermission(ROLE_PRESETS.AUDITOR, ["products.write"]), false);
 });
@@ -119,6 +122,66 @@ test("receiving and transfers cannot revive or silently rewrite batches", () => 
   assert.throws(() => assertUsableBatch({ ...batch, status: "EXPIRED" }, {}, now), /kedaluwarsa/);
   assert.throws(() => assertUsableBatch(batch, { expiryDate: new Date("2028-01-01T00:00:00Z") }, now), /berbeda/);
   assert.throws(() => assertUsableBatch(batch, { expiryDate: new Date("2025-01-01T00:00:00Z") }, now), /kedaluwarsa/);
+});
+
+test("transaction list queries reject invalid filters and preserve the supported status sets", () => {
+  assert.deepEqual(purchaseListQuerySchema.parse({ page: "2", pageSize: "25", status: "", search: " PO-1 ", fromDate: "2026-11-01", toDate: "2026-11-02" }), {
+    page: 2, pageSize: 25, search: "PO-1", status: undefined, fromDate: "2026-11-01", toDate: "2026-11-02",
+  });
+  assert.equal(saleListQuerySchema.parse({ status: "PARTIALLY_SHIPPED" }).status, "PARTIALLY_SHIPPED");
+  assert.equal(adjustmentListQuerySchema.parse({ status: "REVISION" }).status, "REVISION");
+  assert.equal(transferListQuerySchema.parse({ status: "IN_TRANSIT" }).status, "IN_TRANSIT");
+  assert.throws(() => purchaseListQuerySchema.parse({ status: "UNKNOWN" }));
+  assert.throws(() => saleListQuerySchema.parse({ page: "0" }));
+  assert.throws(() => transferListQuerySchema.parse({ pageSize: "500" }));
+  assert.throws(() => adjustmentListQuerySchema.parse({ fromDate: "2026-02-30" }));
+  assert.throws(() => purchaseListQuerySchema.parse({ fromDate: "2026-11-03", toDate: "2026-11-02" }));
+  assert.equal(expenseListQuerySchema.parse({ status: "UNPAID" }).status, "UNPAID");
+  assert.equal(paymentListQuerySchema.parse({ status: "VOID", pageSize: "10" }).pageSize, 10);
+  assert.throws(() => paymentListQuerySchema.parse({ status: "UNKNOWN" }));
+  assert.throws(() => expenseListQuerySchema.parse({ fromDate: "2026-11-03", toDate: "2026-11-02" }));
+  assert.throws(() => paymentListQuerySchema.parse({ unexpected: "filter" }));
+});
+
+test("transaction IDs, reason bodies, and status updates are validated by domain", () => {
+  const id = randomUUID();
+  assert.equal(transactionIdParamsSchema.parse({ id }).id, id);
+  assert.throws(() => transactionIdParamsSchema.parse({ id: "bad-id" }));
+  assert.equal(transactionReasonSchema.parse({ reason: "  Correct stock count  " }).reason, "Correct stock count");
+  assert.throws(() => transactionReasonSchema.parse({ reason: "no" }));
+  assert.equal(purchaseEditSchema.parse({ status: "PENDING" }).status, "PENDING");
+  assert.throws(() => purchaseEditSchema.parse({ status: "APPROVED" }));
+  assert.throws(() => saleEditSchema.parse({ status: "RECEIVED" }));
+  assert.throws(() => adjustmentEditSchema.parse({ status: "POSTED" }));
+  assert.throws(() => transferEditSchema.parse({ status: "IN_TRANSIT" }));
+  assert.throws(() => transferEditSchema.parse({}));
+});
+
+test("workflow action list is status, permission, creator, and reservation aware", () => {
+  const common = { kind: "purchases" as const, status: "PENDING", permission: "purchases", permissions: ["purchases.approve"], isCreator: false, approvalAllowed: true };
+  assert.deepEqual(workflowActions(common), ["approve", "reject"]);
+  assert.deepEqual(workflowActions({ ...common, isCreator: true }), []);
+  assert.deepEqual(workflowActions({ ...common, permissions: ["purchases.read"] }), []);
+  assert.deepEqual(workflowActions({ ...common, status: "RECEIVED" }), []);
+  assert.deepEqual(workflowActions({ ...common, approvalAllowed: false, rejectionAllowed: true }), ["reject"]);
+  assert.deepEqual(workflowActions({ kind: "sales", status: "RESERVED", permission: "sales", permissions: ["sales.write"], isCreator: true, approvalAllowed: false, hasActiveReservation: true }), ["releaseReservation"]);
+  assert.deepEqual(workflowActions({ kind: "sales", status: "RESERVED", permission: "sales", permissions: ["sales.write"], isCreator: false, approvalAllowed: false, hasActiveReservation: true, hasActiveShipment: true }), []);
+});
+
+test("server workflow actions cover approval domains with the same role and status rules", () => {
+  const scenarios = [
+    { kind: "purchases" as const, status: "PENDING", permission: "purchases", approvalAllowed: true },
+    { kind: "adjustments" as const, status: "DRAFT", permission: "adjustments", approvalAllowed: true },
+    { kind: "transfers" as const, status: "DRAFT", permission: "transfers", approvalAllowed: true },
+    { kind: "returns" as const, status: "PENDING", permission: "purchase-returns", approvalAllowed: true },
+    { kind: "opnames" as const, status: "SUBMITTED", permission: "stock-opnames", approvalAllowed: true },
+  ];
+  for (const scenario of scenarios) {
+    assert.deepEqual(workflowActions({ ...scenario, permissions: [`${scenario.permission}.approve`], isCreator: false }), ["approve", "reject"], scenario.kind);
+    assert.deepEqual(workflowActions({ ...scenario, permissions: [`${scenario.permission}.approve`], isCreator: true }), [], `${scenario.kind} creator cannot review own document`);
+    assert.deepEqual(workflowActions({ ...scenario, permissions: [`${scenario.permission}.read`], isCreator: false }), [], `${scenario.kind} read-only role receives no actions`);
+  }
+  assert.deepEqual(workflowActions({ kind: "returns", status: "POSTED", permission: "sales-returns", permissions: ["sales-returns.approve"], isCreator: false, approvalAllowed: true }), []);
 });
 
 test("concurrent stock changes remain consistent and never go negative", { skip: !integrationEnabled }, async () => {

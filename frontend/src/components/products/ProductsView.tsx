@@ -31,7 +31,7 @@ import ProductFormModal from "./ProductFormModal";
 import { useAuth } from "@/components/auth/AuthProvider";
 import DataPagination from "@/components/ui/DataPagination";
 import ActionFeedback from "@/components/ui/ActionFeedback";
-import { statusLabel } from "@/lib/ui-labels";
+import StatusBadge from "@/components/ui/StatusBadge";
 
 type Props = {
   store: ProductStore;
@@ -260,7 +260,7 @@ export default function ProductsView({
         </div>
 
         {/* SEARCH */}
-        <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-5 sm:px-7">
+        <div className="sf-filter-toolbar flex flex-wrap items-center justify-between gap-4 px-5 py-5 sm:px-7">
           <div className="flex items-center gap-2 text-xs text-slate-600">
             <label htmlFor="products-search">
                 Cari:
@@ -295,12 +295,12 @@ export default function ProductsView({
               <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-blue-50 text-blue-600">
                 <Package size={21} />
               </div>
-              <div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><h3 className="truncate font-bold text-slate-900">{product.name}</h3><span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${product.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{statusLabel(product.isActive ? "ACTIVE" : "INACTIVE")}</span></div><p className="mt-1 text-xs text-slate-500">SKU {product.sku}{product.code ? ` · ${product.code}` : ""}</p></div>
+              <div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><h3 className="truncate font-bold text-slate-900">{product.name}</h3><StatusBadge status={product.isActive ? "ACTIVE" : "INACTIVE"} /></div><p className="mt-1 text-xs text-slate-500">SKU <span className="font-mono">{product.sku}</span>{product.code ? ` · ${product.code}` : ""}</p></div>
             </div>
             <dl className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-xs">
               <div><dt className="text-slate-400">Kategori / merek</dt><dd className="mt-1 truncate font-medium text-slate-700">{product.category?.name ?? "—"} · {product.brand?.name ?? "—"}</dd></div>
               <div><dt className="text-slate-400">Stok / batas minimum</dt><dd className="mt-1 font-semibold text-slate-800">{product.totalStock ?? "—"} / {product.minStock} {product.unit?.code ?? "unit"}</dd></div>
-              <div className="col-span-2"><dt className="text-slate-400">Kode batang</dt><dd className="mt-1 break-all text-slate-700">{product.barcode || "—"}</dd></div>
+              <div className="col-span-2"><dt className="text-slate-400">Kode batang</dt><dd className="mt-1 break-all font-mono text-slate-700">{product.barcode || "—"}</dd></div>
             </dl>
             <div data-sf-action-column className="flex flex-wrap items-center gap-1 border-t border-slate-100 pt-3">
               <ActionIconButton label={`Lihat ${product.name}`} icon={Eye} onClick={() => setViewing(product)} />
@@ -312,7 +312,7 @@ export default function ProductsView({
         </div>
 
         {/* TABEL DESKTOP */}
-        <div className="hidden overflow-x-auto px-5 sm:px-7 md:block">
+        <div role="region" aria-label="Tabel data; gunakan gulir horizontal untuk melihat semua kolom" tabIndex={0} className="sf-table-scroll hidden overflow-x-auto px-5 sm:px-7 md:block">
           <table className="w-full min-w-[1170px] text-left text-xs">
             <thead>
               <tr className="border-b-2 border-slate-200 text-slate-700">
@@ -332,7 +332,7 @@ export default function ProductsView({
                 ].map((label) => (
                   <th
                     key={label}
-                    className="whitespace-nowrap px-3 py-3 font-bold"
+                    className={`whitespace-nowrap px-3 py-3 font-bold ${["Stok", "Batas minimum"].includes(label) ? "text-right" : ""}`}
                   >
                     {label}
                   </th>
@@ -372,7 +372,7 @@ export default function ProductsView({
 
                     {/* SKU */}
                     <td className="whitespace-nowrap px-3 py-3 text-slate-600">
-                      {product.sku}
+                      <span className="font-mono">{product.sku}</span>
                     </td>
 
                     {/* CODE */}
@@ -392,7 +392,7 @@ export default function ProductsView({
 
                     {/* STOCK */}
                     <td
-                      className="px-3 py-3 text-slate-600"
+                      className="px-3 py-3 text-right tabular-nums text-slate-600"
                       title={
                         product.totalStock === null
                           ? "Belum ada saldo stok tercatat"
@@ -403,7 +403,7 @@ export default function ProductsView({
                     </td>
 
                     {/* ALERT QTY */}
-                    <td className="px-3 py-3 text-slate-600">
+                    <td className="px-3 py-3 text-right tabular-nums text-slate-600">
                       {product.minStock}
                     </td>
 
@@ -415,7 +415,7 @@ export default function ProductsView({
                     {/* BARCODE */}
                     <td className="px-3 py-3 text-slate-600">
                       {product.barcode ? (
-                        <span className="inline-flex items-center gap-1">
+                          <span className="inline-flex items-center gap-1 font-mono">
                           <Barcode size={16} />
                           {product.barcode}
                         </span>
@@ -426,15 +426,7 @@ export default function ProductsView({
 
                     {/* STATUS */}
                     <td className="px-3 py-3">
-                      <span
-                        className={`rounded-full px-2.5 py-1 font-semibold ${
-                          product.isActive
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-slate-100 text-slate-500"
-                        }`}
-                      >
-                        {statusLabel(product.isActive ? "ACTIVE" : "INACTIVE")}
-                      </span>
+                      <StatusBadge status={product.isActive ? "ACTIVE" : "INACTIVE"} />
                     </td>
 
                   </tr>

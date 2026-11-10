@@ -3,6 +3,14 @@ import { expect, test } from "@playwright/test";
 const adminEmail = process.env.E2E_ADMIN_EMAIL;
 const adminPassword = process.env.E2E_ADMIN_PASSWORD;
 
+const roleAccounts = [
+  { email: adminEmail, name: "System Administrator" },
+  { email: process.env.E2E_WAREHOUSE_MANAGER_EMAIL ?? "warehouse.manager@stockflow.local", name: "Warehouse Manager" },
+  { email: process.env.E2E_WAREHOUSE_STAFF_EMAIL ?? "warehouse.staff@stockflow.local", name: "Warehouse Staff" },
+  { email: process.env.E2E_PROCUREMENT_EMAIL ?? "procurement@stockflow.local", name: "Procurement Officer" },
+  { email: process.env.E2E_AUDITOR_EMAIL ?? "auditor@stockflow.local", name: "Inventory Auditor" },
+];
+
 test("administrator can sign in and reach the role-aware dashboard", async ({ page }) => {
   test.skip(!adminEmail || !adminPassword, "Provide disposable staging administrator credentials");
 
@@ -35,3 +43,26 @@ test("login form reports invalid credentials without exposing a runtime overlay"
   await expect(page.getByText(/invalid email or password/i)).toBeVisible();
   await expect(page.locator("nextjs-portal")).toHaveCount(0);
 });
+
+for (const account of roleAccounts) {
+  test(`${account.name} can sign in to the role-aware dashboard`, async ({ page }) => {
+    test.skip(!account.email || !adminPassword, "Provide disposable staging role credentials");
+
+    await page.goto("/");
+    await page.getByLabel("Email Address").fill(account.email!);
+    await page.getByLabel("Password", { exact: true }).fill(adminPassword!);
+    const loginResponse = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === "/api/auth/login",
+    );
+    const dashboardSummary = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === "/api/operations/dashboard-summary",
+    );
+    await page.getByRole("button", { name: "Sign In" }).click();
+
+    expect((await loginResponse).status()).toBe(200);
+    expect((await dashboardSummary).status()).toBe(200);
+    await expect(page.getByRole("heading", { name: "Dashboard", level: 1, exact: true })).toBeVisible();
+    await expect(page.getByText(account.name, { exact: true })).toBeVisible();
+    await expect(page.locator("nextjs-portal")).toHaveCount(0);
+  });
+}

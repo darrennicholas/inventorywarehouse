@@ -27,10 +27,16 @@ test("rejected stock documents are revised and approved with an audit trail", { 
     const response = await fetch(`http://127.0.0.1:${address.port}/api${path}`, { method, headers: { cookie: `stockflow_session=${tokens[user]}`, origin: (process.env.FRONTEND_URL ?? "http://localhost:3000").replace(/\/$/, ""), "x-csrf-token": createCsrfToken(sessions[user].id), "content-type": "application/json", "idempotency-key": randomUUID() }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     return { status: response.status, body: await response.json() as { data?: { id: string; status: string }; message?: string } };
   }
+  async function getWorkflowActions(id: string, user: number) {
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/operations/workflow/adjustments/${id}/history`, { headers: { cookie: `stockflow_session=${tokens[user]}` } });
+    return { status: response.status, body: await response.json() as { actions?: string[]; message?: string } };
+  }
   let adjustmentId = "", transferId = "";
   try {
     const adjustment = { number: `IT-ADJ-${suffix}`, warehouseId: from.id, type: "DECREASE", status: "DRAFT", reason: "Physical count", items: [{ productId: product.id, quantity: 2, locationId: source.id, batchId: null }] };
     const created = await request("/operations/adjustments", 0, "POST", adjustment); assert.equal(created.status, 201, created.body.message); adjustmentId = created.body.data!.id;
+    assert.deepEqual((await getWorkflowActions(adjustmentId, 0)).body.actions, []);
+    const reviewerActions = await getWorkflowActions(adjustmentId, 1); assert.equal(reviewerActions.status, 200, reviewerActions.body.message); assert.deepEqual(reviewerActions.body.actions, ["approve", "reject"]);
     assert.equal((await request(`/operations/workflow/adjustments/${adjustmentId}/reject`, 0, "POST", { reason: "Incorrect quantity" })).status, 403);
     assert.equal((await request(`/operations/workflow/adjustments/${adjustmentId}/reject`, 1, "POST", { reason: "Incorrect quantity" })).status, 200);
     assert.equal((await request(`/operations/adjustments/${adjustmentId}/approve`, 1, "POST")).status, 409);

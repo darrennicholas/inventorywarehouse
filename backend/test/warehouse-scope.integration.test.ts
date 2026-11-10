@@ -15,6 +15,8 @@ test("warehouse routes deny unassigned custom roles by default and honor explici
   const suffix = randomUUID().slice(0, 8);
   const warehouseScopedRole = await prisma.role.create({ data: { code: `TEST_SCOPE_${suffix}`, name: "Test scoped role", permissions: { create: { permission: { connect: { key: "warehouses.read" } } } } } });
   const unassignedRole = await prisma.role.create({ data: { code: `TEST_GLOBAL_${suffix}`, name: "Test unassigned role", permissions: { create: { permission: { connect: { key: "warehouses.read" } } } } } });
+  const inventoryPermission = await prisma.permission.findUniqueOrThrow({ where: { key: "inventory.read" } });
+  await prisma.rolePermission.createMany({ data: [warehouseScopedRole, unassignedRole].map((role) => ({ roleId: role.id, permissionId: inventoryPermission.id })) });
   const [warehouseA, warehouseB] = await Promise.all([
     prisma.warehouse.create({ data: { code: `SCOPE-A-${suffix}`, name: `Scope warehouse A ${suffix}` } }),
     prisma.warehouse.create({ data: { code: `SCOPE-B-${suffix}`, name: `Scope warehouse B ${suffix}` } }),
@@ -34,6 +36,10 @@ test("warehouse routes deny unassigned custom roles by default and honor explici
     const response = await fetch(`http://127.0.0.1:${address.port}/api/warehouses`, { headers: { cookie: `stockflow_session=${tokens[userIndex]}` } });
     return { status: response.status, body: await response.json() as { data?: Array<{ id: string }>; message?: string } };
   }
+  async function getStockBatches(userIndex: number, warehouseId: string) {
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/operations/batches?warehouseId=${warehouseId}`, { headers: { cookie: `stockflow_session=${tokens[userIndex]}` } });
+    return { status: response.status, body: await response.json() as { message?: string } };
+  }
 
   try {
     const scoped = await getWarehouses(0);
@@ -42,10 +48,13 @@ test("warehouse routes deny unassigned custom roles by default and honor explici
 
     const otherWarehouse = await fetch(`http://127.0.0.1:${address.port}/api/warehouses/${warehouseB.id}`, { headers: { cookie: `stockflow_session=${tokens[0]}` } });
     assert.equal(otherWarehouse.status, 403);
+    assert.equal((await getStockBatches(0, warehouseA.id)).status, 200, "a custom role linked to staff can read stock in its assigned warehouse");
+    assert.equal((await getStockBatches(0, warehouseB.id)).status, 403, "stock endpoints must enforce the same staff warehouse scope");
 
     const unassigned = await getWarehouses(1);
     assert.equal(unassigned.status, 403);
     assert.match(unassigned.body.message ?? "", /warehouse assignment or cross-warehouse permission/i);
+    assert.equal((await getStockBatches(1, warehouseA.id)).status, 403, "an unassigned custom role cannot bypass scope through a stock endpoint");
 
     const allWarehousePermission = await prisma.permission.findUniqueOrThrow({ where: { key: "warehouses.access_all" } });
     await prisma.rolePermission.create({ data: { roleId: unassignedRole.id, permissionId: allWarehousePermission.id } });
@@ -54,6 +63,7 @@ test("warehouse routes deny unassigned custom roles by default and honor explici
     const visibleIds = new Set(explicitlyGranted.body.data?.map((warehouse) => warehouse.id));
     assert.ok(visibleIds.has(warehouseA.id));
     assert.ok(visibleIds.has(warehouseB.id));
+    assert.equal((await getStockBatches(1, warehouseB.id)).status, 200, "explicit cross-warehouse permission should apply consistently to stock reads");
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     await prisma.authSession.deleteMany({ where: { userId: { in: users.map((user) => user.id) } } });

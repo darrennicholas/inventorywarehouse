@@ -342,10 +342,10 @@ export default function ReturnsView({
         <div className="divide-y divide-slate-100 px-4 md:hidden">
           {loading && <div className="py-6 text-center text-sm text-slate-500"><GlobalLoading label="Memuat retur..." /></div>}
           {!loading && rows.length === 0 && <p className="py-10 text-center text-sm text-slate-500">Tidak ada retur yang cocok.</p>}
-          {!loading && rows.map((row) => <article key={row.id} className="space-y-3 py-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-bold text-slate-900">{row.number}</p><p className="mt-1 text-xs text-slate-500">{type === "PURCHASE" ? "Pesanan pembelian" : "Penjualan"} {type === "PURCHASE" ? row.purchaseOrder?.number ?? "—" : row.sale?.number ?? "—"}</p></div><ReturnStatusBadge status={row.status} /></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="text-slate-400">Gudang</dt><dd className="mt-1 text-slate-700">{row.warehouse?.name ?? "—"}</dd></div><div><dt className="text-slate-400">Jumlah barang</dt><dd className="mt-1 text-slate-700">{row.items?.length ?? 0}</dd></div><div className="col-span-2"><dt className="text-slate-400">Tanggal</dt><dd className="mt-1 text-slate-700">{new Date(row.createdAt).toLocaleDateString("id-ID")}</dd></div></dl><div className="border-t border-slate-100 pt-3">{renderActions(row)}</div></article>)}
+          {!loading && rows.map((row) => <article key={row.id} className="space-y-3 py-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-mono font-bold text-slate-900">{row.number}</p><p className="mt-1 text-xs text-slate-500">{type === "PURCHASE" ? "Pesanan pembelian" : "Penjualan"} <span className="font-mono">{type === "PURCHASE" ? row.purchaseOrder?.number ?? "—" : row.sale?.number ?? "—"}</span></p></div><ReturnStatusBadge status={row.status} /></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="text-slate-400">Gudang</dt><dd className="mt-1 text-slate-700">{row.warehouse?.name ?? "—"}</dd></div><div><dt className="text-slate-400">Jumlah barang</dt><dd className="mt-1 text-slate-700">{row.items?.length ?? 0}</dd></div><div className="col-span-2"><dt className="text-slate-400">Tanggal</dt><dd className="mt-1 text-slate-700">{new Date(row.createdAt).toLocaleDateString("id-ID")}</dd></div></dl><div className="border-t border-slate-100 pt-3">{renderActions(row)}</div></article>)}
         </div>
 
-        <div className="hidden overflow-x-auto md:block">
+        <div role="region" aria-label="Tabel data; gunakan gulir horizontal untuk melihat semua kolom" tabIndex={0} className="sf-table-scroll hidden overflow-x-auto md:block">
           <table className="w-full min-w-[930px] text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
@@ -376,7 +376,7 @@ export default function ReturnsView({
                 >
                   <td className="px-5 py-4 align-middle">{renderActions(row)}</td>
                   <td className="px-5 py-4 font-bold text-slate-900">
-                    {row.number}
+                    <span className="font-mono">{row.number}</span>
                   </td>
 
                   <td className="px-5 py-4">

@@ -1,7 +1,6 @@
 
 "use client";
 
-import GlobalLoading from "@/components/ui/GlobalLoading";
 import GlobalSelect from "@/components/ui/GlobalSelect";
 import { confirmAction } from "@/components/ui/GlobalAlert";
 import ActionIconButton from "@/components/ui/ActionIconButton";
@@ -12,10 +11,11 @@ import {
   type FormEvent,
 } from "react";
 
-import { AlertCircle, Eye, Pencil, Plus, RefreshCw, Search, Tags, Trash2, X } from "lucide-react";
+import { AlertCircle, Eye, Pencil, Plus, RefreshCw, Tags, Trash2, X } from "lucide-react";
 import DataPagination from "@/components/ui/DataPagination";
+import DataTable from "@/components/ui/DataTable";
 import ActionFeedback from "@/components/ui/ActionFeedback";
-import { statusLabel } from "@/lib/ui-labels";
+import StatusBadge from "@/components/ui/StatusBadge";
 
 import { usePagedMaster } from "@/hooks/usePagedMaster";
 import { useCategories } from "@/hooks/useCategories";
@@ -78,7 +78,6 @@ export default function CategoriesView() {
   // FILTER CATEGORIES
   // =========================================
 
-  const filteredCategories = categories;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const startIndex = (safePage - 1) * pageSize;
@@ -211,7 +210,6 @@ export default function CategoriesView() {
       {notice && <ActionFeedback message={notice.message} tone={notice.type} onDismiss={() => setNotice(null)} />}
 
       {/* API ERROR */}
-      {error && <ActionFeedback message={error} tone="error" action={{ label: "Coba lagi", onClick: () => void fetchCategories() }} />}
 
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-4 dark:border-blue-900 dark:from-blue-950/60 dark:to-slate-900"><p className="text-[10px] font-bold uppercase tracking-widest text-blue-500">Jumlah kategori</p><p className="mt-2 text-2xl font-bold text-slate-900">{total}</p><p className="mt-1 text-xs text-slate-500">Kategori sesuai pencarian</p></div>
@@ -261,158 +259,24 @@ export default function CategoriesView() {
           </div>
         </div>
 
-        {/* TABLE TOOLBAR */}
-        <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-5 sm:px-7">
-
-
-          <div className="flex w-full items-center gap-2 sm:w-auto">
-            <label
-              htmlFor="category-search"
-              className="text-xs text-slate-600"
-            >
-              Cari:
-            </label>
-
-            <div className="relative min-w-0 flex-1 sm:w-64">
-              <Search
-                size={15}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              />
-
-              <input
-                id="category-search"
-                type="search"
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  setCurrentPage(1);
-                }}
-                placeholder="Cari kategori..."
-                className="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-xs text-slate-800 outline-none focus:border-blue-400"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* CATEGORY CARDS ON SMALL SCREENS */}
-        <div className="divide-y divide-slate-100 px-5 md:hidden">
-          {loading && <div className="py-8 text-center text-sm text-slate-500"><GlobalLoading label="Memuat kategori..." /></div>}
-          {!loading && filteredCategories.length === 0 && <p className="py-10 text-center text-sm text-slate-500">{search ? "Tidak ada kategori yang cocok." : "Kategori belum tersedia."}</p>}
-          {!loading && filteredCategories.map((category, index) => <article key={category.id} className="space-y-3 py-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-bold text-slate-800">{category.name}</p><p className="mt-1 line-clamp-2 text-xs text-slate-500">{category.description || "Tidak ada deskripsi"}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${category.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{statusLabel(category.isActive ? "ACTIVE" : "INACTIVE")}</span></div><div className="flex items-center justify-between text-xs text-slate-400"><span>#{startIndex + index + 1}</span><span>{formatDate(category.createdAt)}</span></div><div data-sf-action-column className="flex items-center gap-1 border-t border-slate-100 pt-3"><ActionIconButton label={`Lihat kategori ${category.name}`} icon={Eye} onClick={() => setViewingCategory(category)} />{canWrite && <ActionIconButton label={`Ubah kategori ${category.name}`} icon={Pencil} variant="warning" onClick={() => openEditModal(category)} />}{canDelete && <ActionIconButton label={`Nonaktifkan kategori ${category.name}`} icon={Trash2} variant="danger" disabled={saving || !category.isActive} onClick={() => void handleDeactivate(category)} />}</div></article>)}
-        </div>
-
-        {/* CATEGORY TABLE */}
-        <div className="hidden overflow-x-auto px-5 sm:px-7 md:block">
-          <table className="w-full min-w-[650px] text-left text-xs">
-            <thead>
-              <tr className="border-b-2 border-slate-200 text-slate-700">
-                <th className="px-3 py-3 font-bold text-left">Aksi</th>
-                <th className="px-3 py-3 font-bold">No.</th>
-                <th className="px-3 py-3 font-bold">
-                  Nama kategori
-                </th>
-                <th className="px-3 py-3 font-bold">
-                  Deskripsi
-                </th>
-                <th className="px-3 py-3 font-bold">
-                  Status
-                </th>
-                <th className="px-3 py-3 font-bold">
-                  Dibuat
-                </th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-100">
-              {!loading &&
-                paginatedCategories.map((category, index) => (
-                  <tr
-                    key={category.id}
-                    className="hover:bg-[#f8faff]"
-                  >
-                    <td className="px-3 py-4 align-middle">
-                      <div data-sf-action-column className="flex items-center gap-1">
-                        <ActionIconButton label={`Lihat kategori ${category.name}`} icon={Eye} onClick={() => setViewingCategory(category)} />
-                        {canWrite && <ActionIconButton label={`Ubah kategori ${category.name}`} icon={Pencil} variant="warning" onClick={() => openEditModal(category)} />}
-                        {canDelete && <ActionIconButton label={`Nonaktifkan kategori ${category.name}`} icon={Trash2} variant="danger" disabled={saving || !category.isActive} onClick={() => void handleDeactivate(category)} />}
-                      </div>
-                    </td>
-                    <td className="px-3 py-4 text-slate-500">
-                      {startIndex + index + 1}
-                    </td>
-
-                    <td className="px-3 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                          <Tags size={17} />
-                        </div>
-
-                        <span className="font-semibold text-slate-800">
-                          {category.name}
-                        </span>
-                      </div>
-                    </td>
-
-                    <td className="max-w-[260px] px-3 py-4 text-slate-500">
-                      {category.description || "—"}
-                    </td>
-
-                    <td className="px-3 py-4">
-                      <span
-                        className={`inline-block rounded-full px-3 py-1 text-[11px] font-semibold ${
-                          category.isActive
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-slate-100 text-slate-600"
-                        }`}
-                      >
-                        {category.isActive
-                          ? "Aktif"
-                          : "Tidak aktif"}
-                      </span>
-                    </td>
-
-                    <td className="whitespace-nowrap px-3 py-4 text-slate-500">
-                      {formatDate(category.createdAt)}
-                    </td>
-
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-
-          {loading && (
-            <div className="flex items-center justify-center gap-2 py-14 text-sm text-slate-500">
-              <GlobalLoading label="Memuat kategori..." />
-            </div>
-          )}
-
-          {!loading && filteredCategories.length === 0 && (
-            <div className="flex flex-col items-center py-14 text-center">
-              <Tags size={35} className="text-slate-300" />
-              <h3 className="mt-3 text-sm font-semibold text-slate-700">
-                {search
-                  ? "Tidak ada kategori yang cocok"
-                  : "Kategori belum tersedia"}
-              </h3>
-
-              <p className="mt-1 text-xs text-slate-400">
-                {search
-                  ? "Coba kata kunci pencarian lain."
-                  : "Tambahkan kategori pertama."}
-              </p>
-
-              {!search && canWrite && (
-                <button
-                  type="button"
-                  onClick={openAddModal}
-                  className="mt-5 rounded-lg bg-[#3867f6] px-4 py-2.5 text-xs font-semibold text-white"
-                >
-                  Tambah kategori pertama
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <DataTable
+          rows={paginatedCategories}
+          loading={loading}
+          error={error}
+          onRetry={() => void fetchCategories()}
+          search={search}
+          onSearch={(value) => { setSearch(value); setCurrentPage(1); }}
+          searchPlaceholder="Cari kategori..."
+          empty={<div className="flex flex-col items-center gap-2"><Tags size={30} className="text-slate-300" /><p className="font-semibold">{search ? "Tidak ada kategori yang cocok" : "Kategori belum tersedia"}</p><p className="text-xs text-slate-500">{search ? "Coba kata kunci pencarian lain." : "Tambahkan kategori pertama untuk mulai mengelola produk."}</p>{!search && canWrite && <button type="button" onClick={openAddModal} className="mt-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700">Tambah kategori pertama</button>}</div>}
+          columns={[
+            { key: "actions", header: "Aksi", render: (category) => <div data-sf-action-column className="flex items-center gap-1"><ActionIconButton label={`Lihat kategori ${category.name}`} icon={Eye} onClick={() => setViewingCategory(category)} />{canWrite && <ActionIconButton label={`Ubah ${category.name}`} icon={Pencil} variant="warning" onClick={() => openEditModal(category)} />}{canDelete && <ActionIconButton label={`Nonaktifkan ${category.name}`} icon={Trash2} variant="danger" disabled={saving || !category.isActive} onClick={() => void handleDeactivate(category)} />}</div> },
+            { key: "number", header: "No.", align: "right", render: (category) => startIndex + paginatedCategories.indexOf(category) + 1 },
+            { key: "name", header: "Nama kategori", render: (category) => <span className="font-semibold text-slate-800">{category.name}</span> },
+            { key: "description", header: "Deskripsi", className: "max-w-[18rem] truncate", render: (category) => <span title={category.description ?? undefined}>{category.description || "—"}</span> },
+            { key: "status", header: "Status", render: (category) => <StatusBadge status={category.isActive ? "ACTIVE" : "INACTIVE"} /> },
+            { key: "createdAt", header: "Dibuat", render: (category) => <span className="whitespace-nowrap">{formatDate(category.createdAt)}</span> },
+          ]}
+        />
 
         <DataPagination page={safePage} pageSize={pageSize} total={total} totalPages={totalPages} onPageChange={setCurrentPage} onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }} loading={loading} noun="kategori" />
       </section>

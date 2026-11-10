@@ -4,7 +4,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
-  --font-sans: Inter, "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+  --font-sans: "Inter Variable", Inter, "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
   --font-serif: Georgia, "Times New Roman", serif;
 }
@@ -138,6 +138,22 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* One bundled UI family and a reusable type scale across roles and modules. */
+:root {
+  --sf-font-ui: "Inter Variable", Inter, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --sf-text-xs: .75rem;
+  --sf-text-sm: .875rem;
+  --sf-text-base: .9375rem;
+  --sf-text-panel: 1rem;
+  --sf-text-page: clamp(1.5rem, 2vw, 1.875rem);
+}
+body, button, input, select, textarea, option { font-family: var(--sf-font-ui); }
+main :is(h1, [data-sf-page-title]) { font-size: var(--sf-text-page); line-height: 1.2; font-weight: 750; }
+main :is(h2, [data-sf-panel-title]) { font-size: var(--sf-text-panel); line-height: 1.3; font-weight: 700; }
+main h3 { font-size: var(--sf-text-base); line-height: 1.35; font-weight: 700; }
+main h4 { font-size: var(--sf-text-sm); line-height: 1.4; font-weight: 700; }
+code, kbd, samp, .font-mono, [data-sf-mono] { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 /* ========================================
    DARK MODE COMPATIBILITY LAYER
@@ -299,9 +315,18 @@ html.dark aside p {
 }
 .sf-table-scroll table { font-variant-numeric: tabular-nums; }
 .sf-table-scroll th { letter-spacing: .045em; }
+.sf-table-scroll thead { position: sticky; inset-block-start: 0; z-index: 10; }
+.sf-table-scroll th { position: sticky; inset-block-start: 0; z-index: 10; background: #edf3ff; }
+.dark .sf-table-scroll th { background: #17243a; }
+.sf-table-scroll tbody tr { border-color: #edf1f7; }
+.sf-table-scroll td { max-width: 24rem; overflow-wrap: anywhere; }
+.sf-table-scroll td[data-sf-action-column] { width: 1%; white-space: nowrap; }
 
-.sf-filter-toolbar { min-width: 0; }
+.sf-filter-toolbar { min-width: 0; align-items: center; }
 .sf-filter-toolbar > * { min-width: 0; }
+.sf-filter-toolbar :is(input:not([type="checkbox"]):not([type="radio"]), select, button) { min-height: 2.65rem; border-radius: .75rem; font-size: .875rem; }
+.sf-filter-toolbar :is(input, select, button):focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+.sf-filter-toolbar > label { min-width: min(100%, 12rem); }
 
 .sf-status-badge {
   display: inline-flex;
@@ -396,6 +421,8 @@ html.dark .sf-action-icon-tooltip { border-color: rgb(148 163 184 / 20%); backgr
   .sf-page-hero { border-radius: 1rem !important; }
   .sf-page-hero [data-sf-hero-art] { display: none; }
   .sf-table-scroll table { min-width: 640px; }
+  .sf-filter-toolbar { align-items: stretch; }
+  .sf-filter-toolbar > :is(div, label, input, select, button) { width: 100%; }
 }
 
 button:disabled {
@@ -730,13 +757,33 @@ html.dark .sf-dashboard-panel { border-color: #26354d !important; }
 main table { border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
 main table thead { background: #edf3ff !important; }
 main table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #edf3ff !important;
   color: #526987 !important;
   font-size: .68rem;
   font-weight: 700;
   letter-spacing: .055em;
   text-transform: uppercase;
 }
+main table tbody tr { border-color: #edf1f7; }
 main table tbody tr:hover { background-color: #f2f7ff !important; }
+main table td { vertical-align: middle; }
+main table td :is(p, span) { max-width: 100%; }
+main table td[data-sf-action-column] { width: 1%; white-space: nowrap; }
+html.dark main table thead th { background: #172b49 !important; }
+html.dark main table tbody tr:hover { background-color: #1b2d48 !important; }
+
+/* Normalize transaction form labels and controls across modules. */
+.sf-modal-overlay :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) { min-height: 2.75rem; font-size: .875rem; }
+.sf-modal-overlay textarea { min-height: 5rem; }
+.sf-modal-overlay form label { line-height: 1.4; }
+.sf-modal-overlay form button[type="submit"],
+.sf-modal-overlay form button[type="button"] { min-height: 2.5rem; }
+.sf-modal-overlay :is(h2, h3) { font-size: 1.125rem; line-height: 1.35; }
+[role="alert"] { line-height: 1.5; }
+.sf-data-row:focus-within { outline: 2px solid #7ba5fb; outline-offset: -2px; }
 main :is(section, div)[class*="overflow-hidden"][class*="rounded"][class*="border"][class*="shadow-sm"] {
   border-color: #e0e8f4 !important;
   box-shadow: 0 4px 16px rgb(25 49 86 / 5%) !important;

@@ -979,7 +979,7 @@ export default function AccessManagement() {
 
                 {/* USER TABLE */}
 
-                <div className="overflow-x-auto">
+                <div role="region" aria-label="Tabel data; gunakan gulir horizontal untuk melihat semua kolom" tabIndex={0} className="sf-table-scroll overflow-x-auto">
                   <table className="w-full min-w-[760px] text-left text-sm">
 
                     <thead className="border-y border-slate-100 bg-slate-50 text-xs text-slate-500">
@@ -1110,7 +1110,7 @@ export default function AccessManagement() {
 
                 {/* ROLE TABLE */}
 
-                <div className="overflow-x-auto">
+                <div role="region" aria-label="Tabel data; gunakan gulir horizontal untuk melihat semua kolom" tabIndex={0} className="sf-table-scroll overflow-x-auto">
                   <table className="w-full min-w-[740px] text-left text-sm">
 
                     <thead className="border-y border-slate-100 bg-slate-50 text-xs text-slate-500">
@@ -1157,7 +1157,7 @@ export default function AccessManagement() {
                             {role.name}
                           </td>
 
-                          <td className="px-5 py-4 font-mono text-xs text-slate-600">
+                          <td className="px-5 py-4 text-xs text-slate-600">
                             {role.code}
                           </td>
 

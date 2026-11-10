@@ -7,6 +7,7 @@ import AuthShell from "@/components/auth/AuthShell";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { GlobalAlertProvider } from "@/components/ui/GlobalAlert";
 import GlobalActionLoading from "@/components/ui/GlobalActionLoading";
+import "@fontsource-variable/inter/wght.css";
 
 import "./globals.css";
 
@@ -44,7 +45,7 @@ export default function RootLayout({
   children: ReactNode;
 }) {
   return (
-    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
+    <html lang="id" className="h-full antialiased" suppressHydrationWarning>
       <body className="min-h-full flex flex-col">
         {/* ==================================
             GLOBAL AUTHENTICATION PROVIDER

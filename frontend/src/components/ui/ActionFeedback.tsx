@@ -6,6 +6,6 @@ export default function ActionFeedback({ message, tone, onDismiss, action }: { m
   if (!message) return null;
   const success = tone === "success";
   const Icon = success ? CheckCircle2 : XCircle;
-  const colors = success ? "border-emerald-200 bg-emerald-50 text-emerald-800" : tone === "error" ? "border-rose-200 bg-rose-50 text-rose-800" : "border-blue-200 bg-blue-50 text-blue-800";
+  const colors = success ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200" : tone === "error" ? "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200" : "border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200";
   return <div role={tone === "error" ? "alert" : "status"} aria-live={tone === "error" ? "assertive" : "polite"} className={`flex flex-wrap items-start gap-2 rounded-xl border px-4 py-3 text-sm ${colors}`}><Icon size={17} className="mt-0.5 shrink-0" aria-hidden="true" /><p className="min-w-0 flex-1">{message}</p>{action && <button type="button" onClick={action.onClick} className="font-semibold underline underline-offset-2">{action.label}</button>}{onDismiss && <button type="button" onClick={onDismiss} aria-label="Tutup pesan" className="rounded-md p-1 opacity-70 transition hover:bg-black/5 hover:opacity-100"><X size={15} /></button>}</div>;
 }

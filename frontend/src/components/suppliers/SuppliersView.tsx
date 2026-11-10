@@ -1,7 +1,6 @@
 
 "use client";
 
-import GlobalLoading from "@/components/ui/GlobalLoading";
 import GlobalSelect from "@/components/ui/GlobalSelect";
 import { confirmAction } from "@/components/ui/GlobalAlert";
 import ActionIconButton from "@/components/ui/ActionIconButton";
@@ -15,7 +14,9 @@ import {
 import { AlertCircle, Eye, Pencil, Plus, RefreshCw, Search, Trash2, Truck, X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import DataPagination from "@/components/ui/DataPagination";
+import DataTable from "@/components/ui/DataTable";
 import ActionFeedback from "@/components/ui/ActionFeedback";
+import StatusBadge from "@/components/ui/StatusBadge";
 import { statusLabel } from "@/lib/ui-labels";
 
 import { usePagedMaster } from "@/hooks/usePagedMaster";
@@ -111,7 +112,6 @@ export default function SuppliersView() {
   // SEARCH & STATUS FILTER
   // =====================================
 
-  const filtered = suppliers;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const currentPage = Math.min(page, totalPages);
   const start = (currentPage - 1) * pageSize;
@@ -376,7 +376,7 @@ export default function SuppliersView() {
         </div>
 
         {/* TOOLBAR */}
-        <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-5 sm:px-7">
+        <div className="sf-filter-toolbar flex flex-wrap items-center justify-between gap-4 px-5 py-5 sm:px-7">
           <div className="flex flex-wrap items-center gap-2">
             <GlobalSelect
               aria-label="Filter status"
@@ -415,119 +415,21 @@ export default function SuppliersView() {
           </div>
         </div>
 
-        {/* KARTU UNTUK LAYAR KECIL */}
-        <div className="divide-y divide-slate-100 px-5 md:hidden">
-          {loading && <div className="py-8 text-center text-sm text-slate-500"><GlobalLoading label="Memuat pemasok..." /></div>}
-          {!loading && visible.map((supplier, index) => <article key={supplier.id} className="space-y-3 py-4">
-            <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><Truck size={18} /></span><div className="min-w-0"><h3 className="truncate font-bold text-slate-900">{supplier.name}</h3><p className="mt-1 font-mono text-xs text-blue-600">{supplier.code}</p></div></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${supplier.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{statusLabel(supplier.isActive ? "ACTIVE" : "INACTIVE")}</span></div>
-            <dl className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-xs"><div><dt className="text-slate-400">Email</dt><dd className="mt-1 break-words text-slate-700">{supplier.email || "—"}</dd></div><div><dt className="text-slate-400">Telepon</dt><dd className="mt-1 text-slate-700">{supplier.phone || "—"}</dd></div><div className="col-span-2"><dt className="text-slate-400">Alamat</dt><dd className="mt-1 line-clamp-2 text-slate-700">{supplier.address || "—"}</dd></div></dl>
-            <div className="flex items-center justify-between text-xs text-slate-400"><span>#{start + index + 1}</span><span>{supplier.createdAt ? formatDate(supplier.createdAt) : "—"}</span></div>
-            <div data-sf-action-column className="flex items-center gap-1 border-t border-slate-100 pt-3"><ActionIconButton label={`Lihat ${supplier.name}`} icon={Eye} disabled={detailLoading} onClick={() => void openDetail(supplier.id)} />{canWrite && <ActionIconButton label={`Ubah ${supplier.name}`} icon={Pencil} variant="warning" disabled={saving} onClick={() => openEdit(supplier)} />}{canWrite && <ActionIconButton label={`Nonaktifkan ${supplier.name}`} icon={Trash2} variant="danger" disabled={saving || !supplier.isActive} onClick={() => void handleDeactivate(supplier)} />}</div>
-          </article>)}
-          {!loading && visible.length === 0 && <p className="py-10 text-center text-sm text-slate-500">{search ? "Tidak ada pemasok yang cocok." : "Data pemasok belum tersedia."}</p>}
-        </div>
-
-        {/* TABEL DESKTOP */}
-        <div className="hidden overflow-x-auto px-5 sm:px-7 md:block">
-          <table className="w-full min-w-[900px] text-left text-xs">
-            <thead>
-              <tr className="border-b-2 border-slate-200 text-slate-700">
-                {[
-                  "Aksi",
-                  "No.",
-                  "Kode pemasok",
-                  "Nama pemasok",
-                  "Email",
-                  "Telepon",
-                  "Alamat",
-                  "Status",
-                ].map((heading) => (
-                  <th
-                    key={heading}
-                    className="px-3 py-3 font-bold"
-                  >
-                    {heading}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-100">
-              {!loading &&
-                visible.map((supplier, index) => (
-                  <tr
-                    key={supplier.id}
-                    className="hover:bg-[#f8faff]"
-                  >
-                    <td className="px-3 py-4 align-middle"><div data-sf-action-column className="flex items-center gap-1"><ActionIconButton label={`Lihat ${supplier.name}`} icon={Eye} disabled={detailLoading} onClick={() => void openDetail(supplier.id)} />{canWrite && <ActionIconButton label={`Ubah ${supplier.name}`} icon={Pencil} variant="warning" disabled={saving} onClick={() => openEdit(supplier)} />}{canWrite && <ActionIconButton label={`Nonaktifkan ${supplier.name}`} icon={Trash2} variant="danger" disabled={saving || !supplier.isActive} onClick={() => void handleDeactivate(supplier)} />}</div></td>
-                    <td className="px-3 py-4 text-slate-500">
-                      {start + index + 1}
-                    </td>
-
-                    <td className="whitespace-nowrap px-3 py-4 font-mono font-semibold text-blue-600">
-                      {supplier.code}
-                    </td>
-
-                    <td className="px-3 py-4">
-                      <div className="flex items-center gap-2">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                          <Truck size={17} />
-                        </span>
-
-                        <span className="font-semibold text-slate-800">
-                          {supplier.name}
-                        </span>
-                      </div>
-                    </td>
-
-                    <td className="px-3 py-4 text-slate-600">
-                      {supplier.email || "—"}
-                    </td>
-
-                    <td className="whitespace-nowrap px-3 py-4 text-slate-600">
-                      {supplier.phone || "—"}
-                    </td>
-
-                    <td className="max-w-[260px] px-3 py-4 text-slate-600">
-                      {supplier.address || "—"}
-                    </td>
-
-                    <td className="px-3 py-4">
-                      <span
-                        className={`rounded-full px-3 py-1 font-semibold ${
-                          supplier.isActive
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-slate-100 text-slate-500"
-                        }`}
-                      >
-                        {statusLabel(supplier.isActive ? "ACTIVE" : "INACTIVE")}
-                      </span>
-                    </td>
-
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-
-          {/* LOADING */}
-          {loading && (
-            <div className="flex items-center justify-center gap-2 py-14 text-sm text-slate-500">
-              <GlobalLoading label="Memuat pemasok..." />
-            </div>
-          )}
-
-          {/* EMPTY */}
-          {!loading &&
-            filtered.length === 0 && (
-              <div className="py-14 text-center text-sm text-slate-400">
-                {search ||
-                statusFilter !== "all"
-                  ? "Tidak ada pemasok yang cocok"
-                  : "Belum ada pemasok. Pilih Tambah pemasok untuk memulai."}
-              </div>
-            )}
-        </div>
-
+        <DataTable
+          rows={visible}
+          loading={loading}
+          empty={<div className="flex flex-col items-center gap-2"><Truck size={30} className="text-slate-300" /><p className="font-semibold">{search || statusFilter !== "all" ? "Tidak ada pemasok yang cocok" : "Data pemasok belum tersedia"}</p><p className="text-xs text-slate-500">Periksa filter atau tambahkan pemasok untuk mulai mengelola data.</p></div>}
+          columns={[
+            { key: "actions", header: "Aksi", render: (supplier) => <div className="flex items-center gap-1"><ActionIconButton label={`Lihat ${supplier.name}`} icon={Eye} disabled={detailLoading} onClick={() => void openDetail(supplier.id)} />{canWrite && <ActionIconButton label={`Ubah ${supplier.name}`} icon={Pencil} variant="warning" disabled={saving} onClick={() => openEdit(supplier)} />}{canWrite && <ActionIconButton label={`Nonaktifkan ${supplier.name}`} icon={Trash2} variant="danger" disabled={saving || !supplier.isActive} onClick={() => void handleDeactivate(supplier)} />}</div> },
+            { key: "number", header: "No.", align: "right", render: (supplier) => start + visible.indexOf(supplier) + 1 },
+            { key: "code", header: "Kode pemasok", render: (supplier) => <span className="font-semibold text-blue-700">{supplier.code}</span> },
+            { key: "name", header: "Nama pemasok", render: (supplier) => <span className="inline-flex items-center gap-2 font-semibold"><Truck size={16} className="shrink-0 text-blue-600" />{supplier.name}</span> },
+            { key: "email", header: "Email", className: "max-w-[16rem] truncate", render: (supplier) => <span title={supplier.email ?? undefined}>{supplier.email || "—"}</span> },
+            { key: "phone", header: "Telepon", render: (supplier) => supplier.phone || "—" },
+            { key: "address", header: "Alamat", className: "max-w-[16rem] truncate", render: (supplier) => <span title={supplier.address ?? undefined}>{supplier.address || "—"}</span> },
+            { key: "status", header: "Status", render: (supplier) => <StatusBadge status={supplier.isActive ? "ACTIVE" : "INACTIVE"} /> },
+          ]}
+        />
         <DataPagination page={currentPage} pageSize={pageSize} total={total} totalPages={totalPages} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} loading={loading} noun="pemasok" />
       </section>
 

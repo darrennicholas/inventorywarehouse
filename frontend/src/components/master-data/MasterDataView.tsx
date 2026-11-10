@@ -14,6 +14,7 @@ import {
 import { AlertCircle, Boxes, Eye, LayoutGrid, List, Pencil, Plus, RefreshCw, Ruler, Search, Trash2, X } from "lucide-react";
 import DataPagination from "@/components/ui/DataPagination";
 import ActionFeedback from "@/components/ui/ActionFeedback";
+import StatusBadge from "@/components/ui/StatusBadge";
 import { statusLabel } from "@/lib/ui-labels";
 
 import { brandService, unitService } from "@/services/master.service";
@@ -294,7 +295,7 @@ export default function MasterDataView({ kind }: Props) {
         </div>
 
         {/* TOOLBAR */}
-        <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-5 sm:px-7">
+        <div className="sf-filter-toolbar flex flex-wrap items-center justify-between gap-4 px-5 py-5 sm:px-7">
 
 
           <div className="flex items-center gap-2">
@@ -329,7 +330,7 @@ export default function MasterDataView({ kind }: Props) {
         {(viewMode === "cards" || viewMode === "table") && loading && <div className={`${viewMode === "cards" ? "" : "md:hidden"} py-8 text-center text-sm text-slate-500`}><GlobalLoading label={`Memuat ${title.toLowerCase()}...`} /></div>}
 
         {/* TABLE */}
-        {viewMode === "table" && <div className="hidden overflow-x-auto px-5 sm:px-7 md:block">
+        {viewMode === "table" && <div role="region" aria-label="Tabel data; gunakan gulir horizontal untuk melihat semua kolom" tabIndex={0} className="sf-table-scroll hidden overflow-x-auto px-5 sm:px-7 md:block">
           <table className="w-full min-w-[650px] text-left text-xs">
             <thead>
               <tr className="border-b-2 border-slate-200 text-slate-700">
@@ -360,7 +361,7 @@ export default function MasterDataView({ kind }: Props) {
                   </td>
 
                   {isUnit && (
-                    <td className="px-3 py-4 font-mono font-semibold text-slate-700">
+                    <td className="px-3 py-4 font-semibold text-slate-700">
                       {item.code ?? "—"}
                     </td>
                   )}
@@ -377,15 +378,7 @@ export default function MasterDataView({ kind }: Props) {
                   </td>
 
                   <td className="px-3 py-4">
-                    <span
-                      className={`rounded-full px-3 py-1 font-semibold ${
-                        item.isActive
-                          ? "bg-emerald-50 text-emerald-700"
-                          : "bg-slate-100 text-slate-500"
-                      }`}
-                    >
-                      {statusLabel(item.isActive ? "ACTIVE" : "INACTIVE")}
-                    </span>
+                    <StatusBadge status={item.isActive ? "ACTIVE" : "INACTIVE"} />
                   </td>
 
                   <td className="whitespace-nowrap px-3 py-4 text-slate-500">
@@ -434,7 +427,7 @@ export default function MasterDataView({ kind }: Props) {
             <div className={`absolute right-0 top-0 h-20 w-20 translate-x-7 -translate-y-7 rounded-full ${isUnit ? "bg-amber-200/40" : "bg-violet-200/40"}`} />
             <div className="relative flex items-start justify-between"><div className={`flex h-11 w-11 items-center justify-center rounded-xl ${isUnit ? "bg-amber-100 text-amber-700" : "bg-violet-100 text-violet-700"}`}><ItemIcon size={20} /></div><span className="text-[10px] font-bold text-slate-400">#{String(startIndex + index + 1).padStart(2, "0")}</span></div>
             <p className="mt-5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{isUnit ? item.code ?? "UNIT" : "BRAND"}</p><h3 className="mt-1 truncate text-lg font-bold text-slate-900">{item.name}</h3>
-            <div className="mt-4 flex items-center justify-between"><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${item.isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{statusLabel(item.isActive ? "ACTIVE" : "INACTIVE")}</span><span className="text-[10px] text-slate-400">{formatDate(item.createdAt)}</span></div>
+            <div className="mt-4 flex items-center justify-between"><StatusBadge status={item.isActive ? "ACTIVE" : "INACTIVE"} /><span className="text-xs text-slate-500">{formatDate(item.createdAt)}</span></div>
             <div data-sf-action-column className="mt-5 flex items-center gap-1 border-t border-slate-200/70 pt-4"><ActionIconButton label={`Lihat ${item.name}`} icon={Eye} onClick={() => setViewing(item)} />{canWrite && <ActionIconButton label={`Ubah ${item.name}`} icon={Pencil} variant="warning" onClick={() => openEdit(item)} />}{canDelete && <ActionIconButton label={`Nonaktifkan ${item.name}`} icon={Trash2} variant="danger" disabled={!item.isActive} onClick={() => void handleDeactivate(item)} />}</div>
           </article>)}
         </div>}
@@ -622,7 +615,7 @@ export default function MasterDataView({ kind }: Props) {
         <div className="sf-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setViewing(null); }}>
           <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-widest text-blue-600">{isUnit ? "Unit" : "Brand"} detail</p><h2 className="mt-1 text-xl font-bold text-slate-900">{viewing.name}</h2></div><button type="button" onClick={() => setViewing(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18} /></button></div>
-            <div className="mt-6 grid gap-3 text-sm">{isUnit && <div className="flex items-center justify-between rounded-xl bg-slate-50 p-4"><span className="text-slate-500">Kode</span><span className="font-mono font-semibold text-slate-800">{viewing.code ?? "—"}</span></div>}<div className="flex items-center justify-between rounded-xl bg-slate-50 p-4"><span className="text-slate-500">Status</span><span className="font-semibold text-slate-800">{statusLabel(viewing.isActive ? "ACTIVE" : "INACTIVE")}</span></div><div className="flex items-center justify-between rounded-xl bg-slate-50 p-4"><span className="text-slate-500">Dibuat</span><span className="font-semibold text-slate-800">{formatDate(viewing.createdAt)}</span></div></div>
+            <div className="mt-6 grid gap-3 text-sm">{isUnit && <div className="flex items-center justify-between rounded-xl bg-slate-50 p-4"><span className="text-slate-500">Kode</span><span className="font-semibold text-slate-800">{viewing.code ?? "—"}</span></div>}<div className="flex items-center justify-between rounded-xl bg-slate-50 p-4"><span className="text-slate-500">Status</span><span className="font-semibold text-slate-800">{statusLabel(viewing.isActive ? "ACTIVE" : "INACTIVE")}</span></div><div className="flex items-center justify-between rounded-xl bg-slate-50 p-4"><span className="text-slate-500">Dibuat</span><span className="font-semibold text-slate-800">{formatDate(viewing.createdAt)}</span></div></div>
             <div className="mt-6 flex justify-end"><button type="button" onClick={() => setViewing(null)} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Tutup</button></div>
           </div>
         </div>

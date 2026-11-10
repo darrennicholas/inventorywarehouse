@@ -90,3 +90,106 @@ test("idempotency replays a completed mutation, rejects key reuse, and prevents 
     await prisma.$disconnect();
   }
 });
+
+test("idempotency retry does not duplicate purchase receipt stock or payment", { skip: !enabled }, async () => {
+  const { prisma } = await import("../src/lib/prisma.ts");
+  const { default: app } = await import("../src/app.ts");
+  const { createCsrfToken, hashSessionToken } = await import("../src/middlewares/auth.middleware.ts");
+  const admin = await prisma.user.findFirstOrThrow({ where: { role: { code: "ADMIN" }, isActive: true } });
+  const token = randomUUID();
+  const session = await prisma.authSession.create({ data: { userId: admin.id, tokenHash: hashSessionToken(token), expiresAt: new Date(Date.now() + 3600000) } });
+  const suffix = randomUUID().slice(0, 8);
+  const receiptNumber = `IT-GR-${suffix}`;
+  const purchaseNumber = `IT-RETRY-PO-${suffix}`;
+  const paymentNumber = `IT-RETRY-PAY-${suffix}`;
+  const receiptKey = `receipt-${randomUUID()}`;
+  const paymentKey = `payment-${randomUUID()}`;
+  const paymentRaceKeys = [`payment-race-${randomUUID()}`, `payment-race-${randomUUID()}`];
+  const warehouse = await prisma.warehouse.create({ data: { code: `IT-WH-${suffix}`, name: `Idempotency warehouse ${suffix}` } });
+  const supplier = await prisma.supplier.create({ data: { code: `IT-SUP-${suffix}`, name: `Idempotency supplier ${suffix}` } });
+  const product = await prisma.product.create({ data: { sku: `IT-SKU-${suffix}`, name: `Idempotency product ${suffix}` } });
+  const purchase = await prisma.purchaseOrder.create({ data: {
+    number: purchaseNumber,
+    supplierId: supplier.id,
+    warehouseId: warehouse.id,
+    createdById: admin.id,
+    approvedById: admin.id,
+    approvedAt: new Date(),
+    status: "APPROVED",
+    subtotal: 50,
+    total: 50,
+    items: { create: { productId: product.id, quantity: 5, unitPrice: 10, total: 50 } },
+  } });
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+
+  async function post(path: string, key: string, body: unknown) {
+    const response = await fetch(`http://127.0.0.1:${address.port}/api${path}`, {
+      method: "POST",
+      headers: {
+        cookie: `stockflow_session=${token}`,
+        origin: (process.env.FRONTEND_URL ?? "http://localhost:3000").replace(/\/$/, ""),
+        "x-csrf-token": createCsrfToken(session.id),
+        "content-type": "application/json",
+        "idempotency-key": key,
+      },
+      body: JSON.stringify(body),
+    });
+    return { status: response.status, body: await response.json() as { data?: { id?: string; status?: string }; message?: string } };
+  }
+
+  try {
+    const receiptPayload = { receiptNumber, items: [{ productId: product.id, quantity: 3, damagedQuantity: 0 }] };
+    const firstReceipt = await post(`/operations/purchases/${purchase.id}/receive`, receiptKey, receiptPayload);
+    assert.equal(firstReceipt.status, 200, firstReceipt.body.message);
+    const retriedReceipt = await post(`/operations/purchases/${purchase.id}/receive`, receiptKey, receiptPayload);
+    assert.equal(retriedReceipt.status, 200, retriedReceipt.body.message);
+    assert.deepEqual(retriedReceipt.body, firstReceipt.body);
+    assert.equal(await prisma.goodsReceipt.count({ where: { number: receiptNumber } }), 1);
+    assert.equal(await prisma.stockMovement.count({ where: { purchaseOrderId: purchase.id, movementType: "PURCHASE_RECEIPT" } }), 1);
+    const balance = await prisma.inventoryBalance.findUniqueOrThrow({ where: { productId_warehouseId: { productId: product.id, warehouseId: warehouse.id } } });
+    assert.equal(balance.quantityOnHand, 3);
+
+    const paymentPayload = { number: paymentNumber, type: "PURCHASE", purchaseOrderId: purchase.id, amount: 20, method: "CASH", status: "PAID" };
+    const firstPayment = await post("/operations/payments", paymentKey, paymentPayload);
+    assert.equal(firstPayment.status, 201, firstPayment.body.message);
+    const retriedPayment = await post("/operations/payments", paymentKey, paymentPayload);
+    assert.equal(retriedPayment.status, 201, retriedPayment.body.message);
+    assert.deepEqual(retriedPayment.body, firstPayment.body);
+    assert.equal(await prisma.payment.count({ where: { number: paymentNumber } }), 1);
+    const paymentRaces = await Promise.all(paymentRaceKeys.map((key, index) => post("/operations/payments", key, {
+      number: `IT-RETRY-RACE-${suffix}-${index}`,
+      type: "PURCHASE",
+      purchaseOrderId: purchase.id,
+      amount: 20,
+      method: "CASH",
+      status: "PAID",
+    })));
+    assert.equal(paymentRaces.filter((result) => result.status === 201).length, 1, "only one concurrent payment may consume the remaining invoice balance");
+    assert.equal(paymentRaces.filter((result) => result.status === 409).length, 1);
+    const paid = await prisma.payment.aggregate({ where: { purchaseOrderId: purchase.id, status: "PAID" }, _sum: { amount: true } });
+    assert.equal(Number(paid._sum.amount), 40);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    const createdPayments = await prisma.payment.findMany({ where: { purchaseOrderId: purchase.id }, select: { id: true } });
+    const entityIds = [purchase.id, ...createdPayments.map((payment) => payment.id)];
+    await prisma.notification.deleteMany({ where: { entityId: { in: entityIds } } });
+    await prisma.auditLog.deleteMany({ where: { entityId: { in: entityIds } } });
+    await prisma.idempotencyKey.deleteMany({ where: { userId: admin.id, key: { in: [receiptKey, paymentKey, ...paymentRaceKeys] } } });
+    await prisma.payment.deleteMany({ where: { purchaseOrderId: purchase.id } });
+    await prisma.goodsReceipt.deleteMany({ where: { purchaseOrderId: purchase.id } });
+    await prisma.stockMovementAllocation.deleteMany({ where: { movement: { purchaseOrderId: purchase.id } } });
+    await prisma.stockMovement.deleteMany({ where: { purchaseOrderId: purchase.id } });
+    await prisma.inventoryLocationBalance.deleteMany({ where: { productId: product.id } });
+    await prisma.inventoryBalance.deleteMany({ where: { productId: product.id } });
+    await prisma.purchaseOrder.delete({ where: { id: purchase.id } });
+    await prisma.warehouseLocation.deleteMany({ where: { warehouseId: warehouse.id } });
+    await prisma.product.delete({ where: { id: product.id } });
+    await prisma.supplier.delete({ where: { id: supplier.id } });
+    await prisma.warehouse.delete({ where: { id: warehouse.id } });
+    await prisma.authSession.delete({ where: { id: session.id } });
+    await prisma.$disconnect();
+  }
+});

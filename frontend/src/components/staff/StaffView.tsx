@@ -16,6 +16,7 @@ import { AlertCircle, Eye, Pencil, Plus, RefreshCw, Search, Trash2, UserRound, X
 import { useAuth } from "@/components/auth/AuthProvider";
 import DataPagination from "@/components/ui/DataPagination";
 import ActionFeedback from "@/components/ui/ActionFeedback";
+import StatusBadge from "@/components/ui/StatusBadge";
 import { statusLabel } from "@/lib/ui-labels";
 
 import { usePagedMaster } from "@/hooks/usePagedMaster";
@@ -517,7 +518,7 @@ export default function StaffView() {
         </div>
 
         {/* TOOLBAR */}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-5 sm:px-7">
+        <div className="sf-filter-toolbar flex flex-wrap items-center justify-between gap-3 px-5 py-5 sm:px-7">
           <div className="flex flex-wrap items-center gap-2">
             {/* STATUS FILTER */}
             <GlobalSelect
@@ -572,7 +573,7 @@ export default function StaffView() {
         <div className="divide-y divide-slate-100 px-5 md:hidden">
           {loading && <div className="py-8 text-center text-sm text-slate-500"><GlobalLoading label="Memuat staf..." /></div>}
           {!loading && rows.map((person, index) => <article key={person.id} className="space-y-3 py-4">
-            <div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><UserRound size={18} /></span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><h3 className="truncate font-bold text-slate-900">{person.fullName}</h3><span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${person.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{statusLabel(person.isActive ? "ACTIVE" : "INACTIVE")}</span></div><p className="mt-1 font-mono text-xs text-blue-600">{person.staffCode}</p></div></div>
+            <div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><UserRound size={18} /></span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><h3 className="truncate font-bold text-slate-900">{person.fullName}</h3><StatusBadge status={person.isActive ? "ACTIVE" : "INACTIVE"} /></div><p className="mt-1 text-xs text-blue-600">{person.staffCode}</p></div></div>
             <dl className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-xs"><div><dt className="text-slate-400">Email / telepon</dt><dd className="mt-1 break-words text-slate-700">{person.email || "—"}<br />{person.phone || "—"}</dd></div><div><dt className="text-slate-400">Jabatan</dt><dd className="mt-1 text-slate-700">{person.position || "—"}</dd></div><div className="col-span-2"><dt className="text-slate-400">Gudang</dt><dd className="mt-1 text-slate-700">{person.warehouse ? `${person.warehouse.code} — ${person.warehouse.name}` : "Belum ditugaskan"}</dd></div></dl>
             <div className="flex items-center justify-between text-xs text-slate-400"><span>#{startIndex + index + 1}</span><span>{person.createdAt ? dateLabel(person.createdAt) : "—"}</span></div>
             <div data-sf-action-column className="flex items-center gap-1 border-t border-slate-100 pt-3"><ActionIconButton label={`Lihat ${person.fullName}`} icon={Eye} disabled={detailLoading} onClick={() => void openDetail(person.id)} />{canWrite && <ActionIconButton label={`Ubah ${person.fullName}`} icon={Pencil} variant="warning" disabled={saving} onClick={() => openEdit(person)} />}{canWrite && <ActionIconButton label={`Nonaktifkan ${person.fullName}`} icon={Trash2} variant="danger" disabled={saving || !person.isActive} onClick={() => void handleDeactivate(person)} />}</div>
@@ -581,7 +582,7 @@ export default function StaffView() {
         </div>
 
         {/* TABEL DESKTOP */}
-        <div className="hidden overflow-x-auto px-5 sm:px-7 md:block">
+        <div role="region" aria-label="Tabel data; gunakan gulir horizontal untuk melihat semua kolom" tabIndex={0} className="sf-table-scroll hidden overflow-x-auto px-5 sm:px-7 md:block">
           <table className="w-full min-w-[950px] text-left text-xs">
             <thead>
               <tr className="border-b-2 border-slate-200 text-slate-700">
@@ -619,7 +620,7 @@ export default function StaffView() {
                     </td>
 
                     {/* STAFF CODE */}
-                    <td className="whitespace-nowrap px-3 py-4 font-mono font-semibold text-blue-600">
+                    <td className="whitespace-nowrap px-3 py-4 font-semibold text-blue-600">
                       {person.staffCode}
                     </td>
 
@@ -661,15 +662,7 @@ export default function StaffView() {
 
                     {/* STATUS */}
                     <td className="px-3 py-4">
-                      <span
-                        className={`rounded-full px-3 py-1 font-semibold ${
-                          person.isActive
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-slate-100 text-slate-500"
-                        }`}
-                      >
-                        {statusLabel(person.isActive ? "ACTIVE" : "INACTIVE")}
-                      </span>
+                      <StatusBadge status={person.isActive ? "ACTIVE" : "INACTIVE"} />
                     </td>
 
                   </tr>

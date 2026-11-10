@@ -62,18 +62,35 @@ router.get("/reorder-suggestions", requirePermission("inventory.read"), asyncHan
   if (warehouseId) z.uuid().parse(warehouseId);
   const rows = (await stockReportRows(auth, warehouseId, productId)).filter((row) => row.isLowStock);
   const canReadPurchases = auth.permissions.includes("purchases.read");
-  const result = await Promise.all(rows.slice(0, 100).map(async (row) => {
-    const [incoming, usage] = await Promise.all([
-      canReadPurchases ? prisma.purchaseOrderItem.aggregate({ where: { productId: row.productId, purchaseOrder: { warehouseId: row.warehouseId, status: { in: ["APPROVED", "PARTIALLY_RECEIVED"] } } }, _sum: { quantity: true, receivedQuantity: true } }) : null,
-      prisma.stockMovement.aggregate({ where: { productId: row.productId, warehouseId: row.warehouseId, movementType: "SALE_ISSUE", occurredAt: { gte: new Date(Date.now() - 30 * 86400000) } }, _sum: { quantity: true } }),
-    ]);
-    const incomingQuantity = incoming ? Math.max(0, (incoming._sum.quantity ?? 0) - (incoming._sum.receivedQuantity ?? 0)) : null;
-    const averageDailyUsage = Math.abs(usage._sum.quantity ?? 0) / 30;
+  const candidates = rows.slice(0, 100);
+  const productIds = [...new Set(candidates.map((row) => row.productId))];
+  const warehouseIds = [...new Set(candidates.map((row) => row.warehouseId))];
+  const [incomingItems, usageRows] = await Promise.all([
+    canReadPurchases && productIds.length ? prisma.purchaseOrderItem.findMany({
+      where: { productId: { in: productIds }, purchaseOrder: { warehouseId: { in: warehouseIds }, status: { in: ["APPROVED", "PARTIALLY_RECEIVED"] } } },
+      select: { productId: true, quantity: true, receivedQuantity: true, purchaseOrder: { select: { warehouseId: true } } },
+    }) : [],
+    productIds.length ? prisma.stockMovement.groupBy({
+      by: ["productId", "warehouseId"],
+      where: { productId: { in: productIds }, warehouseId: { in: warehouseIds }, movementType: "SALE_ISSUE", occurredAt: { gte: new Date(Date.now() - 30 * 86400000) } },
+      _sum: { quantity: true },
+    }) : [],
+  ]);
+  const incomingByBalance = new Map<string, number>();
+  for (const item of incomingItems) {
+    const key = `${item.productId}:${item.purchaseOrder.warehouseId}`;
+    incomingByBalance.set(key, (incomingByBalance.get(key) ?? 0) + Math.max(0, item.quantity - item.receivedQuantity));
+  }
+  const usageByBalance = new Map(usageRows.map((row) => [`${row.productId}:${row.warehouseId}`, Math.abs(row._sum.quantity ?? 0)]));
+  const result = candidates.map((row) => {
+    const key = `${row.productId}:${row.warehouseId}`;
+    const incomingQuantity = canReadPurchases ? incomingByBalance.get(key) ?? 0 : null;
+    const averageDailyUsage = (usageByBalance.get(key) ?? 0) / 30;
     const target = row.product.maxStock ?? row.product.minStock * 2;
     const projected = row.availableQuantity + (incomingQuantity ?? 0);
     const daysUntilMinimum = averageDailyUsage > 0 ? Math.max(0, (projected - row.product.minStock) / averageDailyUsage) : null;
     return { ...row, incomingQuantity, averageDailyUsage, suggestedQuantity: Math.max(0, target - projected), suggestedPurchaseDate: daysUntilMinimum === null ? null : new Date(Date.now() + Math.max(0, daysUntilMinimum - row.product.reorderLeadDays) * 86400000) };
-  }));
+  });
   res.json({ success: true, data: result });
 }));
 

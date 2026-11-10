@@ -1,7 +1,6 @@
 
 "use client";
 
-import GlobalLoading from "@/components/ui/GlobalLoading";
 import GlobalSelect from "@/components/ui/GlobalSelect";
 import { confirmAction } from "@/components/ui/GlobalAlert";
 import ActionIconButton from "@/components/ui/ActionIconButton";
@@ -15,7 +14,9 @@ import {
 import { AlertCircle, Download, Eye, MapPin, Pencil, Plus, RefreshCw, Search, Trash2, Warehouse as WarehouseIcon, X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import DataPagination from "@/components/ui/DataPagination";
+import DataTable from "@/components/ui/DataTable";
 import ActionFeedback from "@/components/ui/ActionFeedback";
+import StatusBadge from "@/components/ui/StatusBadge";
 import { statusLabel } from "@/lib/ui-labels";
 
 import { usePagedMaster } from "@/hooks/usePagedMaster";
@@ -119,7 +120,6 @@ export default function WarehousesView() {
   // SEARCH & FILTER
   // ====================================
 
-  const filtered = warehouses;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, totalPages);
   const startIndex = (safePage - 1) * pageSize;
@@ -379,7 +379,7 @@ export default function WarehousesView() {
         </div>
 
         {/* TOOLBAR */}
-        <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-5 sm:px-7">
+        <div className="sf-filter-toolbar flex flex-wrap items-center justify-between gap-4 px-5 py-5 sm:px-7">
           <div className="flex items-center gap-2">
             <label
               htmlFor="warehouse-search"
@@ -409,151 +409,20 @@ export default function WarehousesView() {
           </div>
         </div>
 
-        {/* KARTU UNTUK LAYAR KECIL */}
-        <div className="divide-y divide-slate-100 px-5 md:hidden">
-          {loading && <div className="py-8 text-center text-sm text-slate-500"><GlobalLoading label="Memuat gudang..." /></div>}
-          {!loading && visible.map((warehouse, index) => <article key={warehouse.id} className="space-y-3 py-4">
-            <div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><WarehouseIcon size={18} /></span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><h3 className="truncate font-bold text-slate-900">{warehouse.name}</h3><span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${warehouse.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{statusLabel(warehouse.isActive ? "ACTIVE" : "INACTIVE")}</span></div><p className="mt-1 font-mono text-xs text-blue-600">{warehouse.code}</p></div></div>
-            <div className="rounded-xl bg-slate-50 p-3 text-xs"><p className="text-slate-400">Alamat</p><p className="mt-1 text-slate-700">{warehouse.address || "—"}</p><p className="mt-3 text-slate-400">Dibuat</p><p className="mt-1 text-slate-700">{formatDate(warehouse.createdAt)}</p></div>
-            <div className="flex items-center justify-between text-xs text-slate-400"><span>#{startIndex + index + 1}</span></div>
-            <div data-sf-action-column className="flex items-center gap-1 border-t border-slate-100 pt-3"><ActionIconButton label={`Lihat ${warehouse.name}`} icon={Eye} disabled={detailLoading} onClick={() => void openDetail(warehouse.id)} /><ActionIconButton label={`Unduh lembar opname ${warehouse.name}`} icon={Download} variant="violet" disabled={downloadingId === warehouse.id} onClick={() => void downloadSheet(warehouse)} />{canWrite && <ActionIconButton label={`Ubah ${warehouse.name}`} icon={Pencil} variant="warning" disabled={saving} onClick={() => openEdit(warehouse)} />}{canWrite && <ActionIconButton label={`Nonaktifkan ${warehouse.name}`} icon={Trash2} variant="danger" disabled={saving || !warehouse.isActive} onClick={() => void handleDeactivate(warehouse)} />}</div>
-          </article>)}
-          {!loading && visible.length === 0 && <p className="py-10 text-center text-sm text-slate-500">{search ? "Tidak ada gudang yang cocok." : "Belum ada gudang."}</p>}
-        </div>
-
-        {/* TABEL DESKTOP */}
-        <div className="hidden overflow-x-auto px-5 sm:px-7 md:block">
-          <table className="w-full min-w-[850px] text-left text-xs">
-            <thead>
-              <tr className="border-b-2 border-slate-200 text-slate-700">
-                {[
-                  "Aksi",
-                  "No.",
-                  "Kode",
-                  "Nama gudang",
-                  "Alamat",
-                  "Status",
-                  "Dibuat",
-                ].map((heading) => (
-                  <th
-                    key={heading}
-                    className="whitespace-nowrap px-3 py-3 font-bold"
-                  >
-                    {heading}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-100">
-              {!loading &&
-                visible.map((warehouse, index) => (
-                  <tr
-                    key={warehouse.id}
-                    className="hover:bg-[#f8faff]"
-                  >
-                    <td className="px-3 py-4 align-middle"><div data-sf-action-column className="flex items-center gap-1"><ActionIconButton label={`Lihat rincian ${warehouse.name}`} icon={Eye} disabled={detailLoading} onClick={() => void openDetail(warehouse.id)} /><ActionIconButton label={`Unduh lembar hitung stok fisik untuk ${warehouse.name}`} icon={Download} variant="violet" disabled={downloadingId === warehouse.id} onClick={() => void downloadSheet(warehouse)} />{canWrite && <ActionIconButton label={`Ubah ${warehouse.name}`} icon={Pencil} variant="warning" disabled={saving} onClick={() => openEdit(warehouse)} />}{canWrite && <ActionIconButton label={`Nonaktifkan ${warehouse.name}`} icon={Trash2} variant="danger" disabled={saving || !warehouse.isActive} onClick={() => void handleDeactivate(warehouse)} />}</div></td>
-                    {/* NO */}
-                    <td className="px-3 py-4 text-slate-500">
-                      {startIndex + index + 1}
-                    </td>
-
-                    {/* CODE */}
-                    <td className="whitespace-nowrap px-3 py-4 font-mono font-semibold text-blue-600">
-                      {warehouse.code}
-                    </td>
-
-                    {/* NAME */}
-                    <td className="px-3 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                          <WarehouseIcon size={18} />
-                        </div>
-
-                        <span className="font-semibold text-slate-800">
-                          {warehouse.name}
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* ADDRESS */}
-                    <td className="max-w-[270px] px-3 py-4 text-slate-500">
-                      <div className="flex items-start gap-1.5">
-                        <MapPin
-                          size={14}
-                          className="mt-0.5 shrink-0"
-                        />
-                        <span>
-                          {warehouse.address || "—"}
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* STATUS */}
-                    <td className="px-3 py-4">
-                      <span
-                        className={`inline-block rounded-full px-3 py-1 font-semibold ${
-                          warehouse.isActive
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-slate-100 text-slate-500"
-                        }`}
-                      >
-                        {warehouse.isActive
-                          ? "Aktif"
-                          : "Tidak aktif"}
-                      </span>
-                    </td>
-
-                    {/* CREATED */}
-                    <td className="whitespace-nowrap px-3 py-4 text-slate-500">
-                      {formatDate(warehouse.createdAt)}
-                    </td>
-
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-
-          {/* LOADING */}
-          {loading && (
-            <div className="flex items-center justify-center gap-2 py-14 text-sm text-slate-500">
-              <GlobalLoading label="Memuat gudang..." />
-            </div>
-          )}
-
-          {/* EMPTY STATE */}
-          {!loading && filtered.length === 0 && (
-            <div className="flex flex-col items-center py-14 text-center">
-              <WarehouseIcon
-                size={36}
-                className="text-slate-300"
-              />
-
-              <p className="mt-3 text-sm font-semibold text-slate-700">
-                {search
-                  ? "Tidak ada gudang yang cocok"
-                  : "Belum ada gudang"}
-              </p>
-
-              <p className="mt-1 text-xs text-slate-400">
-                {search
-                  ? "Coba kata kunci pencarian lain."
-                  : "Tambahkan gudang pertama untuk memulai."}
-              </p>
-
-              {!search && canWrite && (
-                <button
-                  type="button"
-                  onClick={openAdd}
-                  className="mt-5 rounded-lg bg-[#3867f6] px-4 py-2.5 text-xs font-semibold text-white"
-                >
-                  Tambah gudang pertama
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
+        <DataTable
+          rows={visible}
+          loading={loading}
+          empty={<div className="flex flex-col items-center gap-2"><WarehouseIcon size={30} className="text-slate-300" /><p className="font-semibold">{search ? "Tidak ada gudang yang cocok" : "Data gudang belum tersedia"}</p><p className="text-xs text-slate-500">Periksa kata kunci atau tambahkan gudang untuk mulai mengelola penyimpanan.</p></div>}
+          columns={[
+            { key: "actions", header: "Aksi", render: (warehouse) => <div className="flex items-center gap-1"><ActionIconButton label={`Lihat rincian ${warehouse.name}`} icon={Eye} disabled={detailLoading} onClick={() => void openDetail(warehouse.id)} /><ActionIconButton label={`Unduh lembar hitung stok fisik untuk ${warehouse.name}`} icon={Download} variant="violet" disabled={downloadingId === warehouse.id} onClick={() => void downloadSheet(warehouse)} />{canWrite && <ActionIconButton label={`Ubah ${warehouse.name}`} icon={Pencil} variant="warning" disabled={saving} onClick={() => openEdit(warehouse)} />}{canWrite && <ActionIconButton label={`Nonaktifkan ${warehouse.name}`} icon={Trash2} variant="danger" disabled={saving || !warehouse.isActive} onClick={() => void handleDeactivate(warehouse)} />}</div> },
+            { key: "number", header: "No.", align: "right", render: (warehouse) => startIndex + visible.indexOf(warehouse) + 1 },
+            { key: "code", header: "Kode", render: (warehouse) => <span className="font-semibold text-blue-700">{warehouse.code}</span> },
+            { key: "name", header: "Nama gudang", render: (warehouse) => <span className="inline-flex items-center gap-2 font-semibold"><WarehouseIcon size={16} className="shrink-0 text-blue-600" />{warehouse.name}</span> },
+            { key: "address", header: "Alamat", className: "max-w-[18rem] truncate", render: (warehouse) => <span title={warehouse.address ?? undefined} className="inline-flex items-center gap-1.5"><MapPin size={14} className="shrink-0 text-slate-400" />{warehouse.address || "—"}</span> },
+            { key: "status", header: "Status", render: (warehouse) => <StatusBadge status={warehouse.isActive ? "ACTIVE" : "INACTIVE"} /> },
+            { key: "createdAt", header: "Dibuat", render: (warehouse) => <span className="whitespace-nowrap">{formatDate(warehouse.createdAt)}</span> },
+          ]}
+        />
         <DataPagination page={safePage} pageSize={pageSize} total={total} totalPages={totalPages} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} loading={loading} noun="gudang" />
       </section>
 

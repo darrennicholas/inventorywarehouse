@@ -1048,6 +1048,8 @@ model Expense {
   @@index([warehouseId])
   @@index([createdById])
   @@index([expenseDate])
+  @@index([warehouseId, expenseDate])
+  @@index([isPaid, expenseDate])
 }
 
 enum PaymentType {

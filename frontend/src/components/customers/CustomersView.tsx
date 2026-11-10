@@ -1,15 +1,15 @@
 "use client";
 
-import GlobalLoading from "@/components/ui/GlobalLoading";
 import { confirmAction } from "@/components/ui/GlobalAlert";
 import ActionIconButton from "@/components/ui/ActionIconButton";
 import { LoaderCircle } from "@/components/ui/GlobalLoading";
 import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { AlertCircle, Download, Eye, Pencil, Plus, RefreshCw, Search, Trash2, Upload, UserRound, X } from "lucide-react";
+import { AlertCircle, Download, Eye, Pencil, Plus, RefreshCw, Trash2, Upload, UserRound, X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import ActionFeedback from "@/components/ui/ActionFeedback";
-import { statusLabel } from "@/lib/ui-labels";
+import StatusBadge from "@/components/ui/StatusBadge";
 import DataPagination from "@/components/ui/DataPagination";
+import DataTable from "@/components/ui/DataTable";
 
 import { usePagedMaster } from "@/hooks/usePagedMaster";
 import { useCustomers } from "@/hooks/useCustomers";
@@ -170,8 +170,6 @@ export default function CustomersView() {
     <div className="space-y-5">
       {notice && <ActionFeedback message={notice.message} tone={notice.type} onDismiss={() => setNotice(null)} />}
 
-      {error && <ActionFeedback message={error} tone="error" action={{ label: "Coba lagi", onClick: () => void fetchCustomers() }} />}
-
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-5 py-5 sm:px-7">
           <div>
@@ -190,58 +188,27 @@ export default function CustomersView() {
           </div>
         </div>
 
-        <div className="flex items-center justify-end px-5 py-5 sm:px-7">
-          <div className="relative w-full sm:w-72">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Cari pelanggan..." className="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-xs outline-none focus:border-blue-400" />
-          </div>
-        </div>
-
-        <div className="divide-y divide-slate-100 px-4 md:hidden">
-          {loading && <div className="py-6 text-center text-sm text-slate-500"><GlobalLoading label="Memuat pelanggan..." /></div>}
-          {!loading && filteredCustomers.length === 0 && <p className="py-8 text-center text-sm text-slate-500">{search ? "Tidak ada pelanggan yang cocok." : "Pelanggan belum tersedia."}</p>}
-          {!loading && filteredCustomers.map((customer) => <article key={customer.id} className="space-y-3 py-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-bold text-slate-800">{customer.name}</p><p className="mt-0.5 text-xs text-slate-500">{customer.code}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${customer.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{statusLabel(customer.isActive ? "ACTIVE" : "INACTIVE")}</span></div><div className="grid grid-cols-2 gap-2 text-xs"><div className="min-w-0"><p className="text-slate-400">Email</p><p className="truncate text-slate-700">{customer.email || "—"}</p></div><div><p className="text-slate-400">Telepon</p><p className="text-slate-700">{customer.phone || "—"}</p></div><div className="col-span-2 min-w-0"><p className="text-slate-400">Alamat</p><p className="break-words text-slate-700">{customer.address || "—"}</p></div></div><div data-sf-action-column className="flex items-center gap-1 border-t border-slate-100 pt-3"><ActionIconButton label={`Lihat pelanggan ${customer.name}`} icon={Eye} onClick={() => setViewing(customer)} />{canWrite && <ActionIconButton label={`Ubah pelanggan ${customer.name}`} icon={Pencil} variant="warning" onClick={() => openModal(customer)} />}{canDelete && <ActionIconButton label={`Nonaktifkan pelanggan ${customer.name}`} icon={Trash2} variant="danger" disabled={!customer.isActive || saving} onClick={() => void handleDeactivate(customer)} />}</div></article>)}
-        </div>
-        <div className="hidden overflow-x-auto px-5 sm:px-7 md:block">
-          <table className="w-full min-w-[850px] text-left text-xs">
-            <thead>
-              <tr className="border-b-2 border-slate-200 text-slate-700">
-                <th className="px-3 py-3 text-left font-bold">Aksi</th>
-                <th className="px-3 py-3 font-bold">No.</th>
-                <th className="px-3 py-3 font-bold">Kode</th>
-                <th className="px-3 py-3 font-bold">Nama pelanggan</th>
-                <th className="px-3 py-3 font-bold">Email</th>
-                <th className="px-3 py-3 font-bold">Phone</th>
-                <th className="px-3 py-3 font-bold">Alamat</th>
-                <th className="px-3 py-3 font-bold">Status</th>
-                <th className="px-3 py-3 font-bold">Dibuat</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {!loading && filteredCustomers.map((customer, index) => (
-                <tr key={customer.id} className="hover:bg-[#f8faff]">
-                  <td className="px-3 py-4 align-middle"><div data-sf-action-column className="flex items-center gap-1"><ActionIconButton label={`Lihat pelanggan ${customer.name}`} icon={Eye} onClick={() => setViewing(customer)} />{canWrite && <ActionIconButton label={`Ubah pelanggan ${customer.name}`} icon={Pencil} variant="warning" onClick={() => openModal(customer)} />}{canDelete && <ActionIconButton label={`Nonaktifkan pelanggan ${customer.name}`} icon={Trash2} variant="danger" disabled={!customer.isActive || saving} onClick={() => void handleDeactivate(customer)} />}</div></td>
-                  <td className="px-3 py-4 text-slate-500">{(page - 1) * pageSize + index + 1}</td>
-                  <td className="px-3 py-4 font-semibold text-slate-700">{customer.code}</td>
-                  <td className="px-3 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600"><UserRound size={17} /></div>
-                      <span className="font-semibold text-slate-800">{customer.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-4 text-slate-500">{customer.email || "—"}</td>
-                  <td className="px-3 py-4 text-slate-500">{customer.phone || "—"}</td>
-                  <td className="max-w-[220px] px-3 py-4 text-slate-500">{customer.address || "—"}</td>
-                  <td className="px-3 py-4"><span className={`rounded-full px-3 py-1 font-semibold ${customer.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{statusLabel(customer.isActive ? "ACTIVE" : "INACTIVE")}</span></td>
-                  <td className="whitespace-nowrap px-3 py-4 text-slate-500">{formatDate(customer.createdAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {loading && <div className="flex items-center justify-center gap-2 py-14 text-sm text-slate-500"><GlobalLoading label="Memuat pelanggan..." /></div>}
-          {!loading && filteredCustomers.length === 0 && <div className="flex flex-col items-center py-14 text-center"><UserRound size={35} className="text-slate-300" /><h3 className="mt-3 text-sm font-semibold text-slate-700">{search ? "Tidak ada pelanggan yang cocok" : "Pelanggan belum tersedia"}</h3><p className="mt-1 text-xs text-slate-400">Tambahkan pelanggan pertama.</p></div>}
-        </div>
+        <DataTable
+          rows={filteredCustomers}
+          loading={loading}
+          error={error}
+          onRetry={() => void fetchCustomers()}
+          search={search}
+          onSearch={(value) => { setSearch(value); setPage(1); }}
+          searchPlaceholder="Cari pelanggan..."
+          empty={<div className="flex flex-col items-center gap-2"><UserRound size={32} className="text-slate-300" /><p className="font-semibold">{search ? "Tidak ada pelanggan yang cocok" : "Pelanggan belum tersedia"}</p><p className="text-xs text-slate-500">Tambahkan pelanggan pertama untuk mulai mengelola data.</p></div>}
+          columns={[
+            { key: "actions", header: "Aksi", render: (customer) => <div className="flex items-center gap-1"><ActionIconButton label={`Lihat pelanggan ${customer.name}`} icon={Eye} onClick={() => setViewing(customer)} />{canWrite && <ActionIconButton label={`Ubah pelanggan ${customer.name}`} icon={Pencil} variant="warning" onClick={() => openModal(customer)} />}{canDelete && <ActionIconButton label={`Nonaktifkan pelanggan ${customer.name}`} icon={Trash2} variant="danger" disabled={!customer.isActive || saving} onClick={() => void handleDeactivate(customer)} />}</div> },
+            { key: "number", header: "No.", align: "right", render: (customer) => (page - 1) * pageSize + filteredCustomers.indexOf(customer) + 1 },
+            { key: "code", header: "Kode", render: (customer) => <span className="font-semibold">{customer.code}</span> },
+            { key: "name", header: "Nama pelanggan", render: (customer) => <span className="inline-flex items-center gap-2 font-semibold"><UserRound size={16} className="shrink-0 text-blue-600" />{customer.name}</span> },
+            { key: "email", header: "Email", className: "max-w-[16rem] truncate", render: (customer) => <span title={customer.email ?? undefined}>{customer.email || "—"}</span> },
+            { key: "phone", header: "Telepon", render: (customer) => customer.phone || "—" },
+            { key: "address", header: "Alamat", className: "max-w-[16rem] truncate", render: (customer) => <span title={customer.address ?? undefined}>{customer.address || "—"}</span> },
+            { key: "status", header: "Status", render: (customer) => <StatusBadge status={customer.isActive ? "ACTIVE" : "INACTIVE"} /> },
+            { key: "createdAt", header: "Dibuat", render: (customer) => <span className="whitespace-nowrap">{formatDate(customer.createdAt)}</span> },
+          ]}
+        />
         <DataPagination page={page} pageSize={pageSize} total={total} totalPages={Math.ceil(total / pageSize)} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} loading={loading} noun="pelanggan" />
       </section>
 

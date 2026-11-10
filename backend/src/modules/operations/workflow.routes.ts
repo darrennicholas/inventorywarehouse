@@ -9,6 +9,8 @@ import { AppError } from "../../utils/AppError.ts";
 import { assertApprovalAuthority } from "../approvals/approval-policy.service.ts";
 import { writeAuditLog } from "../audit/audit.service.ts";
 import { notifyByPermission } from "../notifications/notification.service.ts";
+import { workflowActions } from "./workflow-actions.ts";
+import { transactionReasonSchema } from "./operations.validation.ts";
 
 const router = Router();
 const paramsSchema = z.object({ kind: z.enum(["purchases", "sales", "adjustments", "transfers", "returns", "opnames"]), id: z.uuid() });
@@ -16,12 +18,19 @@ type Kind = z.infer<typeof paramsSchema>["kind"];
 type Document = { id: string; number: string; warehouseId: string; destinationWarehouseId?: string; createdById: string; status: string; entity: string; permission: string; subject?: ApprovalSubject; amount: number | null };
 
 async function stockValue(tx: Prisma.TransactionClient, items: { productId: string; quantity: number }[], warehouseId: string) {
+  const productIds = [...new Set(items.filter((item) => item.quantity !== 0).map((item) => item.productId))];
+  if (productIds.length === 0) return 0;
+  const balances = await tx.inventoryBalance.findMany({
+    where: { warehouseId, productId: { in: productIds } },
+    select: { productId: true, averageUnitCost: true },
+  });
+  const costs = new Map(balances.map((balance) => [balance.productId, balance.averageUnitCost]));
   let total = 0;
   for (const item of items) {
     if (!item.quantity) continue;
-    const cost = await tx.inventoryBalance.findUnique({ where: { productId_warehouseId: { productId: item.productId, warehouseId } }, select: { averageUnitCost: true } });
-    if (cost?.averageUnitCost == null) return null;
-    total += Math.abs(item.quantity) * Number(cost.averageUnitCost);
+    const cost = costs.get(item.productId);
+    if (cost == null) return null;
+    total += Math.abs(item.quantity) * Number(cost);
   }
   return total;
 }
@@ -66,16 +75,31 @@ router.get("/workflow/:kind/:id/history", asyncHandler(async (req, res) => {
   if (scope && !scope.includes(doc.warehouseId) && (!doc.destinationWarehouseId || !scope.includes(doc.destinationWarehouseId))) throw new AppError(403, "You cannot access another warehouse");
   if (!auth.permissions.includes(`${doc.permission}.read`)) throw new AppError(403, "You cannot view this document");
   const events = await prisma.auditLog.findMany({ where: { entity: doc.entity, entityId: id }, select: { id: true, action: true, createdAt: true, afterData: true, user: { select: { fullName: true } } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 50 });
-  const policy = doc.subject && doc.amount !== null ? await prisma.approvalPolicy.findFirst({ where: { subject: doc.subject, isActive: true, minimumAmount: { lte: doc.amount }, OR: [{ maximumAmount: null }, { maximumAmount: { gte: doc.amount } }] }, include: { approverRole: { select: { name: true } } }, orderBy: { minimumAmount: "desc" } }) : null;
+  const policy = doc.subject && doc.amount !== null ? await prisma.approvalPolicy.findFirst({ where: { subject: doc.subject, isActive: true, minimumAmount: { lte: doc.amount }, OR: [{ maximumAmount: null }, { maximumAmount: { gte: doc.amount } }] }, include: { approverRole: { select: { code: true, name: true } } }, orderBy: { minimumAmount: "desc" } }) : null;
   const reservation = kind === "sales" ? await prisma.stockReservation.aggregate({ where: { saleId: id, status: "ACTIVE" }, _min: { createdAt: true, expiresAt: true }, _sum: { quantity: true } }) : null;
+  const activeShipmentCount = kind === "sales" && doc.status === "RESERVED" ? await prisma.saleShipment.count({ where: { saleId: id, status: { not: "CANCELLED" } } }) : 0;
+  const policyAllowsReview = auth.roleCode === "ADMIN" || policy?.approverRole.code === auth.roleCode;
+  const approvalAllowed = kind === "transfers" || (doc.amount !== null && policyAllowsReview);
+  const rejectionAllowed = doc.amount === null ? auth.roleCode === "ADMIN" : policyAllowsReview;
+  const actions = workflowActions({
+    kind,
+    status: doc.status,
+    permission: doc.permission,
+    permissions: auth.permissions,
+    isCreator: doc.createdById === auth.userId,
+    approvalAllowed,
+    rejectionAllowed,
+    hasActiveReservation: (reservation?._sum.quantity ?? 0) > 0,
+    hasActiveShipment: activeShipmentCount > 0,
+  });
   const reviewRole = doc.amount === null ? "Modal belum diketahui: tetapkan modal awal di Stock Report sebelum persetujuan" : policy ? `${policy.approverRole.name} atau Administrator` : doc.subject ? "Administrator (belum ada kebijakan untuk nilai ini)" : "Role dengan izin persetujuan transfer";
-  res.json({ success: true, reviewRole, reservation: reservation ? { createdAt: reservation._min.createdAt, expiresAt: reservation._min.expiresAt, quantity: reservation._sum.quantity ?? 0 } : null, data: events.map((event) => ({ id: event.id, action: event.action, createdAt: event.createdAt, actor: event.user?.fullName ?? "Unknown", reason: ["REJECT", "RELEASE_RESERVATION"].includes(event.action) && event.afterData && typeof event.afterData === "object" && !Array.isArray(event.afterData) && typeof event.afterData.reason === "string" ? event.afterData.reason : null })) });
+  res.json({ success: true, reviewRole, actions, reservation: reservation ? { createdAt: reservation._min.createdAt, expiresAt: reservation._min.expiresAt, quantity: reservation._sum.quantity ?? 0 } : null, data: events.map((event) => ({ id: event.id, action: event.action, createdAt: event.createdAt, actor: event.user?.fullName ?? "Unknown", reason: ["REJECT", "RELEASE_RESERVATION"].includes(event.action) && event.afterData && typeof event.afterData === "object" && !Array.isArray(event.afterData) && typeof event.afterData.reason === "string" ? event.afterData.reason : null })) });
 }));
 
 router.post("/workflow/:kind/:id/reject", asyncHandler(async (req, res) => {
   const { kind, id } = paramsSchema.parse(req.params);
   if (kind === "sales") throw new AppError(400, "Sales do not use approval rejection");
-  const { reason } = z.object({ reason: z.string().trim().min(5).max(500) }).strict().parse(req.body);
+  const { reason } = transactionReasonSchema.parse(req.body);
   const auth = authOf(req);
   const result = await prisma.$transaction(async (tx) => {
     if (kind === "adjustments") await tx.$queryRaw`SELECT "id" FROM "StockAdjustment" WHERE "id" = ${id}::uuid FOR UPDATE`;

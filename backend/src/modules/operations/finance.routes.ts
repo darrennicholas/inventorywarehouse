@@ -7,7 +7,7 @@ import { AppError } from "../../utils/AppError.ts";
 import { asyncHandler } from "../../utils/asyncHandler.ts";
 import { pageMeta, pagination } from "../../utils/pagination.ts";
 import { notifyByPermission } from "../notifications/notification.service.ts";
-import { expenseSchema, paymentSchema, type ExpenseInput, type PaymentInput } from "./operations.validation.ts";
+import { expenseListQuerySchema, expenseSchema, paymentListQuerySchema, paymentSchema, type ExpenseInput, type PaymentInput } from "./operations.validation.ts";
 import { csvDocument } from "../../utils/csv.ts";
 import { Prisma } from "../../generated/prisma/client.ts";
 import { writeAuditLog } from "../audit/audit.service.ts";
@@ -26,16 +26,14 @@ function dateRange(query: Record<string, unknown>, field: string) {
 const expenseEditSchema = z.object({ category: z.string().trim().min(2).max(100).optional(), description: z.string().trim().max(1000).nullable().optional(), amount: z.coerce.number().min(0).optional(), warehouseId: z.uuid().nullable().optional(), expenseDate: z.coerce.date().optional() }).strict();
 const paymentEditSchema = z.object({ method: z.enum(["CASH", "BANK_TRANSFER", "CREDIT_CARD", "E_WALLET", "OTHER"]).optional(), status: z.enum(["PENDING", "PAID", "VOID"]).optional(), paymentDate: z.coerce.date().optional(), referenceNo: z.string().trim().max(120).nullable().optional(), notes: z.string().trim().max(500).nullable().optional() }).strict();
 
-function paymentFilter(req: Request) {
+function paymentFilter(req: Request, query: z.infer<typeof paymentListQuerySchema>) {
   const scope = warehouseScope(authOf(req));
   const clauses: Prisma.PaymentWhereInput[] = [];
   if (scope) clauses.push({ OR: [{ purchaseOrder: { warehouseId: { in: scope } } }, { sale: { warehouseId: { in: scope } } }, { expense: { warehouseId: { in: scope } } }] });
-  const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 120) : "";
+  const { search, status } = query;
   if (search) clauses.push({ OR: [{ number: { contains: search, mode: "insensitive" } }, { referenceNo: { contains: search, mode: "insensitive" } }, { purchaseOrder: { number: { contains: search, mode: "insensitive" } } }, { sale: { number: { contains: search, mode: "insensitive" } } }, { expense: { number: { contains: search, mode: "insensitive" } } }] });
-  const status = typeof req.query.status === "string" ? req.query.status : "";
-  const paymentStatuses = ["PENDING", "PAID", "VOID"] as const;
-  if ((paymentStatuses as readonly string[]).includes(status)) clauses.push({ status: status as typeof paymentStatuses[number] });
-  const dates = dateRange(req.query as Record<string, unknown>, "paymentDate"); if (dates) clauses.push(dates);
+  if (status) clauses.push({ status });
+  const dates = dateRange(query as Record<string, unknown>, "paymentDate"); if (dates) clauses.push(dates);
   return clauses.length ? { AND: clauses } : undefined;
 }
 
@@ -127,7 +125,8 @@ router.patch("/payment-due-date", requirePermission("payments.write"), asyncHand
 }));
 
 router.get("/payments.csv", requirePermission("payments.read"), asyncHandler(async (req, res) => {
-  const data = await prisma.payment.findMany({ where: paymentFilter(req), include: paymentInclude, orderBy: [{ paymentDate: "desc" }, { id: "desc" }] });
+  const query = paymentListQuerySchema.parse(req.query);
+  const data = await prisma.payment.findMany({ where: paymentFilter(req, query), include: paymentInclude, orderBy: [{ paymentDate: "desc" }, { id: "desc" }] });
   const rows = [["Nomor", "Tanggal", "Tipe", "Dokumen", "Metode", "Status", "Jumlah", "Dicatat oleh"], ...data.map((row) => [row.number, row.paymentDate.toISOString(), row.type, row.purchaseOrder?.number ?? row.sale?.number ?? row.expense?.number ?? "", row.method, row.status, Number(row.amount), row.paidBy.fullName])];
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", 'attachment; filename="payment-report.csv"');
@@ -135,15 +134,15 @@ router.get("/payments.csv", requirePermission("payments.read"), asyncHandler(asy
 }));
 
 router.get("/expenses", requirePermission("expenses.read"), asyncHandler(async (req, res) => {
-  const { page, pageSize, skip, take } = pagination(req.query as Record<string, unknown>);
+  const query = expenseListQuerySchema.parse(req.query);
+  const { page, pageSize, skip, take } = pagination(query);
   const clauses: Prisma.ExpenseWhereInput[] = [];
   const base = scopedWarehouseFilter(authOf(req));
   if (base) clauses.push(base);
-  const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 120) : "";
+  const { search, status } = query;
   if (search) clauses.push({ OR: [{ number: { contains: search, mode: "insensitive" } }, { category: { contains: search, mode: "insensitive" } }, { description: { contains: search, mode: "insensitive" } }] });
-  const status = typeof req.query.status === "string" ? req.query.status : "";
-  if (status === "PAID" || status === "UNPAID") clauses.push({ isPaid: status === "PAID" });
-  const dates = dateRange(req.query as Record<string, unknown>, "expenseDate"); if (dates) clauses.push(dates);
+  if (status) clauses.push({ isPaid: status === "PAID" });
+  const dates = dateRange(query as Record<string, unknown>, "expenseDate"); if (dates) clauses.push(dates);
   const where = clauses.length ? { AND: clauses } : undefined;
   const [data, total] = await Promise.all([prisma.expense.findMany({ where, include: { warehouse: true, createdBy: { select: { id: true, fullName: true } } }, orderBy: { expenseDate: "desc" }, skip, take }), prisma.expense.count({ where })]);
   res.json({ success: true, data, meta: pageMeta(page, pageSize, total) });
@@ -209,8 +208,9 @@ router.delete("/expenses/:id", requirePermission("expenses.delete"), asyncHandle
 }));
 
 router.get("/payments", requirePermission("payments.read"), asyncHandler(async (req, res) => {
-  const { page, pageSize, skip, take } = pagination(req.query as Record<string, unknown>);
-  const where = paymentFilter(req);
+  const query = paymentListQuerySchema.parse(req.query);
+  const { page, pageSize, skip, take } = pagination(query);
+  const where = paymentFilter(req, query);
   const [data, total] = await Promise.all([prisma.payment.findMany({ where, include: paymentInclude, orderBy: [{ paymentDate: "desc" }, { id: "desc" }], skip, take }), prisma.payment.count({ where })]);
   res.json({ success: true, data, meta: pageMeta(page, pageSize, total) });
 }));

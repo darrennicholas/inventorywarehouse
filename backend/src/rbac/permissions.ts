@@ -52,7 +52,7 @@ export const ROLE_PRESETS: Record<RoleCode, readonly PermissionKey[]> = {
     "stock-opnames.read", "stock-opnames.write", "stock-opnames.approve",
   ],
   WAREHOUSE_STAFF: [
-    "categories.read", "brands.read", "units.read", "products.read", "warehouses.read",
+    "dashboard.read", "categories.read", "brands.read", "units.read", "products.read", "warehouses.read",
     "inventory.read", "inventory.write", "inventory.relocate", "purchases.read", "sales.read",
     "purchase-returns.read", "purchase-returns.write", "sales-returns.read", "sales-returns.write",
     "fulfillment.read", "fulfillment.pick", "fulfillment.pack", "fulfillment.ship",
