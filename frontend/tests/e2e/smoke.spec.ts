@@ -11,7 +11,7 @@ test("administrator can sign in and reach the role-aware dashboard", async ({ pa
   await page.getByLabel("Password", { exact: true }).fill(adminPassword!);
   await page.getByRole("button", { name: "Sign In" }).click();
 
-  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dashboard", level: 1, exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Stok & kontrol", exact: true }).click();
   await expect(page.getByRole("button", { name: "Audit", exact: true })).toBeVisible();
   await expect(page.getByText("System Administrator", { exact: true })).toBeVisible();
