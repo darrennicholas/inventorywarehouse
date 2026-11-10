@@ -1,10 +1,13 @@
 
 import { prisma } from "../../lib/prisma.ts";
+import type { Prisma } from "../../generated/prisma/client.ts";
 
 import type {
   CreateSupplierInput,
   UpdateSupplierInput,
 } from "./supplier.validation.ts";
+
+export type SupplierDbClient = typeof prisma | Prisma.TransactionClient;
 
 export const supplierRepository = {
   findAll(options?: { skip?: number; take?: number; search?: string; isActive?: boolean }) {
@@ -19,20 +22,20 @@ export const supplierRepository = {
     return prisma.supplier.count({ where: { ...(options?.isActive !== undefined ? { isActive: options.isActive } : {}), ...(options?.search ? { OR: [{ code: { contains: options.search, mode: "insensitive" } }, { name: { contains: options.search, mode: "insensitive" } }, { email: { contains: options.search, mode: "insensitive" } }, { phone: { contains: options.search } }, { address: { contains: options.search, mode: "insensitive" } }] } : {}) } });
   },
 
-  findById(id: string) {
-    return prisma.supplier.findUnique({
+  findById(id: string, db: SupplierDbClient = prisma) {
+    return db.supplier.findUnique({
       where: { id },
     });
   },
 
-  findByCode(code: string) {
-    return prisma.supplier.findUnique({
+  findByCode(code: string, db: SupplierDbClient = prisma) {
+    return db.supplier.findUnique({
       where: { code },
     });
   },
 
-  create(data: CreateSupplierInput) {
-    return prisma.supplier.create({
+  create(data: CreateSupplierInput, db: SupplierDbClient = prisma) {
+    return db.supplier.create({
       data: {
         code: data.code,
         name: data.name,
@@ -44,8 +47,8 @@ export const supplierRepository = {
     });
   },
 
-  update(id: string, data: UpdateSupplierInput) {
-    return prisma.supplier.update({
+  update(id: string, data: UpdateSupplierInput, db: SupplierDbClient = prisma) {
+    return db.supplier.update({
       where: { id },
       data,
     });

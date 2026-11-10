@@ -533,6 +533,7 @@ model AuditLog {
   @@index([entity, entityId])
   @@index([userId, createdAt])
   @@index([createdAt])
+  @@index([createdAt, id])
 }
 
 // ==========================================
@@ -1145,6 +1146,7 @@ model StockMovement {
 
   @@index([returnOrderId])
   @@index([productId, warehouseId])
+  @@index([productId, warehouseId, occurredAt, id])
   @@index([warehouseId, occurredAt])
   @@index([movementType])
 }

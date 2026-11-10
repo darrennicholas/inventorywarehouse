@@ -16,7 +16,7 @@ const contract = JSON.parse(await readFile(new URL("../openapi.json", import.met
 test("OpenAPI contract covers critical routes and shares fulfillment validation constraints", () => {
   assert.equal(contract.openapi, "3.1.0");
   for (const [path, method] of [
-    ["/auth/login", "post"], ["/auth/me", "get"], ["/categories", "post"],
+    ["/health", "get"], ["/ready", "get"], ["/auth/login", "post"], ["/auth/me", "get"], ["/categories", "post"],
     ["/fulfillment", "get"], ["/fulfillment/scan", "get"],
     ["/fulfillment/sales/{saleId}/shipments", "post"], ["/fulfillment/{id}/pick", "post"], ["/fulfillment/{id}/ship", "post"], ["/fulfillment/{id}/complete", "post"], ["/fulfillment/{id}/cancel", "post"],
     ["/stock-opnames", "post"], ["/stock-opnames/{id}", "get"], ["/stock-opnames/{id}/lines/{lineId}", "patch"], ["/stock-opnames/{id}/submit", "post"], ["/stock-opnames/{id}/approve", "post"],

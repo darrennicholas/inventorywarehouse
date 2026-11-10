@@ -30,6 +30,7 @@ export default function ActionIconButton({
         {...buttonProps}
         type={buttonProps.type ?? "button"}
         aria-label={label}
+        title={label}
         data-sf-icon-action
         className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition duration-150 hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45 ${variantClass[variant]} ${className}`}
       >

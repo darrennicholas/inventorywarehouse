@@ -4,7 +4,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
-  --font-sans: "Segoe UI Variable", "Segoe UI", Arial, sans-serif;
+  --font-sans: Inter, "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
   --font-serif: Georgia, "Times New Roman", serif;
 }
@@ -127,7 +127,10 @@ body {
   background: var(--background);
   color: var(--foreground);
 
-  font-family: "Segoe UI Variable", "Segoe UI", Arial, sans-serif;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: -0.008em;
   font-kerning: normal;
   font-optical-sizing: auto;
   font-feature-settings: "kern" 1, "liga" 1;
@@ -261,10 +264,73 @@ html.dark aside p {
   box-sizing: border-box;
 }
 
+:is(h1, h2, h3, h4) {
+  letter-spacing: -0.025em;
+  text-wrap: pretty;
+}
+
+/* Shared page headers use less vertical space so the working content stays visible. */
+.sf-page-hero {
+  min-height: 0 !important;
+  padding: clamp(1rem, 1.8vw, 1.5rem) !important;
+  border-radius: 1.25rem !important;
+  box-shadow: 0 8px 22px rgb(15 23 42 / 9%) !important;
+}
+.sf-page-hero h1,
+.sf-page-hero h2 {
+  font-size: clamp(1.35rem, 1.8vw, 1.75rem) !important;
+  line-height: 1.2 !important;
+  letter-spacing: -0.035em;
+}
+.sf-page-hero p { line-height: 1.5; }
+
+/* Give horizontally scrollable tables a visible, keyboard-friendly focus state. */
+.sf-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #9db5d9 transparent;
+}
+.sf-table-scroll:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: -2px;
+  border-radius: .75rem;
+}
+.sf-table-scroll table { font-variant-numeric: tabular-nums; }
+.sf-table-scroll th { letter-spacing: .045em; }
+
+.sf-filter-toolbar { min-width: 0; }
+.sf-filter-toolbar > * { min-width: 0; }
+
+.sf-status-badge {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  padding: .25rem .625rem;
+  font-size: .75rem;
+  font-weight: 650;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.sf-status-neutral { border-color: #dbe3ee; background: #f1f5f9; color: #475569; }
+.sf-status-info { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
+.sf-status-success { border-color: #a7f3d0; background: #ecfdf5; color: #047857; }
+.sf-status-warning { border-color: #fde68a; background: #fffbeb; color: #b45309; }
+.sf-status-danger { border-color: #fecdd3; background: #fff1f2; color: #be123c; }
+.dark .sf-status-neutral { border-color: #475569; background: #1e293b; color: #cbd5e1; }
+.dark .sf-status-info { border-color: #1e40af; background: #172554; color: #bfdbfe; }
+.dark .sf-status-success { border-color: #065f46; background: #022c22; color: #a7f3d0; }
+.dark .sf-status-warning { border-color: #92400e; background: #451a03; color: #fde68a; }
+.dark .sf-status-danger { border-color: #9f1239; background: #4c0519; color: #fecdd3; }
+
 button:not(:disabled) {
   cursor: pointer;
   font-family: var(--font-sans);
-  transition: filter 180ms ease, box-shadow 180ms ease, background-color 180ms ease, border-color 180ms ease, transform 180ms ease;
+  transition: filter 160ms ease, box-shadow 160ms ease, background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
 }
 
 /* Keep form controls and toolbar actions on the same readable UI font. */
@@ -280,14 +346,16 @@ option {
 
 @media (hover: hover) {
   button:not(:disabled):hover {
-    filter: brightness(1.04);
-    transform: translateY(-2px);
-    box-shadow: 0 10px 22px rgb(37 99 235 / 18%), 0 0 0 1px rgb(59 130 246 / 16%);
+    filter: brightness(1.035);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgb(37 99 235 / 13%), 0 0 0 1px rgb(59 130 246 / 10%);
   }
-  html.dark button:not(:disabled):hover { box-shadow: 0 10px 22px rgb(0 0 0 / 34%), 0 0 0 1px rgb(96 165 250 / 28%); }
+  html.dark button:not(:disabled):hover { box-shadow: 0 4px 12px rgb(0 0 0 / 28%), 0 0 0 1px rgb(96 165 250 / 20%); }
 }
 button:not(:disabled):active { filter: brightness(.97); transform: translateY(0) scale(.98); }
 button:focus-visible { outline: 2px solid #3b82f6; outline-offset: 3px; box-shadow: 0 0 0 5px rgb(59 130 246 / 14%); }
+:is(input, select, textarea, a):focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+html.dark :is(input, select, textarea, a):focus-visible { outline-color: #93c5fd; }
 .sf-action-icon-wrap { position: relative; display: inline-flex; align-items: center; }
 .sf-action-icon-tooltip {
   position: absolute;
@@ -321,7 +389,13 @@ button:focus-visible { outline: 2px solid #3b82f6; outline-offset: 3px; box-shad
 }
 html.dark .sf-action-icon-tooltip { border-color: rgb(148 163 184 / 20%); background: #0f172a; }
 @media (prefers-reduced-motion: reduce) {
-  button:not(:disabled), .sf-action-icon-tooltip { transition-duration: 0.01ms; }
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
+@media (max-width: 640px) {
+  .sf-page-hero { border-radius: 1rem !important; }
+  .sf-page-hero [data-sf-hero-art] { display: none; }
+  .sf-table-scroll table { min-width: 640px; }
 }
 
 button:disabled {
@@ -536,3 +610,154 @@ body, header, main article, .sf-modal-overlay > :is(div, section, aside) {
     scroll-behavior: auto !important;
   }
 }
+
+/* StockFlow workspace theme shared by every role and module. */
+.sf-sidebar {
+  color: #d7e2f4 !important;
+  background: linear-gradient(180deg, #101f3d 0%, #0c1932 100%) !important;
+  border-color: #26395b !important;
+  box-shadow: 8px 0 24px rgb(15 31 61 / 8%) !important;
+}
+.sf-sidebar > div:first-child { border-color: #26395b !important; }
+.sf-sidebar h1 { color: #f7faff !important; }
+.sf-sidebar h1 span { color: #72a8ff !important; }
+.sf-sidebar > div:first-child p { color: #9fb1d0 !important; }
+.sf-sidebar nav > p,
+.sf-sidebar nav > div > p { color: #8297ba !important; }
+.sf-sidebar nav > div { border-color: #26395b !important; }
+.sf-sidebar nav button {
+  color: #bdcbe2 !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none;
+}
+.sf-sidebar nav button:hover:not(:disabled) {
+  color: #fff !important;
+  background-color: #1a2d50 !important;
+  border-color: #2b426d !important;
+  box-shadow: 0 5px 14px rgb(3 11 28 / 22%);
+}
+.sf-sidebar nav button[aria-current="page"] {
+  color: #fff !important;
+  background: linear-gradient(115deg, #2867e8, #3b82f6) !important;
+  border-color: #5e98ff !important;
+  box-shadow: inset 0 1px rgb(255 255 255 / 18%), 0 7px 18px rgb(37 99 235 / 27%) !important;
+}
+.sf-sidebar nav button[data-active="true"] {
+  color: #f3f7ff !important;
+  background-color: #172b4b !important;
+  border-color: #2c4774 !important;
+}
+.sf-sidebar nav button:disabled { color: #7485a3 !important; }
+.sf-sidebar nav [class*="border-l"] { border-color: #2a3e61 !important; }
+.sf-sidebar nav button:focus-visible {
+  outline-color: #91baff !important;
+  box-shadow: 0 0 0 3px rgb(96 165 250 / 23%) !important;
+}
+.sf-topbar {
+  min-height: 72px;
+  border-color: #e2e9f3 !important;
+  background-color: rgb(255 255 255 / 94%) !important;
+  box-shadow: 0 3px 12px rgb(22 43 77 / 4%) !important;
+}
+.sf-main-content { min-height: calc(100vh - 76px); background: #f4f7fc; }
+html.dark .sf-topbar { border-color: #26354d !important; background-color: rgb(15 26 45 / 94%) !important; }
+html.dark .sf-main-content { background: #0b1220; }
+
+/* Module headers share the reference's light, compact surface. */
+.sf-page-hero {
+  color: #152544 !important;
+  background: linear-gradient(120deg, #fff 0%, #f5f8ff 62%, #edf3ff 100%) !important;
+  border: 1px solid #dce6f5 !important;
+  box-shadow: 0 8px 20px rgb(20 45 83 / 7%) !important;
+}
+.sf-page-hero :is(h1, h2) { color: #152544 !important; }
+.sf-page-hero p { color: #62748f !important; }
+.sf-page-hero > .relative > div:first-child {
+  color: #2864df !important;
+  background: #e7efff !important;
+  box-shadow: inset 0 0 0 1px #d6e4ff !important;
+}
+.sf-page-hero > .relative > span {
+  color: #46628f !important;
+  background: #edf3ff !important;
+  border-color: #dce7fa !important;
+  backdrop-filter: none !important;
+}
+.sf-page-hero button:not(:disabled) {
+  color: #2452a5 !important;
+  background: #e3edff !important;
+  border-color: #c9dcff !important;
+  box-shadow: 0 2px 5px rgb(37 99 235 / 10%) !important;
+}
+.sf-page-hero button:not(:disabled):hover {
+  color: #173c86 !important;
+  background: #ccddff !important;
+  border-color: #aac7ff !important;
+}
+.sf-page-hero [data-sf-hero-art] { display: none; }
+html.dark .sf-page-hero {
+  color: #e8f0ff !important;
+  background: linear-gradient(120deg, #111f36 0%, #142642 100%) !important;
+  border-color: #2b4163 !important;
+}
+html.dark .sf-page-hero :is(h1, h2) { color: #f3f7ff !important; }
+html.dark .sf-page-hero p { color: #aebed6 !important; }
+html.dark .sf-page-hero > .relative > div:first-child,
+html.dark .sf-page-hero > .relative > span { color: #bdd2fa !important; background: #203858 !important; border-color: #344f77 !important; }
+html.dark .sf-page-hero button:not(:disabled) { color: #dbeafe !important; background: #203858 !important; border-color: #385983 !important; }
+html.dark .sf-page-hero button:not(:disabled):hover { color: #fff !important; background: #294b78 !important; }
+
+/* Soft KPI colors keep dashboard data easy to scan without inventing metrics. */
+.sf-dashboard-metric { box-shadow: 0 3px 12px rgb(25 49 86 / 5%) !important; }
+.sf-metric-blue { background: linear-gradient(135deg, #f0f6ff, #e8f1ff) !important; border-color: #d4e3ff !important; }
+.sf-metric-green { background: linear-gradient(135deg, #effbf6, #e5f7f0) !important; border-color: #ccefe0 !important; }
+.sf-metric-violet { background: linear-gradient(135deg, #f6f3ff, #eeeaff) !important; border-color: #dfd7ff !important; }
+.sf-metric-amber { background: linear-gradient(135deg, #fff8ed, #fff2df) !important; border-color: #ffe3bd !important; }
+.sf-metric-rose { background: linear-gradient(135deg, #fff3f4, #ffebed) !important; border-color: #ffd8dd !important; }
+.sf-metric-blue .sf-metric-icon { color: #2f6fe8; background: #dceaff; }
+.sf-metric-green .sf-metric-icon { color: #159668; background: #d5f4e6; }
+.sf-metric-violet .sf-metric-icon { color: #7555dc; background: #e6ddff; }
+.sf-metric-amber .sf-metric-icon { color: #c47b14; background: #ffebc8; }
+.sf-metric-rose .sf-metric-icon { color: #db4964; background: #ffdde3; }
+.sf-dashboard-panel { box-shadow: 0 4px 16px rgb(25 49 86 / 5%) !important; }
+html.dark .sf-dashboard-metric { background: linear-gradient(135deg, #14233c, #172945) !important; border-color: #2a4164 !important; }
+html.dark .sf-dashboard-metric .sf-metric-icon { background: #203b63; color: #a8c6ff; }
+html.dark .sf-dashboard-panel { border-color: #26354d !important; }
+
+/* Give custom tables the same readable rhythm as the shared data table. */
+main table { border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
+main table thead { background: #edf3ff !important; }
+main table thead th {
+  color: #526987 !important;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+main table tbody tr:hover { background-color: #f2f7ff !important; }
+main :is(section, div)[class*="overflow-hidden"][class*="rounded"][class*="border"][class*="shadow-sm"] {
+  border-color: #e0e8f4 !important;
+  box-shadow: 0 4px 16px rgb(25 49 86 / 5%) !important;
+}
+main button[class*="border-slate"]:not([class*="bg-"]):not([class*="text-red"]):not([class*="text-rose"]):not(:disabled) {
+  color: #365580 !important;
+  background-color: #eaf1ff !important;
+  border-color: #d5e2f4 !important;
+}
+main button[class*="border-slate"]:not([class*="bg-"]):not([class*="text-red"]):not([class*="text-rose"]):hover:not(:disabled) {
+  color: #234a86 !important;
+  background-color: #d9e7ff !important;
+  border-color: #bcd2f5 !important;
+}
+html.dark main table thead { background: #172b49 !important; }
+html.dark main table thead th { color: #b9cbe5 !important; }
+html.dark main table tbody tr:hover { background-color: #1b2d48 !important; }
+html.dark main :is(section, div)[class*="overflow-hidden"][class*="rounded"][class*="border"][class*="shadow-sm"] { border-color: #263b5d !important; }
+html.dark main button[class*="border-slate"]:not([class*="bg-"]):not([class*="text-red"]):not([class*="text-rose"]):not(:disabled) {
+  color: #d5e5ff !important;
+  background-color: #203858 !important;
+  border-color: #385983 !important;
+}
+html.dark main button[class*="border-slate"]:not([class*="bg-"]):not([class*="text-red"]):not([class*="text-rose"]):hover:not(:disabled) { background-color: #294b78 !important; }

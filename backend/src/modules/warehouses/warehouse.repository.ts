@@ -1,10 +1,13 @@
 
 import { prisma } from "../../lib/prisma.ts";
+import type { Prisma } from "../../generated/prisma/client.ts";
 
 import type {
   CreateWarehouseInput,
   UpdateWarehouseInput,
 } from "./warehouse.validation.ts";
+
+export type WarehouseDbClient = typeof prisma | Prisma.TransactionClient;
 
 export const warehouseRepository = {
   // ====================================
@@ -24,8 +27,8 @@ export const warehouseRepository = {
   // GET WAREHOUSE BY ID
   // ====================================
 
-  findById(id: string) {
-    return prisma.warehouse.findUnique({
+  findById(id: string, db: WarehouseDbClient = prisma) {
+    return db.warehouse.findUnique({
       where: {
         id,
       },
@@ -36,8 +39,8 @@ export const warehouseRepository = {
   // FIND WAREHOUSE BY UNIQUE CODE
   // ====================================
 
-  findByCode(code: string) {
-    return prisma.warehouse.findUnique({
+  findByCode(code: string, db: WarehouseDbClient = prisma) {
+    return db.warehouse.findUnique({
       where: {
         code,
       },
@@ -48,8 +51,8 @@ export const warehouseRepository = {
   // CREATE WAREHOUSE
   // ====================================
 
-  create(data: CreateWarehouseInput) {
-    return prisma.warehouse.create({
+  create(data: CreateWarehouseInput, db: WarehouseDbClient = prisma) {
+    return db.warehouse.create({
       data: {
         code: data.code,
         name: data.name,
@@ -63,8 +66,8 @@ export const warehouseRepository = {
   // UPDATE WAREHOUSE
   // ====================================
 
-  update(id: string, data: UpdateWarehouseInput) {
-    return prisma.warehouse.update({
+  update(id: string, data: UpdateWarehouseInput, db: WarehouseDbClient = prisma) {
+    return db.warehouse.update({
       where: {
         id,
       },
@@ -76,8 +79,8 @@ export const warehouseRepository = {
   // CHECK WAREHOUSE STOCK
   // ====================================
 
-  countPositiveStockBalances(warehouseId: string) {
-    return prisma.inventoryBalance.count({
+  countPositiveStockBalances(warehouseId: string, db: WarehouseDbClient = prisma) {
+    return db.inventoryBalance.count({
       where: {
         warehouseId,
         quantityOnHand: {

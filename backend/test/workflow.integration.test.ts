@@ -24,7 +24,7 @@ test("rejected stock documents are revised and approved with an audit trail", { 
   const server = app.listen(0, "127.0.0.1"); await once(server, "listening");
   const address = server.address(); assert.ok(address && typeof address !== "string");
   async function request(path: string, user: number, method = "GET", body?: unknown) {
-    const response = await fetch(`http://127.0.0.1:${address.port}/api${path}`, { method, headers: { cookie: `stockflow_session=${tokens[user]}`, origin: (process.env.FRONTEND_URL ?? "http://localhost:3000").replace(/\/$/, ""), "x-csrf-token": createCsrfToken(sessions[user].id), "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    const response = await fetch(`http://127.0.0.1:${address.port}/api${path}`, { method, headers: { cookie: `stockflow_session=${tokens[user]}`, origin: (process.env.FRONTEND_URL ?? "http://localhost:3000").replace(/\/$/, ""), "x-csrf-token": createCsrfToken(sessions[user].id), "content-type": "application/json", "idempotency-key": randomUUID() }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     return { status: response.status, body: await response.json() as { data?: { id: string; status: string }; message?: string } };
   }
   let adjustmentId = "", transferId = "";

@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Check API and database readiness */
+        get: operations["getReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/database-check": {
         parameters: {
             query?: never;
@@ -481,7 +498,7 @@ export interface components {
         };
     };
     parameters: {
-        /** @description Optional. Identical retries return the first response. Reusing a key with a different request returns 409. */
+        /** @description Required for authenticated writes. Identical retries return the first response. Reusing a key with a different request returns 409. */
         IdempotencyKey: string;
         UuidId: string;
     };
@@ -509,6 +526,27 @@ export interface operations {
                     "application/json": components["schemas"]["HealthResponse"];
                 };
             };
+        };
+    };
+    getReadiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description API can accept traffic */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+            503: components["responses"]["ServerError"];
         };
     };
     getDatabaseHealth: {
@@ -614,9 +652,9 @@ export interface operations {
     createCategory: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description Optional. Identical retries return the first response. Reusing a key with a different request returns 409. */
-                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            header: {
+                /** @description Required for authenticated writes. Identical retries return the first response. Reusing a key with a different request returns 409. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
             cookie?: never;
@@ -700,9 +738,9 @@ export interface operations {
     createShipment: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description Optional. Identical retries return the first response. Reusing a key with a different request returns 409. */
-                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            header: {
+                /** @description Required for authenticated writes. Identical retries return the first response. Reusing a key with a different request returns 409. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
                 saleId: string;
@@ -732,9 +770,9 @@ export interface operations {
     pickShipment: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description Optional. Identical retries return the first response. Reusing a key with a different request returns 409. */
-                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            header: {
+                /** @description Required for authenticated writes. Identical retries return the first response. Reusing a key with a different request returns 409. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
                 id: components["parameters"]["UuidId"];
@@ -764,9 +802,9 @@ export interface operations {
     packShipment: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description Optional. Identical retries return the first response. Reusing a key with a different request returns 409. */
-                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            header: {
+                /** @description Required for authenticated writes. Identical retries return the first response. Reusing a key with a different request returns 409. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
                 id: components["parameters"]["UuidId"];
@@ -791,9 +829,9 @@ export interface operations {
     shipShipment: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description Optional. Identical retries return the first response. Reusing a key with a different request returns 409. */
-                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            header: {
+                /** @description Required for authenticated writes. Identical retries return the first response. Reusing a key with a different request returns 409. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
                 id: components["parameters"]["UuidId"];
@@ -844,9 +882,9 @@ export interface operations {
     createStockOpname: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description Optional. Identical retries return the first response. Reusing a key with a different request returns 409. */
-                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            header: {
+                /** @description Required for authenticated writes. Identical retries return the first response. Reusing a key with a different request returns 409. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
             cookie?: never;
@@ -874,9 +912,9 @@ export interface operations {
     countStockOpnameLine: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description Optional. Identical retries return the first response. Reusing a key with a different request returns 409. */
-                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            header: {
+                /** @description Required for authenticated writes. Identical retries return the first response. Reusing a key with a different request returns 409. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
                 id: components["parameters"]["UuidId"];
@@ -907,9 +945,9 @@ export interface operations {
     completeShipment: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description Optional. Identical retries return the first response. Reusing a key with a different request returns 409. */
-                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            header: {
+                /** @description Required for authenticated writes. Identical retries return the first response. Reusing a key with a different request returns 409. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
                 id: components["parameters"]["UuidId"];
@@ -934,9 +972,9 @@ export interface operations {
     cancelShipment: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description Optional. Identical retries return the first response. Reusing a key with a different request returns 409. */
-                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            header: {
+                /** @description Required for authenticated writes. Identical retries return the first response. Reusing a key with a different request returns 409. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
                 id: components["parameters"]["UuidId"];
@@ -985,9 +1023,9 @@ export interface operations {
     submitStockOpname: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description Optional. Identical retries return the first response. Reusing a key with a different request returns 409. */
-                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            header: {
+                /** @description Required for authenticated writes. Identical retries return the first response. Reusing a key with a different request returns 409. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
                 id: components["parameters"]["UuidId"];
@@ -1013,9 +1051,9 @@ export interface operations {
     approveStockOpname: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description Optional. Identical retries return the first response. Reusing a key with a different request returns 409. */
-                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            header: {
+                /** @description Required for authenticated writes. Identical retries return the first response. Reusing a key with a different request returns 409. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
                 id: components["parameters"]["UuidId"];

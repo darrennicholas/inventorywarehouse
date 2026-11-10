@@ -10,7 +10,7 @@ import { notifyByPermission } from "../notifications/notification.service.ts";
 import { masterListOptions, pageMeta, paginateArray } from "../../utils/pagination.ts";
 import { prisma } from "../../lib/prisma.ts";
 import { AppError } from "../../utils/AppError.ts";
-import { writeAuditLog } from "../audit/audit.service.ts";
+import { requestAuditContext, writeAuditLog } from "../audit/audit.service.ts";
 
 import type {
   CreateWarehouseInput,
@@ -69,8 +69,12 @@ export const createWarehouse = asyncHandler(
     const auth = authOf(req);
     if (warehouseScope(auth)) throw new AppError(403, "Warehouse-scoped users cannot create warehouses");
 
-    const warehouse = await warehouseService.create(input);
-    await writeAuditLog({ userId: auth.userId, action: "CREATE", entity: "Warehouse", entityId: warehouse.id, afterData: warehouse, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") });
+    const auditContext = requestAuditContext(req, res.locals.requestId as string | undefined);
+    const warehouse = await prisma.$transaction(async (tx) => {
+      const created = await warehouseService.create(input, tx);
+      await writeAuditLog({ userId: auth.userId, action: "CREATE", entity: "Warehouse", entityId: created.id, afterData: created, ...auditContext }, tx as never);
+      return created;
+    });
     await notifyByPermission({ permission: "warehouses.read", type: "WAREHOUSE_CREATED", title: "Warehouse created", message: `${warehouse.name} is now available for operations.`, entity: "Warehouse", entityId: warehouse.id, warehouseId: warehouse.id });
 
     res.status(201).json({
@@ -89,14 +93,15 @@ export const updateWarehouse = asyncHandler(
   async (req, res) => {
     const id = requireUuid(req.params.id, "Warehouse ID");
     const input = req.body as UpdateWarehouseInput;
-    assertWarehouseAccess(authOf(req), id);
-    const before = await warehouseService.detail(id);
-
-    const warehouse = await warehouseService.update(
-      id,
-      input
-    );
-    await writeAuditLog({ userId: authOf(req).userId, action: "UPDATE", entity: "Warehouse", entityId: warehouse.id, beforeData: before, afterData: warehouse, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") });
+    const auth = authOf(req);
+    assertWarehouseAccess(auth, id);
+    const auditContext = requestAuditContext(req, res.locals.requestId as string | undefined);
+    const warehouse = await prisma.$transaction(async (tx) => {
+      const before = await warehouseService.detail(id, tx);
+      const updated = await warehouseService.update(id, input, tx);
+      await writeAuditLog({ userId: auth.userId, action: "UPDATE", entity: "Warehouse", entityId: updated.id, beforeData: before, afterData: updated, ...auditContext }, tx as never);
+      return updated;
+    });
     await notifyByPermission({ permission: "warehouses.read", type: "WAREHOUSE_UPDATED", title: "Warehouse updated", message: `${warehouse.name} was updated.`, entity: "Warehouse", entityId: warehouse.id, warehouseId: warehouse.id });
 
     res.status(200).json({
@@ -114,12 +119,15 @@ export const updateWarehouse = asyncHandler(
 export const deactivateWarehouse = asyncHandler(
   async (req, res) => {
     const id = requireUuid(req.params.id, "Warehouse ID");
-    assertWarehouseAccess(authOf(req), id);
-    const before = await warehouseService.detail(id);
-
-    const warehouse =
-      await warehouseService.deactivate(id);
-    await writeAuditLog({ userId: authOf(req).userId, action: "DEACTIVATE", entity: "Warehouse", entityId: warehouse.id, beforeData: before, afterData: warehouse, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") });
+    const auth = authOf(req);
+    assertWarehouseAccess(auth, id);
+    const auditContext = requestAuditContext(req, res.locals.requestId as string | undefined);
+    const warehouse = await prisma.$transaction(async (tx) => {
+      const before = await warehouseService.detail(id, tx);
+      const updated = await warehouseService.deactivate(id, tx);
+      await writeAuditLog({ userId: auth.userId, action: "DEACTIVATE", entity: "Warehouse", entityId: updated.id, beforeData: before, afterData: updated, ...auditContext }, tx as never);
+      return updated;
+    });
     await notifyByPermission({ permission: "warehouses.read", type: "WAREHOUSE_DEACTIVATED", title: "Warehouse deactivated", message: `${warehouse.name} was deactivated.`, entity: "Warehouse", entityId: warehouse.id, warehouseId: warehouse.id });
 
     res.status(200).json({

@@ -18,7 +18,7 @@ export default function DataPagination({ page, pageSize, total, totalPages, onPa
   const currentPage = Math.min(Math.max(1, page), safeTotalPages);
   const from = total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const to = Math.min(currentPage * pageSize, total);
-  return <nav aria-label="Navigasi halaman data" className="flex flex-col gap-3 border-t border-slate-100 px-4 py-4 text-xs text-slate-500 dark:border-slate-700 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+  return <nav aria-label="Navigasi halaman data" className="flex min-w-0 flex-col gap-3 border-t border-slate-100 px-4 py-3 text-xs text-slate-500 dark:border-slate-700 sm:flex-row sm:items-center sm:justify-between sm:px-5">
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
       <span>Menampilkan <strong className="text-slate-700 dark:text-slate-200">{from}–{to}</strong> dari <strong className="text-slate-700 dark:text-slate-200">{total}</strong> {noun}</span>
       {onPageSizeChange && <label className="flex items-center gap-2">Baris per halaman<GlobalSelect aria-label="Baris per halaman" value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-800">{pageSizeOptions.map((size) => <option key={size} value={size}>{size}</option>)}</GlobalSelect></label>}

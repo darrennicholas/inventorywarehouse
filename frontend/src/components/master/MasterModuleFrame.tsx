@@ -19,8 +19,8 @@ const modules: Record<MasterModuleKind, { title: string; description: string; ac
 export default function MasterModuleFrame({ kind, children }: { kind: MasterModuleKind; children: ReactNode }) {
   const config = modules[kind];
   const Icon = config.icon;
-  return <section className="space-y-5"><div className={`relative min-h-44 overflow-hidden rounded-3xl bg-gradient-to-br ${config.accent} p-6 text-white shadow-lg sm:p-8`}>
-    {kind === "categories" && <div className="absolute right-8 top-7 flex rotate-3 flex-wrap gap-2 opacity-30">{["Hardware", "Food", "Office", "Tools"].map((label) => <span key={label} className="rounded-full border border-white px-3 py-1 text-xs">{label}</span>)}</div>}
+  return <section className="space-y-5"><div className={`sf-page-hero relative min-h-44 overflow-hidden rounded-3xl bg-gradient-to-br ${config.accent} p-6 text-white shadow-lg sm:p-8`}>
+    {kind === "categories" && <div data-sf-hero-art className="absolute right-8 top-7 flex rotate-3 flex-wrap gap-2 opacity-30">{["Hardware", "Food", "Office", "Tools"].map((label) => <span key={label} className="rounded-full border border-white px-3 py-1 text-xs">{label}</span>)}</div>}
     {kind === "brands" && <><div className="absolute -right-8 -top-12 h-44 w-44 rounded-full border-[28px] border-white/10" /><div className="absolute right-36 top-10 h-16 w-16 rounded-full bg-white/10" /></>}
     {kind === "units" && <div className="absolute inset-y-0 right-0 w-2/5 opacity-20" style={{ backgroundImage: "linear-gradient(90deg,white 1px,transparent 1px),linear-gradient(white 1px,transparent 1px)", backgroundSize: "24px 24px" }} />}
     {kind === "products" && <div className="absolute right-8 top-7 space-y-2 opacity-25">{[82, 64, 94, 48].map((width) => <div key={width} className="h-3 rounded-full bg-white" style={{ width }} />)}</div>}

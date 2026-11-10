@@ -1,6 +1,6 @@
 
 import { AppError } from "../../utils/AppError.ts";
-import { supplierRepository } from "./supplier.repository.ts";
+import { supplierRepository, type SupplierDbClient } from "./supplier.repository.ts";
 
 import type {
   CreateSupplierInput,
@@ -9,9 +9,10 @@ import type {
 
 async function ensureUniqueCode(
   code: string,
-  exceptId?: string
+  exceptId?: string,
+  db?: SupplierDbClient,
 ) {
-  const existing = await supplierRepository.findByCode(code);
+  const existing = await supplierRepository.findByCode(code, db);
 
   if (existing && existing.id !== exceptId) {
     throw new AppError(
@@ -57,8 +58,8 @@ export const supplierService = {
     return supplierRepository.count(options);
   },
 
-  async detail(id: string) {
-    const supplier = await supplierRepository.findById(id);
+  async detail(id: string, db?: SupplierDbClient) {
+    const supplier = await supplierRepository.findById(id, db);
 
     if (!supplier) {
       throw new AppError(
@@ -70,11 +71,12 @@ export const supplierService = {
     return supplier;
   },
 
-  async create(input: CreateSupplierInput) {
-    await ensureUniqueCode(input.code);
+  async create(input: CreateSupplierInput, db?: SupplierDbClient) {
+    const client = db;
+    await ensureUniqueCode(input.code, undefined, client);
 
     try {
-      return await supplierRepository.create(input);
+      return await supplierRepository.create(input, client);
     } catch (error) {
       return handleDatabaseError(error);
     }
@@ -82,27 +84,29 @@ export const supplierService = {
 
   async update(
     id: string,
-    input: UpdateSupplierInput
+    input: UpdateSupplierInput,
+    db?: SupplierDbClient,
   ) {
-    await supplierService.detail(id);
+    await supplierService.detail(id, db);
 
     if (input.code !== undefined) {
-      await ensureUniqueCode(input.code, id);
+      await ensureUniqueCode(input.code, id, db);
     }
 
     try {
       return await supplierRepository.update(
         id,
-        input
+        input,
+        db,
       );
     } catch (error) {
       return handleDatabaseError(error);
     }
   },
 
-  deactivate(id: string) {
+  deactivate(id: string, db?: SupplierDbClient) {
     return supplierService.update(id, {
       isActive: false,
-    });
+    }, db);
   },
 };

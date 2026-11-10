@@ -3,6 +3,7 @@ type ErrorContext = {
   method?: string;
   route?: string;
   userId?: string;
+  job?: string;
 };
 
 export function reportError(error: unknown, context: ErrorContext = {}) {

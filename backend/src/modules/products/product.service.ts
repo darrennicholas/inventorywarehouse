@@ -1,6 +1,7 @@
 
 import { AppError } from "../../utils/AppError.ts";
-import { productRepository } from "./product.repository.ts";
+import { prisma } from "../../lib/prisma.ts";
+import { productRepository, type ProductDbClient } from "./product.repository.ts";
 
 import type {
   CreateProductInput,
@@ -12,10 +13,11 @@ import type {
 // =====================================
 
 async function verifyReferences(
-  data: UpdateProductInput
+  data: UpdateProductInput,
+  db: ProductDbClient,
 ) {
   const results =
-    await productRepository.validateRelations(data);
+    await productRepository.validateRelations(data, db);
 
   if (!results[0]) {
     throw new AppError(
@@ -45,11 +47,12 @@ async function verifyReferences(
 
 async function verifyUnique(
   data: UpdateProductInput,
-  exceptId?: string
+  exceptId?: string,
+  db?: ProductDbClient,
 ) {
   if (data.sku) {
     const found =
-      await productRepository.findBySku(data.sku);
+      await productRepository.findBySku(data.sku, db);
 
     if (found && found.id !== exceptId) {
       throw new AppError(
@@ -61,7 +64,7 @@ async function verifyUnique(
 
   if (data.code) {
     const found =
-      await productRepository.findByCode(data.code);
+      await productRepository.findByCode(data.code, db);
 
     if (found && found.id !== exceptId) {
       throw new AppError(
@@ -74,7 +77,8 @@ async function verifyUnique(
   if (data.barcode) {
     const found =
       await productRepository.findByBarcode(
-        data.barcode
+        data.barcode,
+        db,
       );
 
     if (found && found.id !== exceptId) {
@@ -106,9 +110,9 @@ export const productService = {
   },
 
   // GET DETAIL
-  async detail(id: string) {
+  async detail(id: string, db?: ProductDbClient) {
     const product =
-      await productRepository.findById(id);
+      await productRepository.findById(id, db);
 
     if (!product) {
       throw new AppError(
@@ -121,20 +125,23 @@ export const productService = {
   },
 
   // CREATE PRODUCT
-  async create(input: CreateProductInput) {
-    await verifyReferences(input);
+  async create(input: CreateProductInput, db?: ProductDbClient) {
+    const client = db ?? prisma;
+    await verifyReferences(input, client);
 
-    await verifyUnique(input);
+    await verifyUnique(input, undefined, client);
 
-    return productRepository.create(input);
+    return productRepository.create(input, client);
   },
 
   // UPDATE PRODUCT
   async update(
     id: string,
-    input: UpdateProductInput
+    input: UpdateProductInput,
+    db?: ProductDbClient,
   ) {
-    const current = await this.detail(id);
+    const client = db ?? prisma;
+    const current = await this.detail(id, client);
 
     // Prevent deactivating product with stock
     if (
@@ -148,16 +155,17 @@ export const productService = {
       );
     }
 
-    await verifyReferences(input);
+    await verifyReferences(input, client);
 
-    await verifyUnique(input, id);
+    await verifyUnique(input, id, client);
 
-    return productRepository.update(id, input);
+    return productRepository.update(id, input, client);
   },
 
   // SOFT DELETE PRODUCT
-  async deactivate(id: string) {
-    const product = await this.detail(id);
+  async deactivate(id: string, db?: ProductDbClient) {
+    const client = db ?? prisma;
+    const product = await this.detail(id, client);
 
     if (
       typeof product.totalStock === "number" &&
@@ -171,6 +179,6 @@ export const productService = {
 
     return productRepository.update(id, {
       isActive: false,
-    });
+    }, client);
   },
 };

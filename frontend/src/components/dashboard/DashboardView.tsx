@@ -14,6 +14,7 @@ type Segment = { label: string; count: number };
 type MonthlySeries = "purchases" | "sales" | "expenses";
 type DashboardSummary = {
   period?: { from: string; to: string; bucketDays: number };
+  kpis?: { purchaseValue: number; salesValue: number; expenseValue: number; stockUnits: number; lowStockLines: number; expiringUnits30d: number; activeWarehouses: number };
   monthly: Array<{ label: string; purchases: number; sales: number; expenses: number }>;
   trend: Point[];
   operationStatus: { purchases: Segment[]; sales: Segment[]; transfers: Segment[] };
@@ -115,14 +116,32 @@ export default function DashboardView() {
   const canViewInventory = can("inventory.read");
   const canViewStatus = statusGroups.length > 0;
   const hasCharts = canViewInventory || financialSeries.length > 0 || canViewStatus;
+  const dashboardMetrics = [
+    ...(canViewInventory ? [
+      { key: "stock", label: "Total stok tersedia", value: (summary?.kpis?.stockUnits ?? 0).toLocaleString("id-ID"), note: "Di gudang yang dapat diakses", icon: <Boxes size={18} />, tone: "blue" },
+      { key: "low-stock", label: "Perlu restok", value: (summary?.kpis?.lowStockLines ?? 0).toLocaleString("id-ID"), note: "Baris stok di bawah minimum", icon: <Activity size={18} />, tone: "amber" },
+    ] : []),
+    ...(can("warehouses.read") ? [{ key: "warehouses", label: "Gudang aktif", value: String(summary?.kpis?.activeWarehouses ?? summary?.warehouses.length ?? 0), note: "Sesuai cakupan akses role", icon: <Boxes size={18} />, tone: "violet" }] : []),
+    ...(can("purchases.read") ? [{ key: "purchases", label: "Nilai pembelian", value: money(summary?.kpis?.purchaseValue ?? 0), note: "Pada periode terpilih", icon: <Activity size={18} />, tone: "blue" }] : []),
+    ...(can("sales.read") ? [{ key: "sales", label: "Nilai penjualan", value: money(summary?.kpis?.salesValue ?? 0), note: "Pada periode terpilih", icon: <Activity size={18} />, tone: "green" }] : []),
+    ...(can("expenses.read") ? [{ key: "expenses", label: "Total biaya", value: money(summary?.kpis?.expenseValue ?? 0), note: "Pada periode terpilih", icon: <Activity size={18} />, tone: "rose" }] : []),
+  ].slice(0, 4);
 
-  return <main className="mx-auto max-w-[1240px] space-y-4 pb-8">
+  return <div className="sf-dashboard mx-auto max-w-[1320px] space-y-4 pb-8">
     <header className="flex flex-wrap items-end justify-between gap-3">
-      <div><p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-600">StockFlow · Analitik</p><h1 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">Dashboard</h1></div>
-      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{readableDate(appliedFrom)} – {readableDate(appliedTo)}</p>
+      <div><p className="text-[11px] font-bold uppercase tracking-[.16em] text-blue-600">StockFlow · Ringkasan operasional</p><h1 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">Dashboard</h1><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Pantau aktivitas sesuai menu dan gudang yang dapat Anda akses.</p></div>
+      <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">{readableDate(appliedFrom)} – {readableDate(appliedTo)}</p>
     </header>
 
-    <section aria-label="Filter dashboard" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+    {dashboardMetrics.length > 0 && <section aria-label="Ringkasan dashboard" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {dashboardMetrics.map((metric) => <article key={metric.key} className={`sf-dashboard-metric sf-metric-${metric.tone} min-w-0 rounded-2xl border p-4 shadow-sm`}>
+        <div className="flex items-center justify-between gap-3"><p className="truncate text-xs font-semibold text-slate-600 dark:text-slate-300">{metric.label}</p><span className="sf-metric-icon flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">{metric.icon}</span></div>
+        <p className="mt-3 truncate text-xl font-bold tracking-tight text-slate-900 dark:text-white" title={metric.value}>{summary ? metric.value : "—"}</p>
+        <p className="mt-1 truncate text-[11px] text-slate-500 dark:text-slate-400">{metric.note}</p>
+      </article>)}
+    </section>}
+
+    <section aria-label="Filter dashboard" className="sf-filter-toolbar rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">Filter data</h2><div className="flex flex-wrap gap-1.5">{[{ label: "7 hari", days: 7 }, { label: "30 hari", days: 30 }, { label: "90 hari", days: 90 }, { label: "Bulan ini", days: 0 }].map((preset) => <button key={preset.label} type="button" onClick={() => applyPreset(preset.days)} disabled={refreshing} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-wait disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">{preset.label}</button>)}</div></div>
       <div className="grid items-end gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(150px,1fr)_minmax(150px,1fr)_minmax(190px,1.2fr)_auto_auto]">
         <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Dari tanggal<input type="date" value={from} max={to || undefined} onChange={(event) => setFrom(event.target.value)} className="mt-1 block min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" /></label>
@@ -136,18 +155,18 @@ export default function DashboardView() {
     </section>
 
     {hasCharts && !summary && refreshing && <section aria-label="Memuat grafik dashboard" aria-busy="true" className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900"><GlobalLoading label="Memuat grafik dashboard..." /></section>}
-    {hasCharts && (summary || !refreshing) && <section aria-label="Grafik dashboard" aria-busy={refreshing} className={`grid gap-4 xl:grid-cols-2 ${refreshing && summary ? "opacity-60" : ""}`}>
+    {hasCharts && (summary || !refreshing) && <section aria-label="Grafik dashboard" aria-busy={refreshing} className={`sf-dashboard-charts grid gap-4 xl:grid-cols-2 ${refreshing && summary ? "opacity-60" : ""}`}>
       {financialSeries.length > 0 && <Panel title="Nilai transaksi per bulan" icon={<Boxes className="text-blue-500" size={18} />}><MonthlyBars rows={summary?.monthly ?? []} series={financialSeries} /></Panel>}
       {canViewInventory && <Panel title="Pergerakan stok" icon={<Activity className="text-emerald-500" size={18} />}><MovementChart points={summary?.trend ?? []} bucketDays={summary?.period?.bucketDays ?? 1} /></Panel>}
-      {canViewInventory && <Panel title="Komposisi stok per kategori"><Donut rows={summary?.categoryStock.map((row) => ({ label: row.name, value: row.quantity })) ?? []} /></Panel>}
+      {canViewInventory && <Panel title="Komposisi stok · kategori utama"><Donut rows={summary?.categoryStock.map((row) => ({ label: row.name, value: row.quantity })) ?? []} /></Panel>}
       {canViewStatus && <Panel title="Status transaksi"><div className="grid gap-4 sm:grid-cols-3">{statusGroups.map((group) => <StatusBars key={group.title} title={group.title} rows={group.rows} />)}</div></Panel>}
     </section>}
     {!hasCharts && <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900">Tidak ada grafik yang tersedia untuk role ini.</p>}
-  </main>;
+  </div>;
 }
 
 function Panel({ title, icon, children }: { title: string; icon?: ReactNode; children: ReactNode }) {
-  return <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:p-5"><div className="mb-3 flex items-center justify-between gap-3"><h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">{title}</h3>{icon}</div>{children}</article>;
+  return <article className="sf-dashboard-panel min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:p-5"><div className="mb-3 flex items-center justify-between gap-3"><h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">{title}</h3>{icon}</div>{children}</article>;
 }
 
 function Donut({ rows }: { rows: { label: string; value: number }[] }) {
@@ -158,7 +177,7 @@ function Donut({ rows }: { rows: { label: string; value: number }[] }) {
     return { stops: [...result.stops, `${colors[index % colors.length]} ${result.offset}% ${end}%`], offset: end };
   }, { stops: [], offset: 0 }).stops.join(", ");
   if (!total) return <ChartEmpty />;
-  return <div className="flex flex-wrap items-center justify-center gap-5 sm:justify-start"><div role="img" aria-label={`Komposisi stok, total ${total.toLocaleString("id-ID")} unit`} className="relative h-36 w-36 shrink-0 rounded-full" style={{ background: `conic-gradient(${gradient})` }}><div className="absolute inset-7 flex flex-col items-center justify-center rounded-full bg-white dark:bg-slate-900"><b className="text-xl text-slate-900 dark:text-white">{total.toLocaleString("id-ID")}</b><span className="text-[10px] text-slate-500">unit</span></div></div><div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2">{positiveRows.map((row, index) => <div className="flex min-w-0 items-center gap-2 text-xs" key={row.label}><i className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: colors[index % colors.length] }} /><span className="truncate text-slate-600 dark:text-slate-300">{row.label}</span><b className="ml-auto shrink-0 text-slate-800 dark:text-white">{row.value.toLocaleString("id-ID")}</b></div>)}</div></div>;
+  return <div className="flex flex-wrap items-center justify-center gap-5 sm:justify-start"><div role="img" aria-label={`Komposisi ${positiveRows.length} kategori utama, total ${total.toLocaleString("id-ID")} unit pada kategori yang ditampilkan`} className="relative h-36 w-36 shrink-0 rounded-full" style={{ background: `conic-gradient(${gradient})` }}><div className="absolute inset-7 flex flex-col items-center justify-center rounded-full bg-white dark:bg-slate-900"><b className="text-xl text-slate-900 dark:text-white">{total.toLocaleString("id-ID")}</b><span className="text-[10px] text-slate-500">unit · kategori utama</span></div></div><div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2">{positiveRows.map((row, index) => <div className="flex min-w-0 items-center gap-2 text-xs" key={row.label}><i className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: colors[index % colors.length] }} /><span className="truncate text-slate-600 dark:text-slate-300">{row.label}</span><b className="ml-auto shrink-0 text-slate-800 dark:text-white">{row.value.toLocaleString("id-ID")}</b></div>)}</div></div>;
 }
 
 function MovementChart({ points, bucketDays }: { points: Point[]; bucketDays: number }) {

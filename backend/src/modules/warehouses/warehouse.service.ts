@@ -1,7 +1,7 @@
 
 import { AppError } from "../../utils/AppError.ts";
 
-import { warehouseRepository } from "./warehouse.repository.ts";
+import { warehouseRepository, type WarehouseDbClient } from "./warehouse.repository.ts";
 
 import type {
   CreateWarehouseInput,
@@ -14,9 +14,10 @@ import type {
 
 async function ensureUniqueCode(
   code: string,
-  exceptId?: string
+  exceptId?: string,
+  db?: WarehouseDbClient,
 ) {
-  const existing = await warehouseRepository.findByCode(code);
+  const existing = await warehouseRepository.findByCode(code, db);
 
   if (existing && existing.id !== exceptId) {
     throw new AppError(
@@ -31,10 +32,11 @@ async function ensureUniqueCode(
 // ======================================
 
 async function ensureWarehouseCanDeactivate(
-  id: string
+  id: string,
+  db?: WarehouseDbClient,
 ) {
   const stockBalances =
-    await warehouseRepository.countPositiveStockBalances(id);
+    await warehouseRepository.countPositiveStockBalances(id, db);
 
   if (stockBalances > 0) {
     throw new AppError(
@@ -55,8 +57,8 @@ export const warehouseService = {
   },
 
   // GET DETAIL
-  async detail(id: string) {
-    const warehouse = await warehouseRepository.findById(id);
+  async detail(id: string, db?: WarehouseDbClient) {
+    const warehouse = await warehouseRepository.findById(id, db);
 
     if (!warehouse) {
       throw new AppError(
@@ -69,38 +71,39 @@ export const warehouseService = {
   },
 
   // CREATE
-  async create(data: CreateWarehouseInput) {
-    await ensureUniqueCode(data.code);
+  async create(data: CreateWarehouseInput, db?: WarehouseDbClient) {
+    await ensureUniqueCode(data.code, undefined, db);
 
-    return warehouseRepository.create(data);
+    return warehouseRepository.create(data, db);
   },
 
   // UPDATE
   async update(
     id: string,
-    data: UpdateWarehouseInput
+    data: UpdateWarehouseInput,
+    db?: WarehouseDbClient,
   ) {
-    const current = await warehouseService.detail(id);
+    const current = await warehouseService.detail(id, db);
 
     if (data.code !== undefined) {
-      await ensureUniqueCode(data.code, id);
+      await ensureUniqueCode(data.code, id, db);
     }
 
     if (
       current.isActive &&
       data.isActive === false
     ) {
-      await ensureWarehouseCanDeactivate(id);
+      await ensureWarehouseCanDeactivate(id, db);
     }
 
-    return warehouseRepository.update(id, data);
+    return warehouseRepository.update(id, data, db);
   },
 
   // SOFT DELETE
-  async deactivate(id: string) {
+  async deactivate(id: string, db?: WarehouseDbClient) {
     return warehouseService.update(id, {
       isActive: false,
-    });
+    }, db);
   },
 
   async stockCountSheet(id: string) {

@@ -18,12 +18,13 @@ test("idempotency replays a completed mutation, rejects key reuse, and prevents 
   const suffix = randomUUID().slice(0, 8);
   const replayKey = `replay-${randomUUID()}`;
   const raceKey = `race-${randomUUID()}`;
+  const validationKey = `valid-${randomUUID()}`;
   const server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
   const address = server.address();
   assert.ok(address && typeof address !== "string");
 
-  async function post(key: string, body: unknown) {
+  async function post(key: string | null, body: unknown) {
     const response = await fetch(`http://127.0.0.1:${address.port}/api/categories`, {
       method: "POST",
       headers: {
@@ -31,7 +32,7 @@ test("idempotency replays a completed mutation, rejects key reuse, and prevents 
         origin: (process.env.FRONTEND_URL ?? "http://localhost:3000").replace(/\/$/, ""),
         "x-csrf-token": createCsrfToken(session.id),
         "content-type": "application/json",
-        "idempotency-key": key,
+        ...(key ? { "idempotency-key": key } : {}),
       },
       body: JSON.stringify(body),
     });
@@ -40,11 +41,15 @@ test("idempotency replays a completed mutation, rejects key reuse, and prevents 
 
   const categoryNames: string[] = [];
   try {
+    const missingKey = await post(null, { name: `Idempotency missing ${suffix}` });
+    assert.equal(missingKey.status, 400);
+    assert.match(missingKey.body.message ?? "", /Idempotency-Key is required/i);
+
     const replayName = `Idempotency replay ${suffix}`;
     categoryNames.push(replayName);
     const payload = { name: replayName, description: "Created once with a replayed response" };
     const first = await post(replayKey, payload);
-    const replay = await post(replayKey, payload);
+    const replay = await post(replayKey, { description: payload.description, name: payload.name });
     assert.equal(first.status, 201, first.body.message);
     assert.equal(replay.status, 201, replay.body.message);
     assert.deepEqual(replay.body, first.body, "retry should return the stored response");
@@ -55,6 +60,14 @@ test("idempotency replays a completed mutation, rejects key reuse, and prevents 
     assert.equal(conflicting.status, 409);
     assert.match(conflicting.body.message ?? "", /different request/i);
     assert.equal(await prisma.category.count({ where: { name: { startsWith: replayName } } }), 1);
+
+    const correctedName = `Idempotency corrected ${suffix}`;
+    categoryNames.push(correctedName);
+    const invalid = await post(validationKey, { name: "" });
+    assert.equal(invalid.status, 422);
+    const corrected = await post(validationKey, { name: correctedName });
+    assert.equal(corrected.status, 201, corrected.body.message);
+    assert.equal(await prisma.category.count({ where: { name: correctedName } }), 1, "a rolled-back validation error should release its idempotency claim");
 
     const concurrentName = `Idempotency concurrent ${suffix}`;
     categoryNames.push(concurrentName);
@@ -72,7 +85,7 @@ test("idempotency replays a completed mutation, rejects key reuse, and prevents 
     await prisma.notification.deleteMany({ where: { entity: "Category", entityId: { in: ids } } });
     await prisma.auditLog.deleteMany({ where: { entity: "Category", entityId: { in: ids } } });
     await prisma.category.deleteMany({ where: { id: { in: ids } } });
-    await prisma.idempotencyKey.deleteMany({ where: { userId: admin.id, key: { in: [replayKey, raceKey] } } });
+    await prisma.idempotencyKey.deleteMany({ where: { userId: admin.id, key: { in: [replayKey, raceKey, validationKey] } } });
     await prisma.authSession.delete({ where: { id: session.id } });
     await prisma.$disconnect();
   }

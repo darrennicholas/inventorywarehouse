@@ -6,7 +6,8 @@ import { asyncHandler } from "../../utils/asyncHandler.ts";
 
 import { productService } from "./product.service.ts";
 import { authOf } from "../../middlewares/auth.middleware.ts";
-import { writeAuditLog } from "../audit/audit.service.ts";
+import { requestAuditContext, writeAuditLog } from "../audit/audit.service.ts";
+import { prisma } from "../../lib/prisma.ts";
 import { notifyByPermission } from "../notifications/notification.service.ts";
 import { masterListOptions, pageMeta, paginateArray } from "../../utils/pagination.ts";
 
@@ -97,8 +98,12 @@ export const createProduct = asyncHandler(
   async (req, res) => {
     const input = req.body as CreateProductInput;
 
-    const product = await productService.create(input);
-    await writeAuditLog({ userId: authOf(req).userId, action: "CREATE", entity: "Product", entityId: product.id, afterData: product, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") });
+    const auditContext = requestAuditContext(req, res.locals.requestId as string | undefined);
+    const product = await prisma.$transaction(async (tx) => {
+      const created = await productService.create(input, tx);
+      await writeAuditLog({ userId: authOf(req).userId, action: "CREATE", entity: "Product", entityId: created.id, afterData: created, ...auditContext }, tx as never);
+      return created;
+    });
     await notifyByPermission({ permission: "products.read", type: "PRODUCT_CREATED", title: "New product added", message: `${product.name} (${product.sku}) is now available in the catalog.`, entity: "Product", entityId: product.id });
 
     res.status(201).json({
@@ -119,11 +124,13 @@ export const updateProduct = asyncHandler(
 
     const input = req.body as UpdateProductInput;
 
-    const product = await productService.update(
-      id,
-      input
-    );
-    await writeAuditLog({ userId: authOf(req).userId, action: "UPDATE", entity: "Product", entityId: product.id, afterData: product, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") });
+    const auditContext = requestAuditContext(req, res.locals.requestId as string | undefined);
+    const product = await prisma.$transaction(async (tx) => {
+      const before = await productService.detail(id, tx);
+      const updated = await productService.update(id, input, tx);
+      await writeAuditLog({ userId: authOf(req).userId, action: "UPDATE", entity: "Product", entityId: updated.id, beforeData: before, afterData: updated, ...auditContext }, tx as never);
+      return updated;
+    });
     await notifyByPermission({ permission: "products.read", type: "PRODUCT_UPDATED", title: "Product updated", message: `${product.name} was updated.`, entity: "Product", entityId: product.id });
 
     res.status(200).json({
@@ -142,9 +149,13 @@ export const deactivateProduct = asyncHandler(
   async (req, res) => {
     const id = validId(req.params.id);
 
-    const product =
-      await productService.deactivate(id);
-    await writeAuditLog({ userId: authOf(req).userId, action: "DEACTIVATE", entity: "Product", entityId: product.id, afterData: product, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") });
+    const auditContext = requestAuditContext(req, res.locals.requestId as string | undefined);
+    const product = await prisma.$transaction(async (tx) => {
+      const before = await productService.detail(id, tx);
+      const updated = await productService.deactivate(id, tx);
+      await writeAuditLog({ userId: authOf(req).userId, action: "DEACTIVATE", entity: "Product", entityId: updated.id, beforeData: before, afterData: updated, ...auditContext }, tx as never);
+      return updated;
+    });
     await notifyByPermission({ permission: "products.read", type: "PRODUCT_DEACTIVATED", title: "Product deactivated", message: `${product.name} was deactivated.`, entity: "Product", entityId: product.id });
 
     res.status(200).json({

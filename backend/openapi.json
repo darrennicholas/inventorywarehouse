@@ -3,7 +3,7 @@
   "info": {
     "title": "StockFlow Inventory & Warehouse API",
     "version": "1.0.0",
-    "description": "HTTP contract for authentication, core master data, fulfillment, and stock opname workflows. Mutating requests accept an optional Idempotency-Key header. Authenticated requests use the HttpOnly stockflow_session cookie and CSRF header for writes."
+    "description": "HTTP contract for authentication, core master data, fulfillment, and stock opname workflows. Authenticated write requests require an Idempotency-Key header; identical retries replay the saved response. Authenticated requests use the HttpOnly stockflow_session cookie and CSRF header for writes."
   },
   "servers": [
     {
@@ -46,6 +46,24 @@
               }
             }
           }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Check API and database readiness",
+        "operationId": "getReadiness",
+        "responses": {
+          "200": {
+            "description": "API can accept traffic",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" }
+              }
+            }
+          },
+          "503": { "$ref": "#/components/responses/ServerError" }
         }
       }
     },
@@ -957,13 +975,13 @@
       "IdempotencyKey": {
         "name": "Idempotency-Key",
         "in": "header",
-        "required": false,
+        "required": true,
         "schema": {
           "type": "string",
           "minLength": 8,
           "maxLength": 160
         },
-        "description": "Optional. Identical retries return the first response. Reusing a key with a different request returns 409."
+        "description": "Required for authenticated writes. Identical retries return the first response. Reusing a key with a different request returns 409."
       },
       "UuidId": {
         "name": "id",

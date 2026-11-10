@@ -4,7 +4,7 @@ import { requireUuid } from "../../utils/requireUuid.ts";
 
 import { supplierService } from "./supplier.service.ts";
 import { authOf } from "../../middlewares/auth.middleware.ts";
-import { writeAuditLog } from "../audit/audit.service.ts";
+import { requestAuditContext, writeAuditLog } from "../audit/audit.service.ts";
 import { notifyByPermission } from "../notifications/notification.service.ts";
 import { prisma } from "../../lib/prisma.ts";
 import { AppError } from "../../utils/AppError.ts";
@@ -111,8 +111,12 @@ export const createSupplier = asyncHandler(
   async (req, res) => {
     const input = createSupplierSchema.parse(req.body);
 
-    const data = await supplierService.create(input);
-    await writeAuditLog({ userId: authOf(req).userId, action: "CREATE", entity: "Supplier", entityId: data.id, afterData: data, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") });
+    const auditContext = requestAuditContext(req, res.locals.requestId as string | undefined);
+    const data = await prisma.$transaction(async (tx) => {
+      const created = await supplierService.create(input, tx);
+      await writeAuditLog({ userId: authOf(req).userId, action: "CREATE", entity: "Supplier", entityId: created.id, afterData: created, ...auditContext }, tx as never);
+      return created;
+    });
     await notifyByPermission({ permission: "suppliers.read", type: "SUPPLIER_CREATED", title: "Supplier created", message: `${data.name} was added to supplier master data.`, entity: "Supplier", entityId: data.id });
 
     res.status(201).json({
@@ -132,11 +136,13 @@ export const updateSupplier = asyncHandler(
 
     const input = updateSupplierSchema.parse(req.body);
 
-    const data = await supplierService.update(
-      id,
-      input
-    );
-    await writeAuditLog({ userId: authOf(req).userId, action: "UPDATE", entity: "Supplier", entityId: data.id, afterData: data, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") });
+    const auditContext = requestAuditContext(req, res.locals.requestId as string | undefined);
+    const data = await prisma.$transaction(async (tx) => {
+      const before = await supplierService.detail(id, tx);
+      const updated = await supplierService.update(id, input, tx);
+      await writeAuditLog({ userId: authOf(req).userId, action: "UPDATE", entity: "Supplier", entityId: updated.id, beforeData: before, afterData: updated, ...auditContext }, tx as never);
+      return updated;
+    });
     await notifyByPermission({ permission: "suppliers.read", type: "SUPPLIER_UPDATED", title: "Supplier updated", message: `${data.name} was updated.`, entity: "Supplier", entityId: data.id });
 
     res.status(200).json({
@@ -154,8 +160,13 @@ export const deactivateSupplier = asyncHandler(
       "Supplier ID"
     );
 
-    const data = await supplierService.deactivate(id);
-    await writeAuditLog({ userId: authOf(req).userId, action: "DEACTIVATE", entity: "Supplier", entityId: data.id, afterData: data, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") });
+    const auditContext = requestAuditContext(req, res.locals.requestId as string | undefined);
+    const data = await prisma.$transaction(async (tx) => {
+      const before = await supplierService.detail(id, tx);
+      const updated = await supplierService.deactivate(id, tx);
+      await writeAuditLog({ userId: authOf(req).userId, action: "DEACTIVATE", entity: "Supplier", entityId: updated.id, beforeData: before, afterData: updated, ...auditContext }, tx as never);
+      return updated;
+    });
     await notifyByPermission({ permission: "suppliers.read", type: "SUPPLIER_DEACTIVATED", title: "Supplier deactivated", message: `${data.name} was deactivated.`, entity: "Supplier", entityId: data.id });
 
     res.status(200).json({

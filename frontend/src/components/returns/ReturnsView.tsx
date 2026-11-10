@@ -218,7 +218,7 @@ export default function ReturnsView({
       )}
       {/* HEADER */}
       <div
-        className={`rounded-3xl bg-gradient-to-br ${
+        className={`sf-page-hero rounded-3xl bg-gradient-to-br ${
           type === "PURCHASE"
             ? "from-indigo-600 to-blue-700"
             : "from-emerald-600 to-teal-700"
@@ -293,7 +293,7 @@ export default function ReturnsView({
 
       {/* TABLE */}
       <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-5">
+        <div className="sf-filter-toolbar flex flex-wrap items-center gap-3 border-b border-slate-100 p-5">
           <label className="relative min-w-56 flex-1">
             <Search
               size={16}

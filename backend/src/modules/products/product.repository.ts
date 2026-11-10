@@ -1,5 +1,6 @@
 
 import { prisma } from "../../lib/prisma.ts";
+import type { Prisma } from "../../generated/prisma/client.ts";
 
 import type {
   CreateProductInput,
@@ -36,6 +37,8 @@ const withRelations = {
     },
   },
 } as const;
+
+export type ProductDbClient = typeof prisma | Prisma.TransactionClient;
 
 // Convert inventory balances to total stock
 function serializeProduct<
@@ -84,8 +87,8 @@ export const productRepository = {
   // =====================================
   // GET PRODUCT BY ID
   // =====================================
-  async findById(id: string) {
-    const product = await prisma.product.findUnique({
+  async findById(id: string, db: ProductDbClient = prisma) {
+    const product = await db.product.findUnique({
       where: {
         id,
       },
@@ -99,8 +102,8 @@ export const productRepository = {
   // =====================================
   // FIND BY SKU
   // =====================================
-  findBySku(sku: string) {
-    return prisma.product.findUnique({
+  findBySku(sku: string, db: ProductDbClient = prisma) {
+    return db.product.findUnique({
       where: {
         sku,
       },
@@ -110,8 +113,8 @@ export const productRepository = {
   // =====================================
   // FIND BY CODE
   // =====================================
-  findByCode(code: string) {
-    return prisma.product.findUnique({
+  findByCode(code: string, db: ProductDbClient = prisma) {
+    return db.product.findUnique({
       where: {
         code,
       },
@@ -121,8 +124,8 @@ export const productRepository = {
   // =====================================
   // FIND BY BARCODE
   // =====================================
-  findByBarcode(barcode: string) {
-    return prisma.product.findUnique({
+  findByBarcode(barcode: string, db: ProductDbClient = prisma) {
+    return db.product.findUnique({
       where: {
         barcode,
       },
@@ -132,8 +135,8 @@ export const productRepository = {
   // =====================================
   // CREATE PRODUCT
   // =====================================
-  async create(data: CreateProductInput) {
-    const product = await prisma.product.create({
+  async create(data: CreateProductInput, db: ProductDbClient = prisma) {
+    const product = await db.product.create({
       data,
 
       include: withRelations,
@@ -147,9 +150,10 @@ export const productRepository = {
   // =====================================
   async update(
     id: string,
-    data: UpdateProductInput
+    data: UpdateProductInput,
+    db: ProductDbClient = prisma,
   ) {
-    const product = await prisma.product.update({
+    const product = await db.product.update({
       where: {
         id,
       },
@@ -213,10 +217,10 @@ export const productRepository = {
   // =====================================
   // VALIDATE FOREIGN KEY RELATIONS
   // =====================================
-  async validateRelations(input: UpdateProductInput) {
+  async validateRelations(input: UpdateProductInput, db: ProductDbClient = prisma) {
     const checks = [
       input.categoryId
-        ? prisma.category.findUnique({
+        ? db.category.findUnique({
             where: {
               id: input.categoryId,
             },
@@ -228,7 +232,7 @@ export const productRepository = {
         : Promise.resolve(true),
 
       input.brandId
-        ? prisma.brand.findUnique({
+        ? db.brand.findUnique({
             where: {
               id: input.brandId,
             },
@@ -240,7 +244,7 @@ export const productRepository = {
         : Promise.resolve(true),
 
       input.unitId
-        ? prisma.unit.findUnique({
+        ? db.unit.findUnique({
             where: {
               id: input.unitId,
             },

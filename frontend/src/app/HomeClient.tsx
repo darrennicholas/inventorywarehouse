@@ -646,6 +646,7 @@ export default function Home() {
                   type="button"
                   title={group.label}
                   aria-expanded={expanded}
+                  data-active={groupActive ? "true" : undefined}
                   aria-controls={`menu-group-${group.key}`}
                   onClick={() => setOpenMenuGroups((previous) => ({ ...previous, [group.key]: !previous[group.key] }))}
                   className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-[13px] font-semibold transition ${
@@ -766,7 +767,7 @@ export default function Home() {
       {/* MAIN CONTENT */}
       <div className="min-w-0 flex-1">
         {/* HEADER */}
-        <header className="sticky top-0 z-20 flex h-[86px] items-center justify-between border-b border-slate-200/70 bg-white/80 px-5 shadow-sm backdrop-blur-xl sm:px-8">
+        <header className="sf-topbar sticky top-0 z-20 flex h-[76px] items-center justify-between border-b border-slate-200/70 bg-white/80 px-5 shadow-sm backdrop-blur-xl sm:px-8">
           <div className="flex items-center gap-3">
             {/* MOBILE MENU BUTTON */}
             <button
@@ -867,7 +868,7 @@ export default function Home() {
         {/* MAIN BODY */}
         {/* ================================= */}
 
-        <main className="mx-auto max-w-[1440px] space-y-5 px-4 py-6 sm:px-6 lg:px-7">
+        <main className="sf-main-content mx-auto max-w-[1480px] space-y-5 px-4 py-6 sm:px-6 lg:px-7">
           {activePage !== "dashboard" &&
             !can(activePermission) && (
               <div
