@@ -265,15 +265,22 @@ async function main() {
   const jkt = id(warehouseMap, "WH-JKT"), bdg = id(warehouseMap, "WH-BDG"), sby = id(warehouseMap, "WH-SBY");
   const procurement = id(roleUserMap, "PROCUREMENT"), manager = id(roleUserMap, "WAREHOUSE_MANAGER"), staff = id(roleUserMap, "WAREHOUSE_STAFF"), admin = id(roleUserMap, "ADMIN");
 
+  // Hanya nomor contoh yang dipesan untuk seeder; sertakan format lama saat reset.
+  const demoDocumentNumbers = ["PO", "SALE", "SHP", "ADJ", "TRF", "EXP", "RET", "GR", "OPN", "REL", "PAY"].flatMap((kind) =>
+    ["202610", "202611"].flatMap((period) =>
+      Array.from({ length: 20 }, (_, index) => ["SEED", "SF"].map((prefix) => `${prefix}-${kind}-${period}-${String(index + 1).padStart(3, "0")}`)).flat(),
+    ),
+  );
+
   // Cleanup return transaction lebih dulu karena ReturnOrder memiliki FK ke PurchaseOrder/Sale.
   // Jangan hanya mengandalkan nomor ReturnOrder "SEED-*": return non-SEED yang menunjuk
   // ke transaksi demo juga harus ikut dibersihkan sebelum parent demo dihapus.
   const seededReturns = await prisma.returnOrder.findMany({
     where: {
       OR: [
-        { number: { startsWith: "SEED-" } },
-        { purchaseOrder: { number: { startsWith: "SEED-" } } },
-        { sale: { number: { startsWith: "SEED-" } } },
+        { number: { in: demoDocumentNumbers } },
+        { purchaseOrder: { number: { in: demoDocumentNumbers } } },
+        { sale: { number: { in: demoDocumentNumbers } } },
       ],
     },
     select: { id: true },
@@ -311,24 +318,24 @@ async function main() {
       where: { id: { in: seededReturnIds } },
     });
   }
-  await prisma.quarantineDecision.deleteMany({ where: { reason: { startsWith: "Seed:" } } });
-  await prisma.saleShipment.deleteMany({ where: { number: { startsWith: "SEED-" } } });
-  await prisma.stockReservation.deleteMany({ where: { sale: { number: { startsWith: "SEED-" } } } });
-  await prisma.stockTakeSession.deleteMany({ where: { number: { startsWith: "SEED-" } } });
-  await prisma.stockRelocation.deleteMany({ where: { number: { startsWith: "SEED-" } } });
-  await prisma.auditLog.deleteMany({ where: { action: { startsWith: "SEED:" } } });
+  await prisma.quarantineDecision.deleteMany({ where: { OR: [{ reason: { startsWith: "Seed:" } }, { reason: { startsWith: "Contoh: contoh keputusan karantina " } }] } });
+  await prisma.saleShipment.deleteMany({ where: { number: { in: demoDocumentNumbers } } });
+  await prisma.stockReservation.deleteMany({ where: { sale: { number: { in: demoDocumentNumbers } } } });
+  await prisma.stockTakeSession.deleteMany({ where: { number: { in: demoDocumentNumbers } } });
+  await prisma.stockRelocation.deleteMany({ where: { number: { in: demoDocumentNumbers } } });
+  await prisma.auditLog.deleteMany({ where: { entity: "DemoRecord", action: { in: ["SEED:VIEW", "VIEW"] }, entityId: { startsWith: "DEMO-" } } });
   await prisma.notification.deleteMany({ where: { fingerprint: { startsWith: "SEED:" } } });
-  await prisma.payment.deleteMany({ where: { number: { startsWith: "SEED-" } } });
-  await prisma.goodsReceipt.deleteMany({ where: { number: { startsWith: "SEED-" } } });
-  await prisma.stockMovement.deleteMany({ where: { note: { startsWith: "Seed:" } } });
-  await prisma.purchaseOrder.deleteMany({ where: { number: { startsWith: "SEED-" } } });
-  await prisma.sale.deleteMany({ where: { number: { startsWith: "SEED-" } } });
-  await prisma.stockAdjustment.deleteMany({ where: { number: { startsWith: "SEED-" } } });
-  await prisma.stockTransfer.deleteMany({ where: { number: { startsWith: "SEED-" } } });
-  await prisma.expense.deleteMany({ where: { number: { startsWith: "SEED-" } } });
+  await prisma.payment.deleteMany({ where: { number: { in: demoDocumentNumbers } } });
+  await prisma.goodsReceipt.deleteMany({ where: { number: { in: demoDocumentNumbers } } });
+  await prisma.stockMovement.deleteMany({ where: { note: { in: ["Seed: penerimaan PO perangkat", "Seed: pengiriman penjualan", "Seed: hasil stock opname", "Seed: transfer ke Bandung", "Seed: transfer dari Jakarta", "Contoh: penerimaan PO perangkat", "Contoh: pengiriman penjualan", "Contoh: hasil stock opname", "Contoh: transfer ke Bandung", "Contoh: transfer dari Jakarta"] } } });
+  await prisma.purchaseOrder.deleteMany({ where: { number: { in: demoDocumentNumbers } } });
+  await prisma.sale.deleteMany({ where: { number: { in: demoDocumentNumbers } } });
+  await prisma.stockAdjustment.deleteMany({ where: { number: { in: demoDocumentNumbers } } });
+  await prisma.stockTransfer.deleteMany({ where: { number: { in: demoDocumentNumbers } } });
+  await prisma.expense.deleteMany({ where: { number: { in: demoDocumentNumbers } } });
 
   const poReceived = await prisma.purchaseOrder.create({ data: {
-    number: "SEED-PO-202610-001", supplierId: id(supplierMap, "SUP-001"), warehouseId: jkt, createdById: procurement, approvedById: manager, approvedAt: date(3), status: "RECEIVED", orderDate: date(2), expectedDate: date(5), notes: "Penerimaan perangkat untuk stok demo", subtotal: 336500000, tax: 37015000, total: 373515000,
+    number: "SF-PO-202610-001", supplierId: id(supplierMap, "SUP-001"), warehouseId: jkt, createdById: procurement, approvedById: manager, approvedAt: date(3), status: "RECEIVED", orderDate: date(2), expectedDate: date(5), notes: "Penerimaan perangkat untuk stok demo", subtotal: 336500000, tax: 37015000, total: 373515000,
     items: { create: [
       { productId: id(productMap, "LP-LNV-T14"), quantity: 20, receivedQuantity: 20, unitPrice: 14000000, total: 280000000 },
       { productId: id(productMap, "KB-LOG-K380"), quantity: 50, receivedQuantity: 50, unitPrice: 450000, total: 22500000 },
@@ -338,7 +345,7 @@ async function main() {
     ] },
   } });
   const poPending = await prisma.purchaseOrder.create({ data: {
-    number: "SEED-PO-202610-002", supplierId: id(supplierMap, "SUP-002"), warehouseId: bdg, createdById: procurement, status: "PENDING", orderDate: date(10), expectedDate: date(18), notes: "Menunggu persetujuan pembelian perlengkapan kantor", subtotal: 9250000, tax: 1017500, total: 10267500,
+    number: "SF-PO-202610-002", supplierId: id(supplierMap, "SUP-002"), warehouseId: bdg, createdById: procurement, status: "PENDING", orderDate: date(10), expectedDate: date(18), notes: "Menunggu persetujuan pembelian perlengkapan kantor", subtotal: 9250000, tax: 1017500, total: 10267500,
     items: { create: [
       { productId: id(productMap, "PP-A4-80"), quantity: 50, receivedQuantity: 0, unitPrice: 65000, total: 3250000 },
       { productId: id(productMap, "TN-EPS-003"), quantity: 30, receivedQuantity: 0, unitPrice: 150000, total: 4500000 },
@@ -346,7 +353,7 @@ async function main() {
     ] },
   } });
   const saleCompleted = await prisma.sale.create({ data: {
-    number: "SEED-SALE-202610-001", customerId: id(customerMap, "CUS-001"), warehouseId: jkt, createdById: staff, status: "COMPLETED", saleDate: date(6), notes: "Pengiriman pesanan kantor pusat", subtotal: 59950000, discount: 950000, tax: 6480000, total: 65480000,
+    number: "SF-SALE-202610-001", customerId: id(customerMap, "CUS-001"), warehouseId: jkt, createdById: staff, status: "COMPLETED", saleDate: date(6), notes: "Pengiriman pesanan kantor pusat", subtotal: 59950000, discount: 950000, tax: 6480000, total: 65480000,
     items: { create: [
       { productId: id(productMap, "LP-LNV-T14"), quantity: 3, unitPrice: 17000000, total: 51000000 },
       { productId: id(productMap, "KB-LOG-K380"), quantity: 8, unitPrice: 650000, total: 5200000 },
@@ -354,29 +361,29 @@ async function main() {
     ] },
   } });
   await prisma.sale.create({ data: {
-    number: "SEED-SALE-202610-002", customerId: id(customerMap, "CUS-003"), warehouseId: bdg, createdById: staff, status: "DRAFT", saleDate: date(12), notes: "Draft penawaran pelanggan", subtotal: 3300000, discount: 0, tax: 363000, total: 3663000,
+    number: "SF-SALE-202610-002", customerId: id(customerMap, "CUS-003"), warehouseId: bdg, createdById: staff, status: "DRAFT", saleDate: date(12), notes: "Draft penawaran pelanggan", subtotal: 3300000, discount: 0, tax: 363000, total: 3663000,
     items: { create: [{ productId: id(productMap, "LP-LNV-T14"), quantity: 1, unitPrice: 16500000, total: 16500000 }, { productId: id(productMap, "KB-LOG-K380"), quantity: 3, unitPrice: 650000, total: 1950000 }] },
   } });
   const adjustment = await prisma.stockAdjustment.create({ data: {
-    number: "SEED-ADJ-202610-001", warehouseId: jkt, createdById: staff, approvedById: manager, approvedAt: date(7), type: "INCREASE", status: "POSTED", reason: "Stok fisik printer ditemukan lebih 2 unit saat stock opname", adjustmentDate: date(7),
+    number: "SF-ADJ-202610-001", warehouseId: jkt, createdById: staff, approvedById: manager, approvedAt: date(7), type: "INCREASE", status: "POSTED", reason: "Stok fisik printer ditemukan lebih 2 unit saat stock opname", adjustmentDate: date(7),
     items: { create: [{ productId: id(productMap, "PR-EPS-L3210"), quantity: 2, notes: "Verifikasi stock opname Oktober" }] },
   } });
   await prisma.stockAdjustment.create({ data: {
-    number: "SEED-ADJ-202610-002", warehouseId: sby, createdById: manager, type: "DECREASE", status: "DRAFT", reason: "Barang rusak menunggu konfirmasi", adjustmentDate: date(11),
+    number: "SF-ADJ-202610-002", warehouseId: sby, createdById: manager, type: "DECREASE", status: "DRAFT", reason: "Barang rusak menunggu konfirmasi", adjustmentDate: date(11),
     items: { create: [{ productId: id(productMap, "GLV-SAFE-01"), quantity: 2, notes: "Belum diposting" }] },
   } });
   const transfer = await prisma.stockTransfer.create({ data: {
-    number: "SEED-TRF-202610-001", fromWarehouseId: jkt, toWarehouseId: bdg, createdById: staff, approvedById: manager, approvedAt: date(8), status: "COMPLETED", transferDate: date(8), notes: "Replenishment gudang Bandung",
+    number: "SF-TRF-202610-001", fromWarehouseId: jkt, toWarehouseId: bdg, createdById: staff, approvedById: manager, approvedAt: date(8), status: "COMPLETED", transferDate: date(8), notes: "Replenishment gudang Bandung",
     items: { create: [{ productId: id(productMap, "LP-LNV-T14"), quantity: 4 }, { productId: id(productMap, "KB-LOG-K380"), quantity: 10 }] },
   } });
   await prisma.stockTransfer.create({ data: {
-    number: "SEED-TRF-202610-002", fromWarehouseId: jkt, toWarehouseId: sby, createdById: manager, status: "IN_TRANSIT", transferDate: date(12), notes: "Pengiriman aksesori ke Surabaya",
+    number: "SF-TRF-202610-002", fromWarehouseId: jkt, toWarehouseId: sby, createdById: manager, status: "IN_TRANSIT", transferDate: date(12), notes: "Pengiriman aksesori ke Surabaya",
     items: { create: [{ productId: id(productMap, "MS-LOG-M185"), quantity: 10 }] },
   } });
   const expenses = await Promise.all([
-    prisma.expense.create({ data: { number: "SEED-EXP-202610-001", category: "Freight", description: "Ongkos kirim penerimaan PO Oktober", amount: 1250000, warehouseId: jkt, createdById: procurement, expenseDate: date(5), isPaid: true } }),
-    prisma.expense.create({ data: { number: "SEED-EXP-202610-002", category: "Maintenance", description: "Perawatan forklift gudang", amount: 850000, warehouseId: bdg, createdById: manager, expenseDate: date(9), isPaid: true } }),
-    prisma.expense.create({ data: { number: "SEED-EXP-202610-003", category: "Utilities", description: "Listrik area penyimpanan", amount: 2100000, warehouseId: sby, createdById: admin, expenseDate: date(10), isPaid: false } }),
+    prisma.expense.create({ data: { number: "SF-EXP-202610-001", category: "Freight", description: "Ongkos kirim penerimaan PO Oktober", amount: 1250000, warehouseId: jkt, createdById: procurement, expenseDate: date(5), isPaid: true } }),
+    prisma.expense.create({ data: { number: "SF-EXP-202610-002", category: "Maintenance", description: "Perawatan forklift gudang", amount: 850000, warehouseId: bdg, createdById: manager, expenseDate: date(9), isPaid: true } }),
+    prisma.expense.create({ data: { number: "SF-EXP-202610-003", category: "Utilities", description: "Listrik area penyimpanan", amount: 2100000, warehouseId: sby, createdById: admin, expenseDate: date(10), isPaid: false } }),
   ]);
 
   const quantities: Record<string, number> = { "LP-LNV-T14:WH-JKT": 13, "LP-LNV-T14:WH-BDG": 4, "KB-LOG-K380:WH-JKT": 32, "KB-LOG-K380:WH-BDG": 10, "MS-LOG-M185:WH-JKT": 65, "PR-EPS-L3210:WH-JKT": 14, "CB-UGR-USBC:WH-JKT": 100, "GLV-SAFE-01:WH-JKT": 10 };
@@ -399,7 +406,7 @@ async function main() {
   await prisma.productBatch.upsert({ where: { productId_warehouseId_batchNumber: { productId: id(productMap, "CB-UGR-USBC"), warehouseId: jkt, batchNumber: "LOT-CB-2610-B" } }, update: { quantityOnHand: 40, reservedQuantity: 0, expiryDate: new Date("2027-01-15T00:00:00.000Z"), locationId: locationByCode.get("JKT-B01"), status: "ACTIVE" }, create: { productId: id(productMap, "CB-UGR-USBC"), warehouseId: jkt, batchNumber: "LOT-CB-2610-B", quantityOnHand: 40, expiryDate: new Date("2027-01-15T00:00:00.000Z"), locationId: locationByCode.get("JKT-B01") } });
   const receivedPurchaseItems = await prisma.purchaseOrderItem.findMany({ where: { purchaseOrderId: poReceived.id } });
   const seededCableBatch = await prisma.productBatch.findUnique({ where: { productId_warehouseId_batchNumber: { productId: id(productMap, "CB-UGR-USBC"), warehouseId: jkt, batchNumber: "LOT-CB-2610-A" } } });
-  await prisma.goodsReceipt.create({ data: { number: "SEED-GR-202610-001", purchaseOrderId: poReceived.id, warehouseId: jkt, receivedById: procurement, receivedAt: date(5), notes: "Seed goods receipt", items: { create: receivedPurchaseItems.map((item) => ({ purchaseOrderItemId: item.id, productId: item.productId, locationId: locationByCode.get("JKT-A01")!, batchId: item.productId === id(productMap, "CB-UGR-USBC") ? seededCableBatch?.id ?? null : null, quantity: item.quantity, damagedQuantity: 0 })) } } });
+  await prisma.goodsReceipt.create({ data: { number: "SF-GR-202610-001", purchaseOrderId: poReceived.id, warehouseId: jkt, receivedById: procurement, receivedAt: date(5), notes: "Penerimaan barang pembelian", items: { create: receivedPurchaseItems.map((item) => ({ purchaseOrderItemId: item.id, productId: item.productId, locationId: locationByCode.get("JKT-A01")!, batchId: item.productId === id(productMap, "CB-UGR-USBC") ? seededCableBatch?.id ?? null : null, quantity: item.quantity, damagedQuantity: 0 })) } } });
   for (const product of products) for (const warehouse of warehouseList) {
     const fallbackLocationId = locationByCode.get(`${warehouse.code.slice(3)}-A01`);
     if (!fallbackLocationId) {
@@ -422,25 +429,25 @@ async function main() {
     }
   }
   await prisma.stockMovement.createMany({ data: [
-    { productId: id(productMap, "LP-LNV-T14"), warehouseId: jkt, inventoryBalanceId: balance("LP-LNV-T14", "WH-JKT"), quantity: 20, movementType: "PURCHASE_RECEIPT", unitCost: 14000000, purchaseOrderId: poReceived.id, createdById: procurement, occurredAt: date(5), note: "Seed: penerimaan PO perangkat" },
-    { productId: id(productMap, "KB-LOG-K380"), warehouseId: jkt, inventoryBalanceId: balance("KB-LOG-K380", "WH-JKT"), quantity: 50, movementType: "PURCHASE_RECEIPT", unitCost: 450000, purchaseOrderId: poReceived.id, createdById: procurement, occurredAt: date(5), note: "Seed: penerimaan PO perangkat" },
-    { productId: id(productMap, "MS-LOG-M185"), warehouseId: jkt, inventoryBalanceId: balance("MS-LOG-M185", "WH-JKT"), quantity: 80, movementType: "PURCHASE_RECEIPT", unitCost: 150000, purchaseOrderId: poReceived.id, createdById: procurement, occurredAt: date(5), note: "Seed: penerimaan PO perangkat" },
-    { productId: id(productMap, "PR-EPS-L3210"), warehouseId: jkt, inventoryBalanceId: balance("PR-EPS-L3210", "WH-JKT"), quantity: 12, movementType: "PURCHASE_RECEIPT", unitCost: 1500000, purchaseOrderId: poReceived.id, createdById: procurement, occurredAt: date(5), note: "Seed: penerimaan PO perangkat" },
-    { productId: id(productMap, "CB-UGR-USBC"), warehouseId: jkt, inventoryBalanceId: balance("CB-UGR-USBC", "WH-JKT"), quantity: 100, movementType: "PURCHASE_RECEIPT", unitCost: 40000, purchaseOrderId: poReceived.id, createdById: procurement, occurredAt: date(5), note: "Seed: penerimaan PO perangkat" },
-    { productId: id(productMap, "LP-LNV-T14"), warehouseId: jkt, inventoryBalanceId: balance("LP-LNV-T14", "WH-JKT"), quantity: -3, movementType: "SALE_ISSUE", saleId: saleCompleted.id, createdById: staff, occurredAt: date(6), note: "Seed: pengiriman penjualan" },
-    { productId: id(productMap, "KB-LOG-K380"), warehouseId: jkt, inventoryBalanceId: balance("KB-LOG-K380", "WH-JKT"), quantity: -8, movementType: "SALE_ISSUE", saleId: saleCompleted.id, createdById: staff, occurredAt: date(6), note: "Seed: pengiriman penjualan" },
-    { productId: id(productMap, "MS-LOG-M185"), warehouseId: jkt, inventoryBalanceId: balance("MS-LOG-M185", "WH-JKT"), quantity: -15, movementType: "SALE_ISSUE", saleId: saleCompleted.id, createdById: staff, occurredAt: date(6), note: "Seed: pengiriman penjualan" },
-    { productId: id(productMap, "PR-EPS-L3210"), warehouseId: jkt, inventoryBalanceId: balance("PR-EPS-L3210", "WH-JKT"), quantity: 2, movementType: "ADJUSTMENT_IN", adjustmentId: adjustment.id, createdById: manager, occurredAt: date(7), note: "Seed: hasil stock opname" },
-    { productId: id(productMap, "LP-LNV-T14"), warehouseId: jkt, inventoryBalanceId: balance("LP-LNV-T14", "WH-JKT"), quantity: -4, movementType: "TRANSFER_OUT", transferId: transfer.id, createdById: manager, occurredAt: date(8), note: "Seed: transfer ke Bandung" },
-    { productId: id(productMap, "LP-LNV-T14"), warehouseId: bdg, inventoryBalanceId: balance("LP-LNV-T14", "WH-BDG"), quantity: 4, movementType: "TRANSFER_IN", transferId: transfer.id, createdById: manager, occurredAt: date(8), note: "Seed: transfer dari Jakarta" },
-    { productId: id(productMap, "KB-LOG-K380"), warehouseId: jkt, inventoryBalanceId: balance("KB-LOG-K380", "WH-JKT"), quantity: -10, movementType: "TRANSFER_OUT", transferId: transfer.id, createdById: manager, occurredAt: date(8), note: "Seed: transfer ke Bandung" },
-    { productId: id(productMap, "KB-LOG-K380"), warehouseId: bdg, inventoryBalanceId: balance("KB-LOG-K380", "WH-BDG"), quantity: 10, movementType: "TRANSFER_IN", transferId: transfer.id, createdById: manager, occurredAt: date(8), note: "Seed: transfer dari Jakarta" },
+    { productId: id(productMap, "LP-LNV-T14"), warehouseId: jkt, inventoryBalanceId: balance("LP-LNV-T14", "WH-JKT"), quantity: 20, movementType: "PURCHASE_RECEIPT", unitCost: 14000000, purchaseOrderId: poReceived.id, createdById: procurement, occurredAt: date(5), note: "Contoh: penerimaan PO perangkat" },
+    { productId: id(productMap, "KB-LOG-K380"), warehouseId: jkt, inventoryBalanceId: balance("KB-LOG-K380", "WH-JKT"), quantity: 50, movementType: "PURCHASE_RECEIPT", unitCost: 450000, purchaseOrderId: poReceived.id, createdById: procurement, occurredAt: date(5), note: "Contoh: penerimaan PO perangkat" },
+    { productId: id(productMap, "MS-LOG-M185"), warehouseId: jkt, inventoryBalanceId: balance("MS-LOG-M185", "WH-JKT"), quantity: 80, movementType: "PURCHASE_RECEIPT", unitCost: 150000, purchaseOrderId: poReceived.id, createdById: procurement, occurredAt: date(5), note: "Contoh: penerimaan PO perangkat" },
+    { productId: id(productMap, "PR-EPS-L3210"), warehouseId: jkt, inventoryBalanceId: balance("PR-EPS-L3210", "WH-JKT"), quantity: 12, movementType: "PURCHASE_RECEIPT", unitCost: 1500000, purchaseOrderId: poReceived.id, createdById: procurement, occurredAt: date(5), note: "Contoh: penerimaan PO perangkat" },
+    { productId: id(productMap, "CB-UGR-USBC"), warehouseId: jkt, inventoryBalanceId: balance("CB-UGR-USBC", "WH-JKT"), quantity: 100, movementType: "PURCHASE_RECEIPT", unitCost: 40000, purchaseOrderId: poReceived.id, createdById: procurement, occurredAt: date(5), note: "Contoh: penerimaan PO perangkat" },
+    { productId: id(productMap, "LP-LNV-T14"), warehouseId: jkt, inventoryBalanceId: balance("LP-LNV-T14", "WH-JKT"), quantity: -3, movementType: "SALE_ISSUE", saleId: saleCompleted.id, createdById: staff, occurredAt: date(6), note: "Contoh: pengiriman penjualan" },
+    { productId: id(productMap, "KB-LOG-K380"), warehouseId: jkt, inventoryBalanceId: balance("KB-LOG-K380", "WH-JKT"), quantity: -8, movementType: "SALE_ISSUE", saleId: saleCompleted.id, createdById: staff, occurredAt: date(6), note: "Contoh: pengiriman penjualan" },
+    { productId: id(productMap, "MS-LOG-M185"), warehouseId: jkt, inventoryBalanceId: balance("MS-LOG-M185", "WH-JKT"), quantity: -15, movementType: "SALE_ISSUE", saleId: saleCompleted.id, createdById: staff, occurredAt: date(6), note: "Contoh: pengiriman penjualan" },
+    { productId: id(productMap, "PR-EPS-L3210"), warehouseId: jkt, inventoryBalanceId: balance("PR-EPS-L3210", "WH-JKT"), quantity: 2, movementType: "ADJUSTMENT_IN", adjustmentId: adjustment.id, createdById: manager, occurredAt: date(7), note: "Contoh: hasil stock opname" },
+    { productId: id(productMap, "LP-LNV-T14"), warehouseId: jkt, inventoryBalanceId: balance("LP-LNV-T14", "WH-JKT"), quantity: -4, movementType: "TRANSFER_OUT", transferId: transfer.id, createdById: manager, occurredAt: date(8), note: "Contoh: transfer ke Bandung" },
+    { productId: id(productMap, "LP-LNV-T14"), warehouseId: bdg, inventoryBalanceId: balance("LP-LNV-T14", "WH-BDG"), quantity: 4, movementType: "TRANSFER_IN", transferId: transfer.id, createdById: manager, occurredAt: date(8), note: "Contoh: transfer dari Jakarta" },
+    { productId: id(productMap, "KB-LOG-K380"), warehouseId: jkt, inventoryBalanceId: balance("KB-LOG-K380", "WH-JKT"), quantity: -10, movementType: "TRANSFER_OUT", transferId: transfer.id, createdById: manager, occurredAt: date(8), note: "Contoh: transfer ke Bandung" },
+    { productId: id(productMap, "KB-LOG-K380"), warehouseId: bdg, inventoryBalanceId: balance("KB-LOG-K380", "WH-BDG"), quantity: 10, movementType: "TRANSFER_IN", transferId: transfer.id, createdById: manager, occurredAt: date(8), note: "Contoh: transfer dari Jakarta" },
   ] });
   await prisma.payment.createMany({ data: [
-    { number: "SEED-PAY-202610-001", type: "PURCHASE", purchaseOrderId: poReceived.id, paidById: procurement, amount: 373515000, method: "BANK_TRANSFER", status: "PAID", paymentDate: date(6), referenceNo: "BT-20261006-001", notes: "Pelunasan PO perangkat" },
-    { number: "SEED-PAY-202610-002", type: "SALE", saleId: saleCompleted.id, paidById: staff, amount: 65480000, method: "BANK_TRANSFER", status: "PAID", paymentDate: date(7), referenceNo: "INV-CUS-001-10", notes: "Pembayaran pelanggan" },
-    { number: "SEED-PAY-202610-003", type: "EXPENSE", expenseId: expenses[0].id, paidById: procurement, amount: 1250000, method: "CASH", status: "PAID", paymentDate: date(5), referenceNo: "CASH-EXP-001", notes: "Pembayaran biaya pengiriman" },
-    { number: "SEED-PAY-202610-004", type: "PURCHASE", purchaseOrderId: poPending.id, paidById: procurement, amount: 0, method: "BANK_TRANSFER", status: "PENDING", paymentDate: date(10), referenceNo: "PENDING-PO-002", notes: "Menunggu approval" },
+    { number: "SF-PAY-202610-001", type: "PURCHASE", purchaseOrderId: poReceived.id, paidById: procurement, amount: 373515000, method: "BANK_TRANSFER", status: "PAID", paymentDate: date(6), referenceNo: "BT-20261006-001", notes: "Pelunasan PO perangkat" },
+    { number: "SF-PAY-202610-002", type: "SALE", saleId: saleCompleted.id, paidById: staff, amount: 65480000, method: "BANK_TRANSFER", status: "PAID", paymentDate: date(7), referenceNo: "INV-CUS-001-10", notes: "Pembayaran pelanggan" },
+    { number: "SF-PAY-202610-003", type: "EXPENSE", expenseId: expenses[0].id, paidById: procurement, amount: 1250000, method: "CASH", status: "PAID", paymentDate: date(5), referenceNo: "CASH-EXP-001", notes: "Pembayaran biaya pengiriman" },
+    { number: "SF-PAY-202610-004", type: "PURCHASE", purchaseOrderId: poPending.id, paidById: procurement, amount: 0, method: "BANK_TRANSFER", status: "PENDING", paymentDate: date(10), referenceNo: "PENDING-PO-002", notes: "Menunggu approval" },
   ] });
 
   // Extended sample rows: ten records per operational list and every workflow status.
@@ -456,10 +463,10 @@ async function main() {
     const approved = ["APPROVED", "PARTIALLY_RECEIVED", "RECEIVED"].includes(status);
     const unitPrice = 100000 + index * 25000;
     await prisma.purchaseOrder.create({ data: {
-      number: `SEED-PO-202611-${String(index + 3).padStart(3, "0")}`,
+      number: `SF-PO-202611-${String(index + 3).padStart(3, "0")}`,
       supplierId: supplierIds[index % supplierIds.length]!, warehouseId: warehouseIds[index % warehouseIds.length]!,
       createdById: procurement, approvedById: approved ? manager : null, approvedAt: approved ? date(13 + index) : null,
-      status, orderDate: date(13 + index), expectedDate: date(20 + index), notes: `Seed: skenario purchase ${status.toLowerCase()}`,
+      status, orderDate: date(13 + index), expectedDate: date(20 + index), notes: `Contoh: skenario purchase ${status.toLowerCase()}`,
       subtotal: unitPrice * quantity, tax: Math.round(unitPrice * quantity * 0.11), total: Math.round(unitPrice * quantity * 1.11),
       items: { create: [{ productId: productIds[index % productIds.length]!, quantity, receivedQuantity, unitPrice, total: unitPrice * quantity }] },
     } });
@@ -489,13 +496,13 @@ async function main() {
 
     await prisma.sale.create({
       data: {
-        number: `SEED-SALE-202611-${String(index + 3).padStart(3, "0")}`,
+        number: `SF-SALE-202611-${String(index + 3).padStart(3, "0")}`,
         customerId: customerIds[index % customerIds.length]!,
         warehouseId,
         createdById: staff,
         status,
         saleDate: date(13 + index),
-        notes: `Seed: skenario sales ${status.toLowerCase()}`,
+        notes: `Contoh: skenario sales ${status.toLowerCase()}`,
         subtotal: unitPrice * 10,
         discount: 0,
         tax: Math.round(unitPrice * 10 * 0.11),
@@ -512,7 +519,7 @@ async function main() {
     });
   }
 
-  const saleRows = await prisma.sale.findMany({ where: { number: { startsWith: "SEED-SALE-" } }, include: { items: true }, orderBy: { number: "asc" } });
+  const saleRows = await prisma.sale.findMany({ where: { number: { startsWith: "SF-SALE-" } }, include: { items: true }, orderBy: { number: "asc" } });
   const reservationStatusForSale: Record<string, "ACTIVE" | "RELEASED" | "CONSUMED" | "CANCELLED"> = {
     COMPLETED: "CONSUMED", DRAFT: "CANCELLED", RESERVED: "ACTIVE", PICKING: "ACTIVE", PACKED: "ACTIVE",
     PARTIALLY_SHIPPED: "ACTIVE", SHIPPED: "CONSUMED", CANCELLED: "RELEASED",
@@ -526,7 +533,7 @@ async function main() {
       quantity: 1, status, reservedById: staff,
       releasedAt: status === "RELEASED" || status === "CANCELLED" ? date(18) : null,
       consumedAt: status === "CONSUMED" ? date(18) : null,
-      releaseReason: status === "RELEASED" ? "Seed: pesanan dibatalkan" : status === "CANCELLED" ? "Seed: reservasi tidak dilanjutkan" : null,
+      releaseReason: status === "RELEASED" ? "Contoh: pesanan dibatalkan" : status === "CANCELLED" ? "Contoh: reservasi tidak dilanjutkan" : null,
     } });
     if (status === "ACTIVE" && item.productId === id(productMap, "LP-LNV-T14")) {
       await prisma.inventoryBalance.update({ where: { productId_warehouseId: { productId: item.productId, warehouseId: sale.warehouseId } }, data: { reservedQuantity: { increment: 1 } } });
@@ -547,7 +554,7 @@ async function main() {
     const picked = ["PACKED", "SHIPPED", "COMPLETED"].includes(status);
     const packed = ["PACKED", "SHIPPED", "COMPLETED"].includes(status);
     await prisma.saleShipment.create({ data: {
-      number: `SEED-SHP-202611-${String(index + 1).padStart(3, "0")}`, saleId: sale.id,
+      number: `SF-SHP-202611-${String(index + 1).padStart(3, "0")}`, saleId: sale.id,
       warehouseId: sale.warehouseId, createdById: staff, status,
       courier: status === "SHIPPED" || status === "COMPLETED" ? "JNE Demo" : null,
       trackingNumber: status === "SHIPPED" || status === "COMPLETED" ? `SF-DEMO-${index + 1}` : null,
@@ -563,9 +570,9 @@ async function main() {
     const status = adjustmentStatuses[index]!;
     const approved = status === "POSTED";
     await prisma.stockAdjustment.create({ data: {
-      number: `SEED-ADJ-202611-${String(index + 3).padStart(3, "0")}`, warehouseId: warehouseIds[index % warehouseIds.length]!,
+      number: `SF-ADJ-202611-${String(index + 3).padStart(3, "0")}`, warehouseId: warehouseIds[index % warehouseIds.length]!,
       createdById: staff, approvedById: approved ? manager : null, approvedAt: approved ? date(15 + index) : null,
-      type: index % 2 ? "DECREASE" : "INCREASE", status, reason: `Seed: simulasi adjustment ${status.toLowerCase()}`,
+      type: index % 2 ? "DECREASE" : "INCREASE", status, reason: `Contoh: simulasi adjustment ${status.toLowerCase()}`,
       adjustmentDate: date(14 + index), items: { create: [{ productId: productIds[index % productIds.length]!, quantity: 1, notes: "Contoh data demo" }] },
     } });
   }
@@ -577,9 +584,9 @@ async function main() {
     const fromWarehouseId = warehouseIds[index % warehouseIds.length]!;
     const toWarehouseId = warehouseIds[(index + 1) % warehouseIds.length]!;
     await prisma.stockTransfer.create({ data: {
-      number: `SEED-TRF-202611-${String(index + 3).padStart(3, "0")}`, fromWarehouseId, toWarehouseId, createdById: staff,
+      number: `SF-TRF-202611-${String(index + 3).padStart(3, "0")}`, fromWarehouseId, toWarehouseId, createdById: staff,
       approvedById: approved ? manager : null, approvedAt: approved ? date(15 + index) : null,
-      status, transferDate: date(14 + index), notes: `Seed: simulasi transfer ${status.toLowerCase()}`,
+      status, transferDate: date(14 + index), notes: `Contoh: simulasi transfer ${status.toLowerCase()}`,
       items: { create: [{ productId: productIds[index % productIds.length]!, quantity: 1 }] },
     } });
   }
@@ -587,7 +594,7 @@ async function main() {
   const expenseCategories = ["Freight", "Maintenance", "Utilities", "Packaging", "Fuel", "Safety", "Cleaning"];
   for (let index = 0; index < expenseCategories.length; index++) {
     await prisma.expense.create({ data: {
-      number: `SEED-EXP-202611-${String(index + 4).padStart(3, "0")}`, category: expenseCategories[index]!,
+      number: `SF-EXP-202611-${String(index + 4).padStart(3, "0")}`, category: expenseCategories[index]!,
       description: `Biaya demo ${expenseCategories[index]}`, amount: 250000 + index * 125000,
       warehouseId: warehouseIds[index % warehouseIds.length]!, createdById: index % 2 ? manager : procurement,
       expenseDate: date(14 + index), isPaid: index % 2 === 0,
@@ -606,15 +613,15 @@ async function main() {
     const disposition = condition === "GOOD" ? "RESTOCK" : index % 2 ? "QUARANTINE" : "SCRAP";
     const inspectionStatus = status === "POSTED" ? "COMPLETED" : sampleIndex % 3 === 0 ? "PENDING" : sampleIndex % 3 === 1 ? "COMPLETED" : "FOLLOW_UP";
     await prisma.returnOrder.create({ data: {
-      number: `SEED-RET-202611-${String(index + 1).padStart(3, "0")}`, type,
+      number: `SF-RET-202611-${String(index + 1).padStart(3, "0")}`, type,
       purchaseOrderId: type === "PURCHASE" ? seedPurchase.id : null, saleId: type === "SALE" ? seedSale.id : null,
       warehouseId: type === "PURCHASE" ? seedPurchase.warehouseId : seedSale.warehouseId,
       createdById: type === "PURCHASE" ? procurement : staff,
       approvedById: status === "APPROVED" || status === "POSTED" ? manager : null,
       approvedAt: status === "APPROVED" || status === "POSTED" ? date(20 + sampleIndex) : null,
       postedAt: status === "POSTED" ? date(21 + sampleIndex) : null,
-      status, reason: `Seed: contoh retur ${type.toLowerCase()} ${status.toLowerCase()}`, notes: "Skenario data development",
-      inspection: { create: { status: inspectionStatus, notes: `Seed: status inspeksi ${inspectionStatus.toLowerCase()}`, inspectedById: staff, inspectedAt: date(20 + sampleIndex) } },
+      status, reason: `Contoh: contoh retur ${type.toLowerCase()} ${status.toLowerCase()}`, notes: "Skenario data development",
+      inspection: { create: { status: inspectionStatus, notes: `Contoh: status inspeksi ${inspectionStatus.toLowerCase()}`, inspectedById: staff, inspectedAt: date(20 + sampleIndex) } },
       items: { create: [{
         productId: sourceItem.productId, purchaseOrderItemId: type === "PURCHASE" ? sourceItem.id : null,
         saleItemId: type === "SALE" ? sourceItem.id : null, quantity: 1, condition, disposition,
@@ -628,8 +635,8 @@ async function main() {
   for (let index = 0; index < receiptStatuses.length; index++) {
     const item = receiptItems[index % receiptItems.length]!;
     await prisma.goodsReceipt.create({ data: {
-      number: `SEED-GR-202611-${String(index + 2).padStart(3, "0")}`, purchaseOrderId: poReceived.id,
-      warehouseId: jkt, receivedById: procurement, receivedAt: date(14 + index), status: receiptStatuses[index]!, notes: "Seed: contoh penerimaan barang",
+      number: `SF-GR-202611-${String(index + 2).padStart(3, "0")}`, purchaseOrderId: poReceived.id,
+      warehouseId: jkt, receivedById: procurement, receivedAt: date(14 + index), status: receiptStatuses[index]!, notes: "Contoh: contoh penerimaan barang",
       items: { create: [{ purchaseOrderItemId: item.id, productId: item.productId, locationId: id(locationByCode, "JKT-A01"), quantity: 1, damagedQuantity: 0 }] },
     } });
   }
@@ -639,10 +646,10 @@ async function main() {
     const status = stockTakeStatuses[index]!;
     const counted = status === "SUBMITTED" || status === "APPROVED";
     await prisma.stockTakeSession.create({ data: {
-      number: `SEED-OPN-202611-${String(index + 1).padStart(3, "0")}`, warehouseId: warehouseIds[index % warehouseIds.length]!,
+      number: `SF-OPN-202611-${String(index + 1).padStart(3, "0")}`, warehouseId: warehouseIds[index % warehouseIds.length]!,
       createdById: staff, approvedById: status === "APPROVED" ? manager : null,
       startedAt: date(14 + index), submittedAt: counted ? date(18 + index) : null, approvedAt: status === "APPROVED" ? date(20 + index) : null,
-      status, notes: `Seed: stock opname ${status.toLowerCase()}`,
+      status, notes: `Contoh: stock opname ${status.toLowerCase()}`,
       lines: { create: [{ productId: productIds[index % productIds.length]!, systemQuantity: 10, physicalQuantity: counted ? 9 + index % 3 : null, variance: counted ? -1 + index % 3 : 0, countedAt: counted ? date(18 + index) : null, notes: "Skenario demo" }] },
     } });
   }
@@ -657,8 +664,8 @@ async function main() {
     await prisma.quarantineDecision.create({ data: {
       locationBalanceId: quarantineBalance.id, quantity: 1,
       action: index % 3 === 0 ? "RELEASE" : index % 3 === 1 ? "SCRAP" : "RETURN_SUPPLIER",
-      status, reason: `Seed: contoh keputusan karantina ${index + 1}`,
-      reviewNotes: status === "PENDING" ? null : `Seed: review ${status.toLowerCase()}`,
+      status, reason: `Contoh: contoh keputusan karantina ${index + 1}`,
+      reviewNotes: status === "PENDING" ? null : `Contoh: review ${status.toLowerCase()}`,
       createdById: staff, approvedById: status === "PENDING" ? null : manager,
       reviewedAt: status === "PENDING" ? null : date(22 + index),
       purchaseOrderItemId: index % 3 === 2 ? seedPurchase.items[0]!.id : null,
@@ -670,16 +677,24 @@ async function main() {
     const fromLocationCode = index % 2 === 0 ? "JKT-A01" : "JKT-B01";
     const toLocationCode = index % 2 === 0 ? "JKT-B01" : "JKT-A01";
     await prisma.stockRelocation.create({ data: {
-      number: `SEED-REL-202611-${String(index + 1).padStart(3, "0")}`, warehouseId: jkt,
+      number: `SF-REL-202611-${String(index + 1).padStart(3, "0")}`, warehouseId: jkt,
       fromLocationId: id(locationByCode, fromLocationCode), toLocationId: id(locationByCode, toLocationCode),
-      createdById: staff, status: index % 2 === 0 ? "COMPLETED" : "CANCELLED", reason: `Seed: pemindahan internal ${index + 1}`,
+      createdById: staff, status: index % 2 === 0 ? "COMPLETED" : "CANCELLED", reason: `Contoh: pemindahan internal ${index + 1}`,
       items: { create: [{ productId: id(productMap, "LP-LNV-T14"), quantity: 1 }] },
     } });
   }
 
   for (let index = 0; index < 10; index++) {
     const status = index % 4 === 0 ? "EXPIRED" : index % 4 === 1 ? "QUARANTINED" : index % 4 === 2 ? "DEPLETED" : "ACTIVE";
-    const batchNumber = `SEED-BATCH-202611-${String(index + 1).padStart(3, "0")}`;
+    const batchNumber = `SF-BATCH-202611-${String(index + 1).padStart(3, "0")}`;
+    const oldBatchNumber = `SEED-BATCH-202611-${String(index + 1).padStart(3, "0")}`;
+    const batchKey = { productId: id(productMap, "CB-UGR-USBC"), warehouseId: jkt };
+    const oldBatch = await prisma.productBatch.findUnique({ where: { productId_warehouseId_batchNumber: { ...batchKey, batchNumber: oldBatchNumber } } });
+    if (oldBatch) {
+      const existingBatch = await prisma.productBatch.findUnique({ where: { productId_warehouseId_batchNumber: { ...batchKey, batchNumber } } });
+      if (existingBatch) throw new Error(`Nomor batch contoh ${batchNumber} sudah digunakan; selesaikan duplikat sebelum menjalankan seed.`);
+      await prisma.productBatch.update({ where: { id: oldBatch.id }, data: { batchNumber } });
+    }
     const expiryDate = status === "EXPIRED" ? date(1) : new Date("2027-01-15T00:00:00.000Z");
     await prisma.productBatch.upsert({
       where: { productId_warehouseId_batchNumber: { productId: id(productMap, "CB-UGR-USBC"), warehouseId: jkt, batchNumber } },
@@ -692,16 +707,16 @@ async function main() {
   for (let index = 0; index < paymentStatuses.length; index++) {
     const status = paymentStatuses[index]!;
     await prisma.payment.create({ data: {
-      number: `SEED-PAY-202611-${String(index + 5).padStart(3, "0")}`, type: index % 2 === 0 ? "PURCHASE" : "SALE",
+      number: `SF-PAY-202611-${String(index + 5).padStart(3, "0")}`, type: index % 2 === 0 ? "PURCHASE" : "SALE",
       purchaseOrderId: index % 2 === 0 ? poReceived.id : null, saleId: index % 2 === 1 ? saleCompleted.id : null,
       paidById: index % 2 === 0 ? procurement : staff, amount: 250000 + index * 50000,
       method: index % 2 === 0 ? "BANK_TRANSFER" : "CASH", status, paymentDate: date(16 + index),
-      referenceNo: `SEED-REF-${index + 1}`, notes: `Seed: pembayaran ${status.toLowerCase()}`,
+      referenceNo: `SF-REF-${index + 1}`, notes: `Contoh: pembayaran ${status.toLowerCase()}`,
     } });
   }
 
   await prisma.auditLog.createMany({ data: Array.from({ length: 10 }, (_, index) => ({
-    userId: [admin, manager, staff, procurement][index % 4]!, action: "SEED:VIEW", entity: "DemoRecord",
+    userId: [admin, manager, staff, procurement][index % 4]!, action: "VIEW", entity: "DemoRecord",
     entityId: `DEMO-${String(index + 1).padStart(3, "0")}`, afterData: { sample: true, number: index + 1 }, createdAt: date(15 + index),
   })) });
   const userIds = Array.from(userMap.values());

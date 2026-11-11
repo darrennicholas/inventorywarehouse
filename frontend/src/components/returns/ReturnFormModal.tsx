@@ -186,35 +186,20 @@ export default function ReturnFormModal({
     setError("");
 
     if (reason.trim().length < 3) {
-      setError(
-        "Reason must have at least 3 characters"
-      );
+      setError("Alasan retur harus diisi minimal 3 karakter.");
       return;
     }
 
-    if (
-      !editing &&
-      (
-        !source ||
-        !items.length ||
-        items.some(
-          (i) =>
-            !i.productId ||
-            !i.locationId ||
-            !i[rowKey] ||
-            !Number.isInteger(i.quantity) ||
-            i.quantity <= 0 ||
-            (
-              Boolean(productOf(i.productId)?.trackBatch) &&
-              !i.batchId
-            )
-        )
-      )
-    ) {
-      setError(
-        "Choose a source, item, location, valid quantity and batch where required"
-      );
-      return;
+    if (!editing) {
+      if (!source) { setError(type === "PURCHASE" ? "Pilih purchase order terlebih dahulu." : "Pilih penjualan terlebih dahulu."); return; }
+      if (!items.length) { setError("Tambahkan setidaknya satu barang retur."); return; }
+      for (const [index, item] of items.entries()) {
+        const label = `Barang ${index + 1}`;
+        if (!item.productId || !item[rowKey]) { setError(`${label}: pilih produk dari dokumen asal.`); return; }
+        if (!Number.isInteger(item.quantity) || item.quantity <= 0) { setError(`${label}: jumlah harus berupa bilangan bulat lebih dari 0.`); return; }
+        if (!item.locationId) { setError(`${label}: pilih lokasi gudang.`); return; }
+        if (productOf(item.productId)?.trackBatch && !item.batchId) { setError(`${label}: pilih batch untuk produk yang menggunakan batch.`); return; }
+      }
     }
 
     setSaving(true);

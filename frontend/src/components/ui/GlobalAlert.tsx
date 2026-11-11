@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Info, XCircle } from "lucide-react";
 
 type AlertTone = "warning" | "danger" | "success" | "error" | "info";
-type AlertOptions = { title?: string; tone?: AlertTone; confirmLabel?: string; cancelLabel?: string };
+type AlertOptions = { title?: string; tone?: AlertTone; confirmLabel?: string; cancelLabel?: string; action?: { label: string; onClick: () => void } };
 type AlertRequest = { message: string; options: AlertOptions; confirm: boolean; resolve: (value: boolean) => void };
 const eventName = "stockflow:global-alert";
 
@@ -26,6 +26,11 @@ export function confirmAction(message: string, options: AlertOptions = {}) {
 
 export function showAlert(message: string, options: AlertOptions = {}) {
   return requestAlert(message, { tone: "info", ...options }, false);
+}
+
+export function showFeedback(message: string, tone: "success" | "error" | "info", action?: { label: string; onClick: () => void }) {
+  const title = tone === "success" ? "Aksi berhasil" : tone === "error" ? "Aksi gagal" : "Informasi";
+  return showAlert(message, { tone, title, confirmLabel: action?.label ?? "Tutup", action });
 }
 
 export function GlobalAlertProvider({ children }: { children: React.ReactNode }) {
@@ -59,6 +64,7 @@ export function GlobalAlertProvider({ children }: { children: React.ReactNode })
     const request = current.current;
     if (!request) return;
     request.resolve(value);
+    if (value) request.options.action?.onClick();
     current.current = queue.current.shift() ?? null;
     setActive(current.current);
     if (!current.current) previousFocus.current?.focus();
