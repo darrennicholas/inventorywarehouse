@@ -23,20 +23,21 @@ test("rejected stock documents are revised and approved with an audit trail", { 
   await prisma.inventoryLocationBalance.create({ data: { productId: product.id, warehouseId: from.id, locationId: source.id, quantityOnHand: 5 } });
   const server = app.listen(0, "127.0.0.1"); await once(server, "listening");
   const address = server.address(); assert.ok(address && typeof address !== "string");
+  const port = address.port;
   async function request(path: string, user: number, method = "GET", body?: unknown) {
-    const response = await fetch(`http://127.0.0.1:${address.port}/api${path}`, { method, headers: { cookie: `stockflow_session=${tokens[user]}`, origin: (process.env.FRONTEND_URL ?? "http://localhost:3000").replace(/\/$/, ""), "x-csrf-token": createCsrfToken(sessions[user].id), "content-type": "application/json", "idempotency-key": randomUUID() }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    const response = await fetch(`http://127.0.0.1:${port}/api${path}`, { method, headers: { cookie: `stockflow_session=${tokens[user]}`, origin: (process.env.FRONTEND_URL ?? "http://localhost:3000").replace(/\/$/, ""), "x-csrf-token": createCsrfToken(sessions[user].id), "content-type": "application/json", "idempotency-key": randomUUID() }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     return { status: response.status, body: await response.json() as { data?: { id: string; status: string }; message?: string } };
   }
   async function getWorkflowActions(id: string, user: number) {
-    const response = await fetch(`http://127.0.0.1:${address.port}/api/operations/workflow/adjustments/${id}/history`, { headers: { cookie: `stockflow_session=${tokens[user]}` } });
+    const response = await fetch(`http://127.0.0.1:${port}/api/operations/workflow/adjustments/${id}/history`, { headers: { cookie: `stockflow_session=${tokens[user]}` } });
     return { status: response.status, body: await response.json() as { actions?: string[]; message?: string } };
   }
   let adjustmentId = "", transferId = "";
   try {
     const adjustment = { number: `IT-ADJ-${suffix}`, warehouseId: from.id, type: "DECREASE", status: "DRAFT", reason: "Physical count", items: [{ productId: product.id, quantity: 2, locationId: source.id, batchId: null }] };
-    const created = await request("/operations/adjustments", 0, "POST", adjustment); assert.equal(created.status, 201, created.body.message); adjustmentId = created.body.data!.id;
+    const created = await request("/operations/adjustments", 0, "POST", adjustment); assert.equal(created.status, 201, created.body.message ?? "Adjustment creation failed"); adjustmentId = created.body.data!.id;
     assert.deepEqual((await getWorkflowActions(adjustmentId, 0)).body.actions, []);
-    const reviewerActions = await getWorkflowActions(adjustmentId, 1); assert.equal(reviewerActions.status, 200, reviewerActions.body.message); assert.deepEqual(reviewerActions.body.actions, ["approve", "reject"]);
+    const reviewerActions = await getWorkflowActions(adjustmentId, 1); assert.equal(reviewerActions.status, 200, reviewerActions.body.message ?? "Loading workflow actions failed"); assert.deepEqual(reviewerActions.body.actions, ["approve", "reject"]);
     assert.equal((await request(`/operations/workflow/adjustments/${adjustmentId}/reject`, 0, "POST", { reason: "Incorrect quantity" })).status, 403);
     assert.equal((await request(`/operations/workflow/adjustments/${adjustmentId}/reject`, 1, "POST", { reason: "Incorrect quantity" })).status, 200);
     assert.equal((await request(`/operations/adjustments/${adjustmentId}/approve`, 1, "POST")).status, 409);
@@ -48,7 +49,7 @@ test("rejected stock documents are revised and approved with an audit trail", { 
     assert.equal((await request(`/operations/adjustments/${adjustmentId}/approve`, 1, "POST")).status, 200);
     assert.equal((await prisma.inventoryBalance.findUniqueOrThrow({ where: { productId_warehouseId: { productId: product.id, warehouseId: from.id } } })).quantityOnHand, 4);
     const transfer = { number: `IT-TRF-${suffix}`, fromWarehouseId: from.id, toWarehouseId: to.id, status: "DRAFT", notes: "Transfer", items: [{ productId: product.id, quantity: 2, sourceLocationId: source.id, destinationLocationId: destination.id, batchId: null }] };
-    const made = await request("/operations/transfers", 0, "POST", transfer); assert.equal(made.status, 201, made.body.message); transferId = made.body.data!.id;
+    const made = await request("/operations/transfers", 0, "POST", transfer); assert.equal(made.status, 201, made.body.message ?? "Transfer creation failed"); transferId = made.body.data!.id;
     assert.equal((await request(`/operations/workflow/transfers/${transferId}/reject`, 1, "POST", { reason: "Incorrect quantity" })).status, 200);
     assert.equal((await request(`/operations/transfers/${transferId}/revise`, 0, "POST", { ...transfer, items: [{ ...transfer.items[0], quantity: 1 }] })).status, 200);
     assert.equal((await request(`/operations/transfers/${transferId}/approve`, 1, "POST")).status, 200);

@@ -21,11 +21,12 @@ test("product create, update, and deactivate write before/after audit snapshots"
   await once(server, "listening");
   const address = server.address();
   assert.ok(address && typeof address !== "string");
+  const port = address.port;
 
   async function request(method: string, path: string, body?: unknown) {
     const idempotencyKey = randomUUID();
     idempotencyKeys.push(idempotencyKey);
-    const response = await fetch(`http://127.0.0.1:${address.port}/api${path}`, {
+    const response = await fetch(`http://127.0.0.1:${port}/api${path}`, {
       method,
       headers: {
         cookie: `stockflow_session=${token}`,
@@ -41,12 +42,12 @@ test("product create, update, and deactivate write before/after audit snapshots"
 
   try {
     const created = await request("POST", "/products", { sku: `AUDIT-${suffix}`, name: `Audit product ${suffix}` });
-    assert.equal(created.status, 201, created.body.message);
+    assert.equal(created.status, 201, created.body.message ?? "Unexpected response status");
     productId = created.body.data!.id;
     const updated = await request("PATCH", `/products/${productId}`, { name: `Updated audit product ${suffix}` });
-    assert.equal(updated.status, 200, updated.body.message);
+    assert.equal(updated.status, 200, updated.body.message ?? "Unexpected response status");
     const deactivated = await request("DELETE", `/products/${productId}`);
-    assert.equal(deactivated.status, 200, deactivated.body.message);
+    assert.equal(deactivated.status, 200, deactivated.body.message ?? "Unexpected response status");
 
     const logs = await prisma.auditLog.findMany({ where: { entity: "Product", entityId: productId }, orderBy: { createdAt: "asc" } });
     assert.deepEqual(logs.map((log) => log.action), ["CREATE", "UPDATE", "DEACTIVATE"]);

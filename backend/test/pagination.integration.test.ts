@@ -21,7 +21,8 @@ test("master data and quarantine queues page and search in the database", { skip
   await prisma.quarantineDecision.createMany({ data: Array.from({ length: 22 }, () => ({ locationBalanceId: sourceBalance.id, quantity: 1, action: "SCRAP" as const, reason: "Integration fixture", createdById: admin.id })) });
   await prisma.stockTransfer.createMany({ data: Array.from({ length: 22 }, (_, n) => ({ number: `${key}-T-${n}`, fromWarehouseId: warehouses[0].id, toWarehouseId: warehouses[1].id, createdById: admin.id, status: "IN_TRANSIT" as const, updatedAt: new Date("2000-01-01T00:00:00Z") })) });
   const server = app.listen(0, "127.0.0.1"); await once(server, "listening"); const address = server.address(); assert.ok(address && typeof address !== "string");
-  async function get(path: string) { const response = await fetch(`http://127.0.0.1:${address.port}/api${path}`, { headers: { cookie: `stockflow_session=${token}` } }); assert.equal(response.status, 200); return response.json() as Promise<{ data: unknown; meta: { total: number } }>; }
+  const port = address.port;
+  async function get(path: string) { const response = await fetch(`http://127.0.0.1:${port}/api${path}`, { headers: { cookie: `stockflow_session=${token}` } }); assert.equal(response.status, 200); return response.json() as Promise<{ data: unknown; meta: { total: number } }>; }
   try {
     for (const resource of ["categories", "brands", "units", "customers", "suppliers", "staff", "warehouses"]) {
       const first = await get(`/${resource}?page=1&pageSize=1&search=${key}`); const second = await get(`/${resource}?page=2&pageSize=1&search=${key}`);

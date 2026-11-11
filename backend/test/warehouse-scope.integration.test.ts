@@ -31,22 +31,23 @@ test("warehouse routes deny unassigned custom roles by default and honor explici
   await once(server, "listening");
   const address = server.address();
   assert.ok(address && typeof address !== "string");
+  const port = address.port;
 
   async function getWarehouses(userIndex: number) {
-    const response = await fetch(`http://127.0.0.1:${address.port}/api/warehouses`, { headers: { cookie: `stockflow_session=${tokens[userIndex]}` } });
+    const response = await fetch(`http://127.0.0.1:${port}/api/warehouses`, { headers: { cookie: `stockflow_session=${tokens[userIndex]}` } });
     return { status: response.status, body: await response.json() as { data?: Array<{ id: string }>; message?: string } };
   }
   async function getStockBatches(userIndex: number, warehouseId: string) {
-    const response = await fetch(`http://127.0.0.1:${address.port}/api/operations/batches?warehouseId=${warehouseId}`, { headers: { cookie: `stockflow_session=${tokens[userIndex]}` } });
+    const response = await fetch(`http://127.0.0.1:${port}/api/operations/batches?warehouseId=${warehouseId}`, { headers: { cookie: `stockflow_session=${tokens[userIndex]}` } });
     return { status: response.status, body: await response.json() as { message?: string } };
   }
 
   try {
     const scoped = await getWarehouses(0);
-    assert.equal(scoped.status, 200, scoped.body.message);
+    assert.equal(scoped.status, 200, scoped.body.message ?? "Unexpected response status");
     assert.deepEqual(scoped.body.data?.map((warehouse) => warehouse.id), [warehouseA.id]);
 
-    const otherWarehouse = await fetch(`http://127.0.0.1:${address.port}/api/warehouses/${warehouseB.id}`, { headers: { cookie: `stockflow_session=${tokens[0]}` } });
+    const otherWarehouse = await fetch(`http://127.0.0.1:${port}/api/warehouses/${warehouseB.id}`, { headers: { cookie: `stockflow_session=${tokens[0]}` } });
     assert.equal(otherWarehouse.status, 403);
     assert.equal((await getStockBatches(0, warehouseA.id)).status, 200, "a custom role linked to staff can read stock in its assigned warehouse");
     assert.equal((await getStockBatches(0, warehouseB.id)).status, 403, "stock endpoints must enforce the same staff warehouse scope");
@@ -59,7 +60,7 @@ test("warehouse routes deny unassigned custom roles by default and honor explici
     const allWarehousePermission = await prisma.permission.findUniqueOrThrow({ where: { key: "warehouses.access_all" } });
     await prisma.rolePermission.create({ data: { roleId: unassignedRole.id, permissionId: allWarehousePermission.id } });
     const explicitlyGranted = await getWarehouses(1);
-    assert.equal(explicitlyGranted.status, 200, explicitlyGranted.body.message);
+    assert.equal(explicitlyGranted.status, 200, explicitlyGranted.body.message ?? "Unexpected response status");
     const visibleIds = new Set(explicitlyGranted.body.data?.map((warehouse) => warehouse.id));
     assert.ok(visibleIds.has(warehouseA.id));
     assert.ok(visibleIds.has(warehouseB.id));

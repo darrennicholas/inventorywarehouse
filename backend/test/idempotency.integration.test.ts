@@ -23,9 +23,10 @@ test("idempotency replays a completed mutation, rejects key reuse, and prevents 
   await once(server, "listening");
   const address = server.address();
   assert.ok(address && typeof address !== "string");
+  const port = address.port;
 
   async function post(key: string | null, body: unknown) {
-    const response = await fetch(`http://127.0.0.1:${address.port}/api/categories`, {
+    const response = await fetch(`http://127.0.0.1:${port}/api/categories`, {
       method: "POST",
       headers: {
         cookie: `stockflow_session=${token}`,
@@ -50,8 +51,8 @@ test("idempotency replays a completed mutation, rejects key reuse, and prevents 
     const payload = { name: replayName, description: "Created once with a replayed response" };
     const first = await post(replayKey, payload);
     const replay = await post(replayKey, { description: payload.description, name: payload.name });
-    assert.equal(first.status, 201, first.body.message);
-    assert.equal(replay.status, 201, replay.body.message);
+    assert.equal(first.status, 201, first.body.message ?? "Unexpected response status");
+    assert.equal(replay.status, 201, replay.body.message ?? "Unexpected response status");
     assert.deepEqual(replay.body, first.body, "retry should return the stored response");
     assert.equal(await prisma.category.count({ where: { name: replayName } }), 1);
     assert.equal(await prisma.auditLog.count({ where: { entity: "Category", entityId: first.body.data!.id, action: "CREATE" } }), 1);
@@ -66,7 +67,7 @@ test("idempotency replays a completed mutation, rejects key reuse, and prevents 
     const invalid = await post(validationKey, { name: "" });
     assert.equal(invalid.status, 422);
     const corrected = await post(validationKey, { name: correctedName });
-    assert.equal(corrected.status, 201, corrected.body.message);
+    assert.equal(corrected.status, 201, corrected.body.message ?? "Unexpected response status");
     assert.equal(await prisma.category.count({ where: { name: correctedName } }), 1, "a rolled-back validation error should release its idempotency claim");
 
     const concurrentName = `Idempotency concurrent ${suffix}`;
@@ -124,9 +125,10 @@ test("idempotency retry does not duplicate purchase receipt stock or payment", {
   await once(server, "listening");
   const address = server.address();
   assert.ok(address && typeof address !== "string");
+  const port = address.port;
 
   async function post(path: string, key: string, body: unknown) {
-    const response = await fetch(`http://127.0.0.1:${address.port}/api${path}`, {
+    const response = await fetch(`http://127.0.0.1:${port}/api${path}`, {
       method: "POST",
       headers: {
         cookie: `stockflow_session=${token}`,
@@ -143,9 +145,9 @@ test("idempotency retry does not duplicate purchase receipt stock or payment", {
   try {
     const receiptPayload = { receiptNumber, items: [{ productId: product.id, quantity: 3, damagedQuantity: 0 }] };
     const firstReceipt = await post(`/operations/purchases/${purchase.id}/receive`, receiptKey, receiptPayload);
-    assert.equal(firstReceipt.status, 200, firstReceipt.body.message);
+    assert.equal(firstReceipt.status, 200, firstReceipt.body.message ?? "Unexpected response status");
     const retriedReceipt = await post(`/operations/purchases/${purchase.id}/receive`, receiptKey, receiptPayload);
-    assert.equal(retriedReceipt.status, 200, retriedReceipt.body.message);
+    assert.equal(retriedReceipt.status, 200, retriedReceipt.body.message ?? "Unexpected response status");
     assert.deepEqual(retriedReceipt.body, firstReceipt.body);
     assert.equal(await prisma.goodsReceipt.count({ where: { number: receiptNumber } }), 1);
     assert.equal(await prisma.stockMovement.count({ where: { purchaseOrderId: purchase.id, movementType: "PURCHASE_RECEIPT" } }), 1);
@@ -154,9 +156,9 @@ test("idempotency retry does not duplicate purchase receipt stock or payment", {
 
     const paymentPayload = { number: paymentNumber, type: "PURCHASE", purchaseOrderId: purchase.id, amount: 20, method: "CASH", status: "PAID" };
     const firstPayment = await post("/operations/payments", paymentKey, paymentPayload);
-    assert.equal(firstPayment.status, 201, firstPayment.body.message);
+    assert.equal(firstPayment.status, 201, firstPayment.body.message ?? "Unexpected response status");
     const retriedPayment = await post("/operations/payments", paymentKey, paymentPayload);
-    assert.equal(retriedPayment.status, 201, retriedPayment.body.message);
+    assert.equal(retriedPayment.status, 201, retriedPayment.body.message ?? "Unexpected response status");
     assert.deepEqual(retriedPayment.body, firstPayment.body);
     assert.equal(await prisma.payment.count({ where: { number: paymentNumber } }), 1);
     const paymentRaces = await Promise.all(paymentRaceKeys.map((key, index) => post("/operations/payments", key, {
