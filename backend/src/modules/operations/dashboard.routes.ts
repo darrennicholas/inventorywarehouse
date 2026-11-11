@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../lib/prisma.ts";
+import { Prisma } from "../../generated/prisma/client.ts";
 import { authOf, requirePermission } from "../../middlewares/auth.middleware.ts";
 import { assertWarehouseAccess, warehouseScope } from "../../rbac/warehouse-scope.ts";
 import { asyncHandler } from "../../utils/asyncHandler.ts";
@@ -75,35 +76,38 @@ router.get("/dashboard-summary", requirePermission("dashboard.read"), asyncHandl
     ? { OR: [{ fromWarehouseId: query.warehouseId }, { toWarehouseId: query.warehouseId }] }
     : scope ? { OR: [{ fromWarehouseId: { in: scope } }, { toWarehouseId: { in: scope } }] } : {};
   const periodFilter = hasDateOnlyEnd ? { gte: from, lt: toExclusive } : { gte: from, lte: toInclusive };
-
-  const [purchases, sales, expenses, balances, movements, purchaseStatuses, saleStatuses, transferStatuses, batches, warehouses] = await Promise.all([
-    auth.permissions.includes("purchases.read") ? prisma.purchaseOrder.findMany({ where: { ...warehouseFilter, orderDate: periodFilter, status: { not: "CANCELLED" } }, select: { orderDate: true, total: true } }) : [],
-    auth.permissions.includes("sales.read") ? prisma.sale.findMany({ where: { ...warehouseFilter, saleDate: periodFilter, status: "COMPLETED" }, select: { saleDate: true, total: true } }) : [],
-    auth.permissions.includes("expenses.read") ? prisma.expense.findMany({ where: { ...warehouseFilter, expenseDate: periodFilter }, select: { expenseDate: true, amount: true } }) : [],
-    auth.permissions.includes("inventory.read") ? prisma.inventoryBalance.findMany({ where: warehouseFilter, select: { warehouseId: true, quantityOnHand: true, reservedQuantity: true, product: { select: { id: true, sku: true, name: true, minStock: true, category: { select: { id: true, name: true } } } }, warehouse: { select: { id: true, name: true } } } }) : [],
-    auth.permissions.includes("inventory.read") ? prisma.stockMovement.findMany({ where: { ...warehouseFilter, occurredAt: periodFilter }, select: { occurredAt: true, quantity: true, movementType: true } }) : [],
-    auth.permissions.includes("purchases.read") ? prisma.purchaseOrder.groupBy({ by: ["status"], where: { ...warehouseFilter, orderDate: periodFilter }, _count: { _all: true } }) : [],
-    auth.permissions.includes("sales.read") ? prisma.sale.groupBy({ by: ["status"], where: { ...warehouseFilter, saleDate: periodFilter }, _count: { _all: true } }) : [],
-    auth.permissions.includes("transfers.read") ? prisma.stockTransfer.groupBy({ by: ["status"], where: { ...transferWarehouseFilter, transferDate: periodFilter }, _count: { _all: true } }) : [],
-    auth.permissions.includes("inventory.read") ? prisma.productBatch.findMany({ where: { ...warehouseFilter, quantityOnHand: { gt: 0 }, expiryDate: { not: null } }, select: { expiryDate: true, quantityOnHand: true } }) : [],
-    prisma.warehouse.findMany({ where: { isActive: true, ...(scope ? { id: { in: scope } } : {}) }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-  ]);
-
   const durationDays = Math.max(1, Math.ceil((toInclusive.getTime() - from.getTime() + 1) / 86_400_000));
   const bucketDays = durationDays <= 31 ? 1 : durationDays <= 120 ? 7 : 30;
   const bucketCount = Math.min(31, Math.ceil(durationDays / bucketDays));
+  const movementWarehouses = query.warehouseId ? [query.warehouseId] : scope;
+  const movementScope = movementWarehouses ? Prisma.sql`AND "warehouseId" IN (${Prisma.join(movementWarehouses.map((id) => Prisma.sql`${id}::uuid`))})` : Prisma.empty;
+  const movementEnd = hasDateOnlyEnd ? Prisma.sql`"occurredAt" < ${toExclusive}` : Prisma.sql`"occurredAt" <= ${toInclusive}`;
+
+  const [purchases, sales, expenses, balances, movements, purchaseStatuses, saleStatuses, transferStatuses, batches, warehouses] = await Promise.all([
+    auth.permissions.includes("purchases.read") ? prisma.purchaseOrder.groupBy({ by: ["orderDate"], where: { ...warehouseFilter, orderDate: periodFilter, status: { not: "CANCELLED" } }, _sum: { total: true } }) : [],
+    auth.permissions.includes("sales.read") ? prisma.sale.groupBy({ by: ["saleDate"], where: { ...warehouseFilter, saleDate: periodFilter, status: "COMPLETED" }, _sum: { total: true } }) : [],
+    auth.permissions.includes("expenses.read") ? prisma.expense.groupBy({ by: ["expenseDate"], where: { ...warehouseFilter, expenseDate: periodFilter }, _sum: { amount: true } }) : [],
+    auth.permissions.includes("inventory.read") ? prisma.inventoryBalance.findMany({ where: warehouseFilter, select: { warehouseId: true, quantityOnHand: true, reservedQuantity: true, product: { select: { id: true, sku: true, name: true, minStock: true, category: { select: { id: true, name: true } } } }, warehouse: { select: { id: true, name: true } } } }) : [],
+    auth.permissions.includes("inventory.read") ? prisma.$queryRaw<Array<{ bucket: number; movementType: string; quantity: number; absoluteQuantity: number }>>(Prisma.sql`SELECT FLOOR(EXTRACT(EPOCH FROM ("occurredAt" - ${from}::timestamp)) / ${bucketDays * 86_400})::int AS bucket, "movementType"::text AS "movementType", SUM("quantity")::double precision AS quantity, SUM(ABS("quantity"::bigint))::double precision AS "absoluteQuantity" FROM "StockMovement" WHERE "occurredAt" >= ${from} AND ${movementEnd} ${movementScope} GROUP BY 1, 2`) : [],
+    auth.permissions.includes("purchases.read") ? prisma.purchaseOrder.groupBy({ by: ["status"], where: { ...warehouseFilter, orderDate: periodFilter }, _count: { _all: true } }) : [],
+    auth.permissions.includes("sales.read") ? prisma.sale.groupBy({ by: ["status"], where: { ...warehouseFilter, saleDate: periodFilter }, _count: { _all: true } }) : [],
+    auth.permissions.includes("transfers.read") ? prisma.stockTransfer.groupBy({ by: ["status"], where: { ...transferWarehouseFilter, transferDate: periodFilter }, _count: { _all: true } }) : [],
+    auth.permissions.includes("inventory.read") ? prisma.productBatch.aggregate({ where: { ...warehouseFilter, quantityOnHand: { gt: 0 }, expiryDate: { gte: now, lte: new Date(now.getTime() + 30 * 86_400_000) } }, _sum: { quantityOnHand: true } }) : null,
+    prisma.warehouse.findMany({ where: { isActive: true, ...(scope ? { id: { in: scope } } : {}) }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+  ]);
+
   const trend = Array.from({ length: bucketCount }, (_, index) => {
     const start = new Date(from.getTime() + index * bucketDays * 86_400_000);
     return { label: start.toLocaleDateString("id-ID", { timeZone: "Asia/Jakarta", day: "2-digit", month: "short" }), date: start.toISOString(), receipts: 0, issues: 0, adjustments: 0, transfers: 0 };
   });
   for (const movement of movements) {
-    const index = Math.min(bucketCount - 1, Math.floor((movement.occurredAt.getTime() - from.getTime()) / (bucketDays * 86_400_000)));
+    const index = Math.min(bucketCount - 1, movement.bucket);
     if (index < 0) continue;
     const point = trend[index];
     if (movement.movementType === "PURCHASE_RECEIPT" || movement.movementType === "SALES_RETURN") point.receipts += movement.quantity;
-    else if (movement.movementType === "SALE_ISSUE" || movement.movementType === "PURCHASE_RETURN") point.issues += Math.abs(movement.quantity);
-    else if (movement.movementType.startsWith("ADJUSTMENT")) point.adjustments += Math.abs(movement.quantity);
-    else if (movement.movementType === "TRANSFER_OUT" || movement.movementType === "RELOCATION_OUT") point.transfers += Math.abs(movement.quantity);
+    else if (movement.movementType === "SALE_ISSUE" || movement.movementType === "PURCHASE_RETURN") point.issues += movement.absoluteQuantity;
+    else if (movement.movementType.startsWith("ADJUSTMENT")) point.adjustments += movement.absoluteQuantity;
+    else if (movement.movementType === "TRANSFER_OUT" || movement.movementType === "RELOCATION_OUT") point.transfers += movement.absoluteQuantity;
   }
 
   const productMap = new Map<string, { id: string; sku: string; name: string; quantity: number; minStock: number }>();
@@ -141,16 +145,16 @@ router.get("/dashboard-summary", requirePermission("dashboard.read"), asyncHandl
     const key = `${monthDate.getUTCFullYear()}-${String(monthDate.getUTCMonth() + 1).padStart(2, "0")}`;
     monthMap.set(key, { label: monthDate.toLocaleDateString("id-ID", { timeZone: "UTC", month: "short" }), purchases: 0, sales: 0, expenses: 0 });
   }
-  for (const row of purchases) { const m = monthMap.get(jakartaMonth(row.orderDate)); if (m) m.purchases += Number(row.total); }
-  for (const row of sales) { const m = monthMap.get(jakartaMonth(row.saleDate)); if (m) m.sales += Number(row.total); }
-  for (const row of expenses) { const m = monthMap.get(jakartaMonth(row.expenseDate)); if (m) m.expenses += Number(row.amount); }
+  for (const row of purchases) { const m = monthMap.get(jakartaMonth(row.orderDate)); if (m) m.purchases += Number(row._sum.total ?? 0); }
+  for (const row of sales) { const m = monthMap.get(jakartaMonth(row.saleDate)); if (m) m.sales += Number(row._sum.total ?? 0); }
+  for (const row of expenses) { const m = monthMap.get(jakartaMonth(row.expenseDate)); if (m) m.expenses += Number(row._sum.amount ?? 0); }
   const statusSummary = (rows: { status: string; _count: { _all: number } }[]) => rows.map((row) => ({ label: row.status, count: row._count._all }));
-  const expirySoon = batches.filter((batch) => batch.expiryDate && batch.expiryDate >= now && batch.expiryDate <= new Date(now.getTime() + 30 * 86_400_000)).reduce((sum, batch) => sum + batch.quantityOnHand, 0);
+  const expirySoon = batches?._sum.quantityOnHand ?? 0;
   const totalStock = balances.reduce((sum, row) => sum + availableFor(row), 0);
 
   res.json({ success: true, data: {
     period: { from: from.toISOString(), to: toInclusive.toISOString(), bucketDays },
-    kpis: { purchaseValue: purchases.reduce((s, r) => s + Number(r.total), 0), salesValue: sales.reduce((s, r) => s + Number(r.total), 0), expenseValue: expenses.reduce((s, r) => s + Number(r.amount), 0), stockUnits: totalStock, lowStockLines: lowStock.length, expiringUnits30d: expirySoon, activeWarehouses: warehouses.length },
+    kpis: { purchaseValue: purchases.reduce((s, r) => s + Number(r._sum.total ?? 0), 0), salesValue: sales.reduce((s, r) => s + Number(r._sum.total ?? 0), 0), expenseValue: expenses.reduce((s, r) => s + Number(r._sum.amount ?? 0), 0), stockUnits: totalStock, lowStockLines: lowStock.length, expiringUnits30d: expirySoon, activeWarehouses: warehouses.length },
     monthly: [...monthMap.values()], trend,
     operationStatus: { purchases: statusSummary(purchaseStatuses), sales: statusSummary(saleStatuses), transfers: statusSummary(transferStatuses) },
     categoryStock: [...categoryMap.values()].sort((a, b) => b.quantity - a.quantity).slice(0, 7),

@@ -4,6 +4,7 @@ import { prisma } from "../../lib/prisma.ts";
 import { userSelect } from "./user.validation.ts";
 import { AppError } from "../../utils/AppError.ts";
 import { asyncHandler } from "../../utils/asyncHandler.ts";
+import { roleNeedsWarehouseAssignment } from "./user.service.ts";
 
 const router = Router();
 
@@ -29,6 +30,7 @@ router.get(
           code: true,
           name: true,
           isActive: true,
+          permissions: { select: { permission: { select: { key: true } } } },
         },
 
         orderBy: {
@@ -45,6 +47,7 @@ router.get(
           id: true,
           staffCode: true,
           fullName: true,
+          warehouse: { select: { id: true, name: true, isActive: true } },
         },
 
         orderBy: {
@@ -57,7 +60,7 @@ router.get(
       success: true,
 
       data: {
-        roles,
+        roles: roles.map(({ permissions, ...role }) => ({ ...role, requiresWarehouseAssignment: roleNeedsWarehouseAssignment(permissions.map((entry) => entry.permission.key)) })),
         staff,
       },
     });

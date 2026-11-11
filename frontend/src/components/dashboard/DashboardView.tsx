@@ -24,7 +24,7 @@ type DashboardSummary = {
 
 const colors = ["#2563eb", "#10b981", "#f43f5e", "#8b5cf6", "#f59e0b", "#06b6d4", "#64748b"];
 const money = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value || 0);
-const localDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+const localDate = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
 const dateDaysAgo = (days: number) => localDate(new Date(Date.now() - days * 86_400_000));
 const readableDate = (value: string) => value ? new Date(`${value}T12:00:00`).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) : "—";
 
@@ -56,6 +56,7 @@ export default function DashboardView() {
   const [refreshing, setRefreshing] = useState(true);
   const [applyingFilters, setApplyingFilters] = useState(false);
   const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -68,16 +69,17 @@ export default function DashboardView() {
         setError("");
       })
       .catch((reason) => {
-        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Data dashboard tidak dapat dimuat.");
+        if (!controller.signal.aborted) { setSummary(null); setError(reason instanceof Error ? reason.message : "Data dashboard tidak dapat dimuat."); }
       })
       .finally(() => { if (!controller.signal.aborted) { setRefreshing(false); setApplyingFilters(false); } });
     return () => controller.abort();
-  }, [appliedFrom, appliedTo, appliedWarehouseId]);
+  }, [appliedFrom, appliedTo, appliedWarehouseId, retry]);
 
   const applyRange = (start = from, end = to, warehouse = warehouseId) => {
     if (!start || !end || start > end) return;
     if (start === appliedFrom && end === appliedTo && warehouse === appliedWarehouseId) return;
     setError("");
+    setSummary(null);
     setRefreshing(true);
     setApplyingFilters(true);
     setAppliedFrom(start);
@@ -151,11 +153,12 @@ export default function DashboardView() {
         <button type="button" disabled={refreshing} onClick={resetFilters} className="inline-flex min-h-10 w-fit items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"><RefreshCw size={15} aria-hidden="true" />Reset</button>
       </div>
       {from && to && from > to && <p role="alert" className="mt-2 text-xs font-medium text-rose-600">Tanggal awal harus sebelum atau sama dengan tanggal akhir.</p>}
-      {error && <p role="alert" className="mt-2 text-xs font-medium text-rose-600">{error}</p>}
+      <p className="mt-2 text-xs text-slate-500">Periode menggunakan waktu Jakarta (WIB).</p>
+      {error && <div role="alert" className="mt-3 flex flex-wrap items-center gap-3 rounded-lg bg-rose-50 p-3 text-xs font-medium text-rose-700 dark:bg-rose-950/40 dark:text-rose-200"><span>{error}</span><button type="button" onClick={() => { setError(""); setRefreshing(true); setRetry((value) => value + 1); }} className="rounded-lg bg-rose-100 px-3 py-1.5 font-semibold hover:bg-rose-200 dark:bg-rose-900">Coba lagi</button></div>}
     </section>
 
     {hasCharts && !summary && refreshing && <section aria-label="Memuat grafik dashboard" aria-busy="true" className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900"><GlobalLoading label="Memuat grafik dashboard..." /></section>}
-    {hasCharts && (summary || !refreshing) && <section aria-label="Grafik dashboard" aria-busy={refreshing} className={`sf-dashboard-charts grid gap-4 xl:grid-cols-2 ${refreshing && summary ? "opacity-60" : ""}`}>
+    {hasCharts && summary && !error && <section aria-label="Grafik dashboard" aria-busy={refreshing} className={`sf-dashboard-charts grid gap-4 xl:grid-cols-2 ${refreshing && summary ? "opacity-60" : ""}`}>
       {financialSeries.length > 0 && <Panel title="Nilai transaksi per bulan" icon={<Boxes className="text-blue-500" size={18} />}><MonthlyBars rows={summary?.monthly ?? []} series={financialSeries} /></Panel>}
       {canViewInventory && <Panel title="Pergerakan stok" icon={<Activity className="text-emerald-500" size={18} />}><MovementChart points={summary?.trend ?? []} bucketDays={summary?.period?.bucketDays ?? 1} /></Panel>}
       {canViewInventory && <Panel title="Komposisi stok · kategori utama"><Donut rows={summary?.categoryStock.map((row) => ({ label: row.name, value: row.quantity })) ?? []} /></Panel>}

@@ -621,9 +621,15 @@
             "sessionCookie": []
           }
         ],
+        "parameters": [
+          { "name": "page", "in": "query", "description": "Halaman dimulai dari 1.", "schema": { "type": "integer", "minimum": 1, "maximum": 100000, "default": 1 } },
+          { "name": "pageSize", "in": "query", "description": "Jumlah sesi per halaman.", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 } },
+          { "name": "search", "in": "query", "description": "Cari nomor sesi atau gudang.", "schema": { "type": "string", "maxLength": 120, "default": "" } },
+          { "name": "status", "in": "query", "description": "Filter status sesi.", "schema": { "type": "string", "enum": ["", "DRAFT", "COUNTING", "SUBMITTED", "APPROVED", "CANCELLED", "REJECTED"] } }
+        ],
         "responses": {
           "200": {
-            "description": "Visible stock take sessions",
+            "description": "Visible stock take sessions. With pagination filters, rows contain _count.lines and meta; without query parameters, the legacy detail list is returned.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1669,6 +1675,10 @@
           },
           "message": {
             "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "description": "Stable application error code when provided by the server."
           },
           "requestId": {
             "type": "string"

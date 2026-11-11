@@ -461,6 +461,8 @@ export interface components {
             /** @constant */
             success: false;
             message: string;
+            /** @description Stable application error code when provided by the server. */
+            code?: string;
             requestId?: string;
         };
         SuccessResponse: {
@@ -1001,14 +1003,23 @@ export interface operations {
     };
     listStockOpnames: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Halaman dimulai dari 1. */
+                page?: number;
+                /** @description Jumlah sesi per halaman. */
+                pageSize?: number;
+                /** @description Cari nomor sesi atau gudang. */
+                search?: string;
+                /** @description Filter status sesi. */
+                status?: "" | "DRAFT" | "COUNTING" | "SUBMITTED" | "APPROVED" | "CANCELLED" | "REJECTED";
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Visible stock take sessions */
+            /** @description Visible stock take sessions. With pagination filters, rows contain _count.lines and meta; without query parameters, the legacy detail list is returned. */
             200: {
                 headers: {
                     [name: string]: unknown;

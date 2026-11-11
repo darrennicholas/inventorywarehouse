@@ -37,6 +37,7 @@ export const errorHandler: ErrorRequestHandler = (
     res.status(error.statusCode).json({
       success: false,
       message: error.message,
+      code: error.code ?? (error.statusCode === 403 ? "ACCESS_DENIED" : error.statusCode === 404 ? "NOT_FOUND" : error.statusCode === 409 ? "BUSINESS_CONFLICT" : "REQUEST_ERROR"),
       ...responseMeta,
       ...(error.details !== undefined
         ? { errors: error.details }
@@ -50,6 +51,7 @@ export const errorHandler: ErrorRequestHandler = (
     res.status(400).json({
       success: false,
       message: error.issues[0]?.message ?? "Invalid request data",
+      code: "VALIDATION_ERROR",
       errors: error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message })),
       ...responseMeta,
     });
@@ -61,6 +63,7 @@ export const errorHandler: ErrorRequestHandler = (
     res.status(409).json({
       success: false,
       message: "Data already exists",
+      code: "DUPLICATE_DATA",
       ...responseMeta,
     });
 
@@ -75,6 +78,7 @@ export const errorHandler: ErrorRequestHandler = (
     res.status(400).json({
       success: false,
       message: "Invalid JSON request body",
+      code: "INVALID_JSON",
       ...responseMeta,
     });
 
@@ -84,16 +88,17 @@ export const errorHandler: ErrorRequestHandler = (
   // Unexpected Server Error
   const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
   if (["P2034", "P2003", "P2004"].includes(code)) {
-    res.status(409).json({ success: false, message: code === "P2034" ? "Data changed during this transaction. Reload and try again; no partial changes were saved." : "This action conflicts with linked data or a database constraint.", ...responseMeta }); return;
+    res.status(409).json({ success: false, code: code === "P2034" ? "TRANSACTION_CONFLICT" : "DATA_CONSTRAINT", message: code === "P2034" ? "Data changed during this transaction. Reload and try again; no partial changes were saved." : "This action conflicts with linked data or a database constraint.", ...responseMeta }); return;
   }
-  if (code === "P2025") { res.status(404).json({ success: false, message: "Record no longer exists. Reload the page.", ...responseMeta }); return; }
+  if (code === "P2025") { res.status(404).json({ success: false, code: "RECORD_NOT_FOUND", message: "Record no longer exists. Reload the page.", ...responseMeta }); return; }
   if (code === "P2010" && typeof error === "object" && error !== null && "meta" in error) {
     const meta = error.meta as { code?: string } | undefined;
-    if (meta?.code && ["23514", "40001", "40P01"].includes(meta.code)) { res.status(409).json({ success: false, message: "Stock or related data changed. Reload and retry; the transaction was rolled back.", ...responseMeta }); return; }
+    if (meta?.code && ["23514", "40001", "40P01"].includes(meta.code)) { res.status(409).json({ success: false, code: "TRANSACTION_CONFLICT", message: "Stock or related data changed. Reload and retry; the transaction was rolled back.", ...responseMeta }); return; }
   }
   res.status(500).json({
     success: false,
     message: "Internal server error",
+    code: "INTERNAL_ERROR",
     ...responseMeta,
   });
 };

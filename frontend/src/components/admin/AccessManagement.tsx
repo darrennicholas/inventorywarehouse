@@ -408,6 +408,13 @@ export default function AccessManagement() {
       return;
     }
 
+    const selectedRole = options.roles.find((role) => role.id === userForm.roleId);
+    const selectedStaff = options.staff.find((staff) => staff.id === userForm.staffId);
+    if (userForm.isActive && selectedRole?.requiresWarehouseAssignment && !selectedStaff?.warehouse?.isActive) {
+      setError("Role ini memerlukan staff aktif yang ditugaskan ke gudang aktif.");
+      return;
+    }
+
     setSaving(true);
     setError("");
 
@@ -1370,7 +1377,7 @@ export default function AccessManagement() {
                 </label>
 
                 <label className="block text-sm font-medium text-slate-700">
-                  Staff (Optional)
+                  Staff {options.roles.find((role) => role.id === userForm.roleId)?.requiresWarehouseAssignment ? "(wajib untuk akses gudang)" : "(opsional)"}
 
                   <GlobalSelect
                     value={userForm.staffId}
@@ -1391,7 +1398,7 @@ export default function AccessManagement() {
                         key={staff.id}
                         value={staff.id}
                       >
-                        {staff.staffCode} — {staff.fullName}
+                        {staff.staffCode} — {staff.fullName} · {staff.warehouse?.name ?? "Belum ada gudang"}{staff.warehouse && !staff.warehouse.isActive ? " (tidak aktif)" : ""}
                       </option>
                     ))}
                   </GlobalSelect>

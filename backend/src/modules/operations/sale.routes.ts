@@ -97,7 +97,7 @@ router.post("/sales/:id/release-reservation", requirePermission("sales.write"), 
     await ensureScopedWarehouse(tx, current.warehouseId, auth);
     if (current.status !== "RESERVED") throw new AppError(409, "Only a reserved sale can release its reservation");
     const shipments = await tx.saleShipment.count({ where: { saleId: id, status: { not: "CANCELLED" } } });
-    if (shipments) throw new AppError(409, "Cancel or complete all active shipments before releasing stock");
+    if (shipments) throw new AppError(409, "Cancel or complete all active shipments before releasing stock", undefined, "ACTIVE_SHIPMENTS");
     const active = await tx.stockReservation.count({ where: { saleId: id, status: "ACTIVE" } });
     if (!active) throw new AppError(409, "No active reservations remain");
     await releaseSaleReservations(tx, id, "RELEASED", reason);
@@ -125,7 +125,7 @@ router.patch("/sales/:id", requirePermission("sales.write"), asyncHandler(async 
   const data = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "Sale" WHERE "id" = ${id}::uuid FOR UPDATE`;
     const latest = await tx.sale.findUnique({ where: { id } });
-    if (!latest || latest.status !== current.status) throw new AppError(409, "Sale status changed; reload and try again");
+    if (!latest || latest.status !== current.status) throw new AppError(409, "Sale status changed; reload and try again", undefined, "TRANSACTION_CONFLICT");
     if (nextStatus === "RESERVED" && current.status === "DRAFT") {
       await reserveSaleStock(tx, id, current.warehouseId, userId, current.items.map((item) => ({ id: item.id, productId: item.productId, quantity: item.quantity })));
     }
@@ -149,7 +149,7 @@ router.delete("/sales/:id", requirePermission("sales.delete"), asyncHandler(asyn
   const data = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "Sale" WHERE "id" = ${id}::uuid FOR UPDATE`;
     const latest = await tx.sale.findUnique({ where: { id }, select: { status: true } });
-    if (!latest || latest.status !== current.status) throw new AppError(409, "Sale status changed; reload and try again");
+    if (!latest || latest.status !== current.status) throw new AppError(409, "Sale status changed; reload and try again", undefined, "TRANSACTION_CONFLICT");
     if (await tx.payment.count({ where: { saleId: id, status: { not: "VOID" } } }) || await tx.creditApplication.count({ where: { saleId: id } })) throw new AppError(409, "This sale has financial entries and cannot be cancelled");
     const updated = await tx.sale.update({ where: { id }, data: { status: "CANCELLED" }, include: saleInclude });
     await writeAuditLog({ userId: authOf(req).userId, action: "CANCEL", entity: "Sale", entityId: id, beforeData: latest, afterData: updated, requestId: res.locals.requestId as string | undefined, ipAddress: req.ip, userAgent: req.get("user-agent") }, tx as never);

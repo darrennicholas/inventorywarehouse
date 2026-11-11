@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "../../lib/prisma.ts";
 import { createUserSchema, updateUserSchema, userSelect } from "./user.validation.ts";
-import { ensureAdminRemains, getManageableUser, validateAssignableRole, validateStaff } from "./user.service.ts";
+import { ensureAdminRemains, getManageableUser, validateAssignableRole, validateStaff, validateWarehouseAssignment } from "./user.service.ts";
 import { AppError } from "../../utils/AppError.ts";
 import { asyncHandler } from "../../utils/asyncHandler.ts";
 import { writeAuditLog } from "../audit/audit.service.ts";
@@ -37,6 +37,7 @@ router.post(
     await validateStaff(
       input.staffId ?? null
     );
+    if (input.isActive !== false) await validateWarehouseAssignment(input.roleId, input.staffId ?? null);
 
     // Check email uniqueness.
     const existingEmail =
@@ -131,6 +132,9 @@ router.patch(
         input.staffId,
         id
       );
+    }
+    if ((input.roleId !== undefined || input.staffId !== undefined || input.isActive === true) && (input.isActive ?? currentUser.isActive)) {
+      await validateWarehouseAssignment(input.roleId ?? currentUser.roleId, input.staffId !== undefined ? input.staffId : currentUser.staffId);
     }
 
     const changingRole =

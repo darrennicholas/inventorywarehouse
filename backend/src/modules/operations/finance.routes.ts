@@ -69,13 +69,13 @@ async function assertPaymentLimit(tx: Prisma.TransactionClient, link: PaymentLin
     const summary = await financialSummary(tx, link.type, id, excludeId);
     if (["DRAFT", "CANCELLED"].includes(summary.invoice.status)) throw new AppError(409, "Payments require an active invoice that is no longer a draft");
     if (new Prisma.Decimal(amount).lte(0)) throw new AppError(400, "Payment amount must be greater than zero");
-    if (new Prisma.Decimal(amount).gt(summary.outstanding)) throw new AppError(409, "Payment exceeds the outstanding balance after returns and credit applications");
+    if (new Prisma.Decimal(amount).gt(summary.outstanding)) throw new AppError(409, "Payment exceeds the outstanding balance after returns and credit applications", undefined, "PAYMENT_EXCEEDS_BALANCE");
     return;
   }
   const relation = { expenseId: id };
   const existing = await tx.payment.aggregate({ where: { ...relation, status: "PAID", ...(excludeId ? { id: { not: excludeId } } : {}) }, _sum: { amount: true } });
   if (new Prisma.Decimal(amount).lte(0)) throw new AppError(400, "Payment amount must be greater than zero");
-  if (new Prisma.Decimal(existing._sum.amount ?? 0).plus(amount).gt(total)) throw new AppError(409, "Payment exceeds the outstanding balance of the linked document");
+  if (new Prisma.Decimal(existing._sum.amount ?? 0).plus(amount).gt(total)) throw new AppError(409, "Payment exceeds the outstanding balance of the linked document", undefined, "PAYMENT_EXCEEDS_BALANCE");
 }
 
 async function syncExpensePaymentState(tx: Prisma.TransactionClient, expenseId: string, userId: string) {

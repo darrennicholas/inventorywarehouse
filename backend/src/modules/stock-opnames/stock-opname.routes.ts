@@ -9,6 +9,7 @@ import { postStockIn, postStockOut, linkMovementAllocations } from "../operation
 import { writeAuditLog } from "../audit/audit.service.ts";
 import { notifyByPermission } from "../notifications/notification.service.ts";
 import { assertApprovalAuthority } from "../approvals/approval-policy.service.ts";
+import { paginationQuerySchema, pageMeta } from "../../utils/pagination.ts";
 
 const router = Router();
 const idSchema = z.uuid();
@@ -28,6 +29,17 @@ const detailInclude = {
 } as const;
 
 router.get("/", requirePermission("stock-opnames.read"), asyncHandler(async (req, res) => {
+  if (req.query.page !== undefined || req.query.pageSize !== undefined || req.query.search !== undefined || req.query.status !== undefined) {
+    const query = paginationQuerySchema.extend({ status: z.enum(["", "DRAFT", "COUNTING", "SUBMITTED", "APPROVED", "CANCELLED", "REJECTED"]).default("") }).parse(req.query);
+    if (query.status === "REJECTED") { res.json({ success: true, data: [], meta: pageMeta(query.page, query.pageSize, 0) }); return; }
+    const where = { ...scopedWarehouseFilter(authOf(req)), ...(query.status ? { status: query.status } : {}), ...(query.search ? { OR: [{ number: { contains: query.search, mode: "insensitive" as const } }, { warehouse: { name: { contains: query.search, mode: "insensitive" as const } } }, { warehouse: { code: { contains: query.search, mode: "insensitive" as const } } }] } : {}) };
+    const [data, total] = await Promise.all([
+      prisma.stockTakeSession.findMany({ where, select: { id: true, number: true, status: true, startedAt: true, warehouse: { select: { id: true, code: true, name: true } }, _count: { select: { lines: true } } }, orderBy: [{ startedAt: "desc" }, { id: "desc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }),
+      prisma.stockTakeSession.count({ where }),
+    ]);
+    res.json({ success: true, data, meta: pageMeta(query.page, query.pageSize, total) });
+    return;
+  }
   const data = await prisma.stockTakeSession.findMany({ where: scopedWarehouseFilter(authOf(req)), include: detailInclude, orderBy: { startedAt: "desc" } });
   res.json({ success: true, data });
 }));

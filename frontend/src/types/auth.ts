@@ -74,11 +74,13 @@ export interface UserOptions {
     code: string;
     name: string;
     isActive: boolean;
+    requiresWarehouseAssignment?: boolean;
   }[];
 
   staff: {
     id: string;
     staffCode: string;
     fullName: string;
+    warehouse?: { id: string; name: string; isActive: boolean } | null;
   }[];
 }

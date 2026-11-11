@@ -30,7 +30,20 @@ let csrfToken: string | null = null;
 let unauthorizedHandler: (() => void) | null = null;
 const pendingMutations = new Map<string, Map<string | null, Promise<unknown>>>();
 
-function userFacingMessage(message: string): string {
+function userFacingMessage(message: string, code?: string): string {
+  const messages: Record<string, string> = {
+    WAREHOUSE_ASSIGNMENT_REQUIRED: "Pilih staff aktif yang ditugaskan ke gudang aktif untuk role ini.",
+    INSUFFICIENT_STOCK: "Stok yang dapat digunakan tidak mencukupi. Periksa gudang, lokasi, batch, dan reservasi, lalu muat ulang data sebelum mencoba lagi.",
+    PAYMENT_EXCEEDS_BALANCE: "Jumlah pembayaran melebihi sisa tagihan. Periksa histori pembayaran dan sesuaikan jumlahnya.",
+    ACTIVE_SHIPMENTS: "Reservasi belum dapat dilepas karena masih ada pengiriman aktif. Selesaikan atau batalkan pengiriman terlebih dahulu.",
+    TRANSACTION_CONFLICT: "Perubahan tidak disimpan karena stok atau data terkait berubah. Muat ulang data dan periksa kembali sebelum mencoba lagi.",
+    RECORD_NOT_FOUND: "Data ini sudah tidak tersedia. Muat ulang daftar untuk melihat data terbaru.",
+    DUPLICATE_DATA: "Data sudah ada. Periksa kode atau nama yang digunakan.",
+    INVALID_JSON: "Format data tidak valid. Periksa kembali formulir.",
+    DATA_CONSTRAINT: "Tindakan bertentangan dengan data terkait. Periksa kembali dokumen atau relasinya.",
+    INTERNAL_ERROR: "Terjadi kesalahan pada server. Coba lagi atau hubungi administrator.",
+  };
+  if (code && messages[code]) return messages[code];
   if (/Data changed during this transaction|status changed; reload|changed by another process/i.test(message)) return "Data berubah saat Anda memprosesnya. Data formulir tetap tersimpan; muat ulang daftar, periksa status terbaru, lalu ulangi aksi bila masih diperlukan.";
   if (/transaction was rolled back|no partial changes were saved/i.test(message)) return "Perubahan tidak disimpan karena stok atau data terkait berubah. Formulir tetap terbuka; muat ulang data dan periksa kembali sebelum mencoba lagi.";
   if (/Record no longer exists/i.test(message)) return "Data ini sudah tidak tersedia. Muat ulang daftar untuk melihat data terbaru.";
@@ -183,7 +196,8 @@ async function performApiRequest<T>(
         : `Request failed (${response.status})`;
 
     const requestId = response.headers.get("X-Request-Id") ?? (typeof result === "object" && result !== null && "requestId" in result && typeof result.requestId === "string" ? result.requestId : undefined);
-    throw new ApiError(response.status, userFacingMessage(message), requestId);
+    const code = typeof result === "object" && result !== null && "code" in result && typeof result.code === "string" ? result.code : undefined;
+    throw new ApiError(response.status, userFacingMessage(message, code), requestId);
   }
 
   if (result === null) {

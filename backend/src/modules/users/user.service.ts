@@ -1,5 +1,18 @@
 import { prisma } from "../../lib/prisma.ts";
 import { AppError } from "../../utils/AppError.ts";
+const warehouseScopedPrefixes = ["inventory.", "purchases.", "sales.", "purchase-returns.", "sales-returns.", "fulfillment.", "adjustments.", "transfers.", "expenses.", "payments.", "reports.", "stock-opnames.", "warehouses."];
+
+export function roleNeedsWarehouseAssignment(permissions: string[]): boolean {
+  return !permissions.includes("warehouses.access_all") && permissions.some((key) => key === "dashboard.read" || warehouseScopedPrefixes.some((prefix) => key.startsWith(prefix)));
+}
+
+export async function validateWarehouseAssignment(roleId: string, staffId: string | null): Promise<void> {
+  const role = await prisma.role.findUniqueOrThrow({ where: { id: roleId }, select: { permissions: { select: { permission: { select: { key: true } } } } } });
+  if (!roleNeedsWarehouseAssignment(role.permissions.map((entry) => entry.permission.key))) return;
+  if (!staffId) throw new AppError(400, "Role ini memerlukan staff yang ditugaskan ke gudang aktif.", undefined, "WAREHOUSE_ASSIGNMENT_REQUIRED");
+  const staff = await prisma.staff.findUnique({ where: { id: staffId }, select: { isActive: true, warehouse: { select: { isActive: true } } } });
+  if (!staff?.isActive || !staff.warehouse?.isActive) throw new AppError(400, "Pilih staff aktif yang memiliki penugasan ke gudang aktif.", undefined, "WAREHOUSE_ASSIGNMENT_REQUIRED");
+}
 // HELPER: VALIDATE ASSIGNABLE ROLE
 // ==========================================
 

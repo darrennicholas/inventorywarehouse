@@ -77,7 +77,7 @@ async function updateWarehouseBalance(tx: InventoryTx, productId: string, wareho
       AND "quantityOnHand" + ${delta} >= "reservedQuantity"
     RETURNING "id"
   `);
-  if (rows.length !== 1) throw new AppError(409, `Insufficient stock for ${productId}`);
+  if (rows.length !== 1) throw new AppError(409, `Insufficient stock for ${productId}`, undefined, "INSUFFICIENT_STOCK");
   return rows[0];
 }
 
@@ -196,7 +196,7 @@ export async function changeLocationReservation(tx: InventoryTx, locationBalance
       AND "quantityOnHand" >= "reservedQuantity" + ${delta}
     RETURNING "id"
   `);
-  if (rows.length !== 1) throw new AppError(409, "Insufficient available stock or invalid reservation release");
+  if (rows.length !== 1) throw new AppError(409, "Insufficient available stock or invalid reservation release", undefined, "INSUFFICIENT_STOCK");
 }
 
 export async function consumeLocationReservation(tx: InventoryTx, locationBalanceId: string, quantity: number) {

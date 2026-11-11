@@ -9,6 +9,7 @@ export type DataColumn<T> = {
   render: (row: T) => ReactNode;
   className?: string;
   align?: "left" | "center" | "right";
+  action?: boolean;
 };
 
 type DataTableProps<T extends { id: string }> = {
@@ -24,7 +25,7 @@ type DataTableProps<T extends { id: string }> = {
 };
 
 const isActionColumn = <T,>(column: DataColumn<T>) =>
-  /^(?:actions?|aksi|tindakan)$/i.test(column.header.trim());
+  column.action ?? (/^(?:actions?|aksi|tindakan)$/i.test(column.key) || /^(?:actions?|aksi|tindakan)$/i.test(column.header.trim()));
 
 export default function DataTable<T extends { id: string }>({
   rows,

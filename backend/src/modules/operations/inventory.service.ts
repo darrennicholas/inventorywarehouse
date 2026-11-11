@@ -27,7 +27,7 @@ export async function changeStock(tx: InventoryTx, productId: string, warehouseI
           "quantityOnHand" = "InventoryBalance"."quantityOnHand" + EXCLUDED."quantityOnHand", "updatedAt" = NOW()
         RETURNING "id", "quantityOnHand"
       `);
-  if (rows.length !== 1) throw new AppError(409, `Insufficient stock for ${productId}`);
+  if (rows.length !== 1) throw new AppError(409, `Insufficient stock for ${productId}`, undefined, "INSUFFICIENT_STOCK");
   return rows[0];
 }
 
@@ -51,7 +51,7 @@ export async function reserveSaleStock(tx: InventoryTx, saleId: string, warehous
         AND "quantityOnHand" - "reservedQuantity" >= ${item.quantity}
       RETURNING "id"
     `);
-    if (aggregate.length !== 1) throw new AppError(409, `Insufficient available stock for ${item.productId}`);
+    if (aggregate.length !== 1) throw new AppError(409, `Insufficient available stock for ${item.productId}`, undefined, "INSUFFICIENT_STOCK");
 
     const allocations = await allocateAvailableStock(tx, item.productId, warehouseId, item.quantity);
     for (const allocation of allocations) {

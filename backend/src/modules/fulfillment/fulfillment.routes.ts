@@ -66,7 +66,17 @@ router.get("/", requirePermission("fulfillment.read"), asyncHandler(async (req, 
   const query = fulfillmentListQuerySchema.parse(req.query);
   if (query.warehouseId) assertWarehouseAccess(auth, query.warehouseId);
   const data = await prisma.$transaction((tx) => listFulfillments(tx, query, warehouseScope(auth)));
-  res.json({ success: true, ...data });
+  const rows = data.data.map((shipment) => ({
+    ...shipment,
+    availableActions: [
+      ...(shipment.status === "PICKING" && auth.permissions.includes("fulfillment.pick") ? ["pick"] : []),
+      ...(shipment.status === "PICKING" && auth.permissions.includes("fulfillment.pack") && shipment.items.every((item) => item.pickedQuantity === item.quantity) ? ["pack"] : []),
+      ...(shipment.status === "PACKED" && auth.permissions.includes("fulfillment.ship") && shipment.items.every((item) => item.packedQuantity === item.quantity) ? ["ship"] : []),
+      ...(shipment.status === "SHIPPED" && auth.permissions.includes("fulfillment.write") ? ["complete"] : []),
+      ...(["PICKING", "PACKED"].includes(shipment.status) && auth.permissions.includes("fulfillment.write") ? ["cancel"] : []),
+    ],
+  }));
+  res.json({ success: true, ...data, data: rows });
 }));
 
 router.get("/scan", requirePermission("fulfillment.pick"), asyncHandler(async (req, res) => {

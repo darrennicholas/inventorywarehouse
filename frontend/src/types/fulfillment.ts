@@ -23,6 +23,7 @@ export type FulfillmentRecord = {
   sale?: { id: string; number: string; status: string; customer?: { name: string } | null };
   warehouse?: { id: string; code: string; name: string };
   items: FulfillmentItem[];
+  availableActions?: ("pick" | "pack" | "ship" | "complete" | "cancel")[];
 };
 
 export type FulfillmentScanMatch = {

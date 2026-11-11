@@ -16,6 +16,8 @@ export default function ReturnSettlementPanel({ id, type }: { id: string; type: 
   const [data, setData] = useState<Summary | null>(null);
   const [revision, setRevision] = useState(0);
   const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [kind, setKind] = useState("REFUND"); const [amount, setAmount] = useState("");
   const [reference, setReference] = useState(""); const [notes, setNotes] = useState("");
   const [creditId, setCreditId] = useState(""); const [targets, setTargets] = useState<{ id: string; number: string }[]>([]);
@@ -28,7 +30,7 @@ export default function ReturnSettlementPanel({ id, type }: { id: string; type: 
     if (!readable) return;
     const controller = new AbortController();
     void apiRequest<{ data: Summary }>(`/api/operations/return-settlements/${id}`, { signal: controller.signal })
-      .then((result) => { setData(result.data); setError(""); }).catch((reason) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Gagal memuat settlement."); });
+      .then((result) => { if (!controller.signal.aborted) { setData(result.data); setLoadError(""); } }).catch((reason) => { if (!controller.signal.aborted) setLoadError(reason instanceof Error ? reason.message : "Gagal memuat settlement."); });
     return () => controller.abort();
   }, [id, readable, revision]);
   async function settle() {
@@ -36,7 +38,7 @@ export default function ReturnSettlementPanel({ id, type }: { id: string; type: 
     if (!(Number(amount) > 0) || Number(amount) > Number(data.available) || reference.trim().length < 3 || notes.trim().length < 5) { setError("Isi nominal sesuai saldo tersedia, referensi, dan catatan minimal 5 karakter."); return; }
     if (!await confirmAction(`Catat ${kind === "REFUND" ? "pengembalian uang" : "kredit"} ${money(amount)}? Pencatatan bersifat final; pastikan bukti dan pihak penerima benar.`, { title: "Konfirmasi settlement", confirmLabel: "Catat" })) return;
     setBusy(true); setError("");
-    try { await apiRequest(`/api/operations/return-settlements/${id}`, { method: "POST", body: JSON.stringify({ kind, amount, reference: reference.trim(), notes: notes.trim() }) }); setAmount(""); setReference(""); setNotes(""); setRevision((value) => value + 1); }
+    try { await apiRequest(`/api/operations/return-settlements/${id}`, { method: "POST", body: JSON.stringify({ kind, amount, reference: reference.trim(), notes: notes.trim() }) }); setAmount(""); setReference(""); setNotes(""); setNotice("Pencatatan refund atau kredit berhasil disimpan."); setRevision((value) => value + 1); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Settlement gagal."); } finally { setBusy(false); }
   }
   useEffect(() => {
@@ -51,21 +53,23 @@ export default function ReturnSettlementPanel({ id, type }: { id: string; type: 
     if (busy || !creditId || !targetId || !(Number(applyAmount) > 0)) return;
     if (!await confirmAction(`Gunakan kredit ${money(applyAmount)} untuk tagihan terpilih? Saldo kredit dan sisa tagihan diperiksa ulang oleh server.`, { title: "Gunakan kredit", confirmLabel: "Terapkan" })) return;
     setBusy(true); setError("");
-    try { await apiRequest(`/api/operations/credits/${creditId}/apply`, { method: "POST", body: JSON.stringify({ targetId, amount: applyAmount }) }); setCreditId(""); setRevision((value) => value + 1); }
+    try { await apiRequest(`/api/operations/credits/${creditId}/apply`, { method: "POST", body: JSON.stringify({ targetId, amount: applyAmount }) }); setCreditId(""); setNotice("Kredit berhasil diterapkan ke tagihan."); setRevision((value) => value + 1); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Kredit tidak dapat digunakan."); } finally { setBusy(false); }
   }
   async function reverse(entry: Entry) {
     if (busy || !reverseReference.trim() || reverseNotes.trim().length < 10) { setError("Isi referensi dan alasan pembalikan minimal 10 karakter."); return; }
     if (!await confirmAction(`Catat pembalikan ${entry.kind} ${money(entry.amount)}? Untuk refund, lakukan/konfirmasi pengembalian dana terlebih dahulu. Kredit yang sudah dipakai tidak dapat dibalik.`, { title: "Pembalikan settlement", confirmLabel: "Catat pembalikan" })) return;
     setBusy(true); setError("");
-    try { await apiRequest(`/api/operations/return-settlements/${entry.id}/reverse`, { method: "POST", body: JSON.stringify({ reference: reverseReference.trim(), notes: reverseNotes.trim() }) }); setReverseId(""); setReverseReference(""); setReverseNotes(""); setRevision((value) => value + 1); }
+    try { await apiRequest(`/api/operations/return-settlements/${entry.id}/reverse`, { method: "POST", body: JSON.stringify({ reference: reverseReference.trim(), notes: reverseNotes.trim() }) }); setReverseId(""); setReverseReference(""); setReverseNotes(""); setNotice("Pembalikan berhasil dicatat."); setRevision((value) => value + 1); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Settlement tidak dapat dibalik."); } finally { setBusy(false); }
   }
   if (!readable) return null;
   return <section className="mt-6 space-y-4 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
     <div><h3 className="font-semibold">Refund & kredit return</h3><p className="mt-1 text-xs text-slate-500">Return posted langsung mengurangi tagihan asal. Refund/kredit hanya untuk kelebihan pembayaran; tidak ada transfer bank otomatis.</p></div>
     {error && <p role="alert" className="text-sm text-red-600 dark:text-red-300">{error}</p>}
-    {!data ? <p className="text-sm text-slate-500">Memuat rincian keuangan…</p> : <>
+    {notice && <p role="status" className="rounded-lg bg-emerald-50 p-2 text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">{notice}</p>}
+    {loadError && <div role="alert" className="flex items-center gap-3 text-sm text-red-600 dark:text-red-300"><span>{loadError}</span><button type="button" onClick={() => { setLoadError(""); setRevision((value) => value + 1); }} className="rounded-lg bg-red-100 px-3 py-1 font-semibold hover:bg-red-200">Coba lagi</button></div>}
+    {!data || loadError ? !loadError && <p role="status" className="text-sm text-slate-500">Memuat rincian keuangan…</p> : <>
       <dl className="grid grid-cols-2 gap-3 text-xs">{[["Nilai return", data.returnValue], ["Dapat diselesaikan", data.available], ["Sisa tagihan asal", data.summary.outstanding], ["Kelebihan bayar asal", data.summary.refundable]].map(([label, value]) => <div key={label}><dt className="text-slate-500">{label}</dt><dd className="mt-1 font-semibold">{money(value)}</dd></div>)}</dl>
       {writable && Number(data.available) > 0 && <fieldset disabled={busy} className="grid gap-3 border-t pt-4 sm:grid-cols-2 dark:border-slate-700">
         <label className="text-xs">Metode<GlobalSelect value={kind} onChange={(event) => setKind(event.target.value)} className={inputClass}><option value="REFUND">Refund uang</option><option value="CREDIT">Kredit tagihan berikutnya</option></GlobalSelect></label>
